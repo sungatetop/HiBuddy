@@ -8,8 +8,9 @@
 #   env key       : MINIMAX_CN_API_KEY   (global platform: MINIMAX_API_KEY, route id `minimax`)
 #   endpoint      : https://api.minimaxi.com/anthropic (anthropic-messages)
 #   catalog models: MiniMax-M2.7 | MiniMax-M2.7-highspeed | MiniMax-M3 | MiniMax-M3.1-Flash
-# The key lives in the repo-root .env (gitignored), loaded natively by dsh
-# app-boot from the invoking directory. Never commit it.
+# The key lives ONLY in the MINIMAX_CN_API_KEY environment variable (repo-root
+# .env is a convenience store, but dsh does NOT auto-load it — export via setx
+# or inject it into the process environment). Never commit it.
 #
 # Overridden official row (dsh 0.2.1-rc.5, dsh-base bundle):
 #   - id: agent-default-model
@@ -18,3 +19,12 @@
   config:
     provider: minimax-cn
     model: MiniMax-M3.1-Flash
+# Declares the route inside llm-pi-ai's `providers` dict so the pi-ai adapter
+# registers for it; the installed catalog fills api/baseURL/models for a known
+# route id, so apiKeyEnv alone is enough. Without this row the agent default
+# model above fails with NO_ADAPTER (checked against dsh-llm-pi-ai 0.2.1-rc.5).
+- id: llm-pi-ai
+  config:
+    providers:
+      minimax-cn:
+        apiKeyEnv: MINIMAX_CN_API_KEY

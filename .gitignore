@@ -21,3 +21,7 @@ profile/*/sessions/
 profile/*/logs/
 profile/*/.dsh/
 profile/*/workspace/
+
+# dsh plugin-manager runtime state (install logs / temp store from
+# `dsh plugin --profile` operations against the synced junction)
+profile/*/.plugin-manager/

@@ -26,4 +26,18 @@
   config:
     provider: minimax-cn
     model: MiniMax-M3.1-Flash
-
+# Declares the route inside llm-pi-ai's `providers` dict so the pi-ai adapter
+# registers for it; the installed catalog fills api/baseURL/models for a known
+# route id, so apiKeyEnv alone is enough. Without this row the agent default
+# model above fails with NO_ADAPTER (checked against dsh-llm-pi-ai 0.2.1-rc.5).
+# The key itself lives ONLY in MINIMAX_CN_API_KEY — dsh does not auto-load the
+# repo-root .env, so export it via setx or inject it into the process env.
+- id: llm-pi-ai
+  config:
+    providers:
+      minimax-cn:
+        apiKeyEnv: MINIMAX_CN_API_KEY
+- id: ui-settings-general
+  name: "@deepseek-ai/dsh-client-ui-settings-general"
+  config:
+    welcomeNoticeVersion: 2026-09-28.1

@@ -15,8 +15,8 @@
     "watch": "tsdown --watch",
     "typecheck": "tsc --noEmit",
     "start": "electron .",
-    "deploy:host": "node -e \"require('node:fs').rmSync('build/host',{recursive:true,force:true})\" && pnpm --filter @hibuddy/desktop-host deploy --prod build/host",
-    "deploy:profile": "node -e \"require('node:fs').rmSync('build/profile',{recursive:true,force:true})\" && pnpm --filter hibuddy-profile deploy --prod build/profile",
+    "deploy:host": "node -e \"require('node:fs').rmSync('build/host',{recursive:true,force:true})\" && pnpm --filter @hibuddy/desktop-host deploy --prod --node-linker hoisted build/host",
+    "deploy:profile": "node -e \"require('node:fs').rmSync('build/profile',{recursive:true,force:true})\" && pnpm --filter hibuddy-profile deploy --prod --node-linker hoisted build/profile",
     "dist": "pnpm run deploy:host && pnpm run deploy:profile && node scripts/materialize-deploy.mjs build/host build/profile && electron-builder --win --config electron-builder.config.mjs"
   },
   "devDependencies": {
