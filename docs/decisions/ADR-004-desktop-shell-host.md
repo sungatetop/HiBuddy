@@ -94,12 +94,17 @@ P0 不实现 dsh 的 `file-drag-resource`/`update-tasks`/`platform-session`/`plu
 
 单实例锁（第二实例聚焦已有窗口）；主窗口关闭即走 D6 退出流程（不做"关闭最小化到托盘"）；托盘提供 Open/Quit 两项（Windows 常驻托盘行为与 dsh 一致）；无 deep link、无自动更新（P0 不做，S5 仅评估）。
 
-### D8 打包（概要，S1-D 细化实施）
+### D8 打包（S1-D 实施定稿）
 
-- electron-builder + Windows NSIS 目标；产物含：壳主进程 bundle（asar）+ 宿 bundle 及其完整依赖树（`@deepseek-ai/*` 含 koffi 等原生模块 → asarUnpack）+ HiBuddy 插件与 profile 模板（随资源分发，首启复制到 `$DSH_HOME`，见 D2）。
-- **不内嵌独立 Node 运行时**：宿以 RunAsNode 跑在 Electron 二进制内（dsh 内嵌 Node 是为 plugin-manager 的独立 Node 启动器，P0 开发态无此需求；打包态若 S1-D 验证出插件安装需独立 Node，再按 dsh extraResources 方案补，登记于 S1-D）。
-- **不内嵌 Python/LibreOffice 发行版**：dsh 的 office skill 经 npm 依赖（`@deepseek-ai/libreoffice-kit*`）已随依赖树分发，无需 extraResources 兜底（P0 不离线承诺）。
-- 根 `build`/`typecheck` 脚本扩展覆盖 `desktop/*`。
+产物链路：`pnpm deploy --prod` 双树（宿 + profile 模板）→ `materialize-deploy.mjs` 物化 → electron-builder（NSIS）→ `HiBuddy-Setup-<version>.exe`。
+
+- **壳（asar 内）**：`lib/main.js` + `assets/**` + `package.json`，`asar: true`；壳无原生依赖，`npmRebuild: false` 跳过 @electron/rebuild 联网下载。
+- **宿与 profile（asar 外，普通资源）**：宿 bundle 及完整依赖树（含 koffi 等预编译原生模块）放 `resources/host/`，profile 模板放 `resources/profile/`。**经 afterPack 钩子 cpSync 拷入**，不用 extraResources——其排除源目录根 node_modules（dsh 源码注释证实）且重叠目标条目不合并，均与本树结构冲突。afterPack 先于 NSIS 打包执行，拷入内容进入安装载荷。
+- **物化（materialize-deploy.mjs）**：pnpm deploy 产物含 junction/symlink，Windows NSIS 链路无法携带，须替换为实体文件并剪除运行时不会读取的 `.map/.d.ts/.tsbuildinfo`（`.md` 保留——dsh skills 运行时可能加载）。**剪除必须递归进入解引用产生的新子树**：首版只在原树遍历，漏掉 41,408 个链接内部 dev 文件。
+- **Electron 精确钉版**：dsh 宿对 Electron 版本指纹有编译期白名单（0.2.1-rc.5 支持 43.0.0/44.0.0/44.7.0/45.0.0-alpha.6），`^44.7.0` 会浮动到未受支持版本使宿启动即 fatal；devDep 必须 `"electron": "44.7.0"`，升级 dsh 时同步核对白名单（纳入 ADR-005 升级清单）。
+- **electron-builder 26 配置**：`.config.mjs` 不被自动发现，须显式 `--config electron-builder.config.mjs`（dsh 同款做法）；`electronFuses: { runAsNode: true }` 打包态必须显式开启（RunAsNode 是宿启动前提）；`electronDist` 指向本地 dist。
+- **NSIS 安装行为（实测）**：安装 = 内嵌 7z 载荷解压到 `%TEMP%` 的 `$PLUGINSDIR\7z-out`，再 `CopyFiles`（SHFileOperation）到 `$INSTDIR`。CopyFiles 失败**静默跳过**，仅有 retry 循环兜底：实测 C 盘空间不足时 68k 文件静默丢失、卸载器写成 0 字节、注册表项未写，安装器仍报成功。**安装期峰值磁盘 ≈ 2× 树体积**（解压临时 + 安装目标同盘时）；分发与验证安装时须保证 `%TEMP%` 与安装盘空间充足，必要时以 `TEMP=<盘>` 启动安装器把解压临时转移。后续每次发版验收必须做"安装后文件计数 = win-unpacked 计数"比对。另实测：assisted 安装器（oneClick=false）在 `/S` 静默模式下 UAC 提权握手会 wedge（内层提权实例空转、外层退出码 2、零文件落盘，本机 2026-11-01），自动化验收不走 `/S`，以交互向导或后续评估 perMachine/oneClick 组合为准。
+- **首启引导（D2 的打包态实现）**：壳 `ensureDshProfile()` 在 `app.isPackaged` 时把 `resources/profile` 模板复制到 `$DSH_HOME/profiles/hibuddy`（已存在则跳过，幂等）；`projectDir` 打包态 = `app.getPath('userData')`。
 
 ## 3. 备选方案对比（关键决策点）
 
