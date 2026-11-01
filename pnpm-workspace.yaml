@@ -1,0 +1,13 @@
+packages:
+  - profile/*
+  - packages/*
+  # 首次开发时加入：desktop/*、tests
+
+# pnpm 12 settings moved here (package.json "pnpm" field is no longer read).
+# Native / postinstall builds required by the dsh runtime.
+allowBuilds:
+  '@deepseek-ai/dsh-subprocess-local': true
+  '@google/genai': true
+  koffi: true
+  node-pty: true
+  protobufjs: true

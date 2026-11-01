@@ -1,0 +1,20 @@
+# HiBuddy smoke-profile patch layer (headless variant).
+#
+# Mirrors profile/hibuddy/cordis.patch.yml's smoke-test LLM override; keep the
+# two files in sync while the smoke default model is MiniMax.
+#
+# dsh built-in `minimax-cn` provider route (checked against
+# @deepseek-ai/dsh-llm-pi-ai@0.2.1-rc.5 / @earendil-works/pi-ai@1.4.0):
+#   env key       : MINIMAX_CN_API_KEY   (global platform: MINIMAX_API_KEY, route id `minimax`)
+#   endpoint      : https://api.minimaxi.com/anthropic (anthropic-messages)
+#   catalog models: MiniMax-M2.7 | MiniMax-M2.7-highspeed | MiniMax-M3 | MiniMax-M3.1-Flash
+# The key lives in the repo-root .env (gitignored), loaded natively by dsh
+# app-boot from the invoking directory. Never commit it.
+#
+# Overridden official row (dsh 0.2.1-rc.5, dsh-base bundle):
+#   - id: agent-default-model
+#     config: {provider: deepseek-official, model: deepseek-flash}
+- id: agent-default-model
+  config:
+    provider: minimax-cn
+    model: MiniMax-M3.1-Flash

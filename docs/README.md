@@ -1,0 +1,25 @@
+# HiBuddy 文档索引
+
+> 全库文档索引：按类别列出 `accepted` 状态文档；`draft` 文档单列（评审通过后移入正表）。新文档定稿时必须在本表登记（规则见 [.trae/rules/project.md](../.trae/rules/project.md) §2.3）。
+
+## 评审中（draft）
+
+| 类别 | 文档 | 摘要 |
+|---|---|---|
+| 产品文档 | [product/requirements.md](product/requirements.md) | PRD：HiBuddy（个人工作伙伴）的 P0 范围、对象模型、功能需求（会话/任务/工具审批/生成式界面/共享状态/BYOK/双端一致）与共享规则 |
+| 架构文档 | [architecture/system-architecture.md](architecture/system-architecture.md) | 技术方案：基于 deepseek-harness（dsh，npm 依赖，MIT）深度定制——hibuddy profile 装配 + @hibuddy/* 插件集（品牌/核心工具/Web UI 定制/AG-UI 桥）+ 自建 Electron 壳+宿；不 fork、不建 SPI（路线见 ADR-003） |
+
+## 决策文档（docs/decisions/）
+
+| ADR | 摘要 |
+|---|---|
+| [ADR-003-dsh-based-customization.md](decisions/ADR-003-dsh-based-customization.md) | 总体路线：放弃"自建 server + AgentRuntime SPI 适配器"，以 dsh 为底座深度定制（插件/patch/brand slots/client 模块官方路径实证）；定制优先级纪律与 fork 触发条件；取代 ADR-002 的适配器定位、取消 ADR-001（AG-UI 统一协议降级为 P1 可选桥） |
+| ~~[ADR-002-agent-runtime-selection.md](decisions/ADR-002-agent-runtime-selection.md)~~ | （superseded）Agent 运行时选型对比与事件映射——dsh/pi 对比数据、AG-UI 事件映射表与 thirdparty sparse 引入方式仍有参考价值 |
+
+## 参考资料（docs/references/）
+
+| 文档 | 摘要 |
+|---|---|
+| [ag-ui-research.md](references/ag-ui-research.md) | AG-UI 协议与生成式 UI 生态调研；thirdparty/ 参考仓清单（ag-ui、CopilotKit、OpenBot、OpenIntelligentUI、openui、genui-sdk + 运行时两仓 deepseek-harness、pi-mono）与克隆状态 |
+| [dsh-desktop-analysis.md](references/dsh-desktop-analysis.md) | dsh 桌面端技术方案剖析：Electron 壳 + RunAsNode 宿进程分离、dsh-app:// 协议拦截与认证转发、--port 0 端口治理、细分沙箱 preload、打包分发；HiBuddy ADR-007 的直接输入 |
+| [dsh-web-cli-analysis.md](references/dsh-web-cli-analysis.md) | dsh Web 与 CLI 技术方案剖析：apps/web 纯 dist 产物包与双注入通道、apps/cli 单 bin 四模式与 profile 分层配置、单端口单进程 serve + appReady 启动编排；产出 12 条机制级借鉴清单，技术方案 §2.2 与 ADR-006 的直接输入 |

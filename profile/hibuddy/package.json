@@ -1,0 +1,22 @@
+{
+  "name": "hibuddy-profile",
+  "description": "HiBuddy product composition: dsh web surface + HiBuddy bundles (see ADR-003 §5.1)",
+  "private": true,
+  "license": "MIT",
+  "dependencies": {
+    "@hibuddy/brand": "workspace:*",
+    "@hibuddy/coworker": "workspace:*",
+    "@hibuddy/web-ui": "workspace:*"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "@hibuddy/brand",
+        "@hibuddy/coworker",
+        "@hibuddy/web-ui"
+      ]
+    }
+  }
+}

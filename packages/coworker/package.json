@@ -1,0 +1,36 @@
+{
+  "name": "@hibuddy/coworker",
+  "description": "HiBuddy coworker core: built-in tools, persona defaults, approval risk grading",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "dsh": ">=0.2.1-rc.0 <0.4.0-0"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.0"
+  }
+}

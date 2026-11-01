@@ -1,0 +1,6 @@
+# HiBuddy brand bundle layer: mounts the browser brand plugin.
+# The host half is an empty apply (Loader row); the browser half ships via
+# the package's ./client export (dsh.client manifest).
+- insert:
+    - id: hibuddy-brand
+      name: '@hibuddy/brand'

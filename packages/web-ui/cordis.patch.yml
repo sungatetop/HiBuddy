@@ -1,0 +1,6 @@
+# HiBuddy web-UI customization bundle layer: mounts the browser plugin row.
+# UI contributions register via ctx.slots.inject() into official declaration
+# slots (settings cards, workbench panels) in the client half.
+- insert:
+    - id: hibuddy-web-ui
+      name: '@hibuddy/web-ui'

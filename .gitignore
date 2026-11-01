@@ -1,0 +1,19 @@
+# Dependencies / build output
+node_modules/
+lib/
+dist/
+*.tsbuildinfo
+.pnpm-store/
+
+# Secrets (local smoke-test LLM keys; never commit)
+.env
+.env.local
+
+# dsh profile runtime artifacts (generated when a repo profile runs,
+# e.g. with $DSH_HOME pointing at profile/ or after profile:sync)
+profile/*/cordis.yml
+profile/*/.credentials.yaml
+profile/*/sessions/
+profile/*/logs/
+profile/*/.dsh/
+profile/*/workspace/

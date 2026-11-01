@@ -1,0 +1,6 @@
+# HiBuddy coworker core bundle layer: mounts the host-side plugin.
+# Tools/persona/approval-grading registrations land in src/index.ts as the
+# first tools are implemented (dsh extension points per ADR-003 §4).
+- insert:
+    - id: hibuddy-coworker
+      name: '@hibuddy/coworker'
