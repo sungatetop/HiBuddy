@@ -1,0 +1,37 @@
+{
+  "name": "@hibuddy/desktop-host",
+  "description": "HiBuddy desktop host: RunAsNode process booting the hibuddy profile through dsh's runProfile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "engines": {
+    "dsh": ">=0.2.1-rc.0 <0.4.0-0"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-app-boot": "0.2.1-rc.5"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.0",
+    "@deepseek-ai/dsh-agent": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-client-connection": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-host-webserver": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-jobs": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-schedule": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-workspace": "0.2.1-rc.5"
+  }
+}

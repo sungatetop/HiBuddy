@@ -1,7 +1,8 @@
 packages:
   - profile/*
   - packages/*
-  # 首次开发时加入：desktop/*、tests
+  - desktop/*
+  # tests 在跨端测试阶段加入
 
 # pnpm 12 settings moved here (package.json "pnpm" field is no longer read).
 # Native / postinstall builds required by the dsh runtime.
