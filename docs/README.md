@@ -15,6 +15,7 @@
 
 | ADR | 摘要 |
 |---|---|
+| [ADR-005-dsh-version-pinning.md](decisions/ADR-005-dsh-version-pinning.md) | dsh 版本锁定与升级策略：@deepseek-ai/* 全家精确钉版维持整组发版配对；Electron 精确钉在 dsh 宿原生白名单指纹（禁 ^ 浮动）；engines.dsh 运行时闸；七步强制升级流程（changelog→覆盖行 diff→白名单→client 契约→build→冒烟→登记）；deploy 必须 hoisted 布局（isolated+dereference 丢相对 symlink 实测）；插件安装状态经 profile package.json+lock 入库复现 |
 | [ADR-004-desktop-shell-host.md](decisions/ADR-004-desktop-shell-host.md) | 桌面端壳+宿方案：自建 Electron 壳 + RunAsNode 宿进程复刻 dsh 模式；宿按名启动 $DSH_HOME/profiles/hibuddy（三端插件安装/分层配置同源互通）；P0 渲染层直连宿 authenticatedUrl，hibuddy-app:// 特权协议降为 P1 加固；IPC 消息集、--port 0 端口治理、quit-inspection、Windows 打包概要 |
 | [ADR-003-dsh-based-customization.md](decisions/ADR-003-dsh-based-customization.md) | 总体路线：放弃"自建 server + AgentRuntime SPI 适配器"，以 dsh 为底座深度定制（插件/patch/brand slots/client 模块官方路径实证）；定制优先级纪律与 fork 触发条件；取代 ADR-002 的适配器定位、取消 ADR-001（AG-UI 统一协议降级为 P1 可选桥） |
 | ~~[ADR-002-agent-runtime-selection.md](decisions/ADR-002-agent-runtime-selection.md)~~ | （superseded）Agent 运行时选型对比与事件映射——dsh/pi 对比数据、AG-UI 事件映射表与 thirdparty sparse 引入方式仍有参考价值 |
