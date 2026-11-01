@@ -2,7 +2,7 @@
 title: HiBuddy P0 实施计划
 summary: P0 的分阶段执行计划（S1–S5）：S1 先把 dsh 基础设施三端（CLI/Web/桌面）全部复用跑通、验证 dsh 原生能力面完整性（插件安装/启停/分层配置）并建立编译打包链路，S2 起再按 PRD 需求做深度定制（品牌人设→核心工具/审批→生成式 UI→收尾双端交付）；每阶段含可判定的验收标准
 keywords: [实施计划, 里程碑, 验收标准, P0, 分阶段交付, 基础设施复用, 插件生态, HiBuddy]
-status: draft
+status: accepted
 date: 2026-11-01
 ---
 
