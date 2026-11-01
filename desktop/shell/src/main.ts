@@ -6,17 +6,41 @@
  */
 
 import { app, BrowserWindow, dialog, shell } from 'electron'
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, cpSync, existsSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { HostProcess, HostFatalError } from './host-process.js'
 import { createTray } from './tray.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
+const packaged = app.isPackaged
 // Dev layout: <repo>/desktop/shell/lib/main.js → host entry and repo root are relative.
-// Packaged builds override both via env (wired in S1-D).
-const hostEntry = process.env.HIBUDDY_HOST_ENTRY ?? join(here, '../../host/lib/index.js')
-const projectDir = process.env.HIBUDDY_PROJECT_DIR ?? join(here, '../../..')
+// Packaged layout (ADR-004 D8): host tree and profile template ship as
+// extraResources; the layered env's projectDir becomes userData so the host
+// reads <userData>/.env for secrets (mirrors the repo-root .env in dev).
+const hostEntry = packaged
+  ? join(process.resourcesPath, 'host/lib/index.js')
+  : process.env.HIBUDDY_HOST_ENTRY ?? join(here, '../../host/lib/index.js')
+const projectDir = packaged
+  ? app.getPath('userData')
+  : process.env.HIBUDDY_PROJECT_DIR ?? join(here, '../../..')
+
+/**
+ * First-launch profile bootstrap (ADR-004 D2): the packaged app ships a
+ * materialized hibuddy profile template; copy it into $DSH_HOME/profiles/
+ * hibuddy once, then boot by name exactly like the CLI/Web. Idempotent — an
+ * existing profile (user plugins, settings) is never overwritten.
+ */
+function ensureDshProfile(): void {
+  if (!packaged) return
+  const dshHome = process.env.DSH_HOME ?? join(homedir(), '.dsh')
+  const target = join(dshHome, 'profiles', 'hibuddy')
+  if (existsSync(target)) return
+  const template = join(process.resourcesPath, 'profile')
+  cpSync(template, target, { recursive: true })
+  log(`profile template copied: ${template} -> ${target}`)
+}
 
 let mainWindow: BrowserWindow | undefined
 let host: HostProcess | undefined
@@ -122,7 +146,8 @@ async function main(): Promise<void> {
   })
 
   await app.whenReady()
-  log(`shell starting; hostEntry=${hostEntry}; projectDir=${projectDir}`)
+  log(`shell starting (packaged=${String(packaged)}); hostEntry=${hostEntry}; projectDir=${projectDir}`)
+  ensureDshProfile()
   createTray({
     onOpen: () => {
       if (mainWindow !== undefined && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus() }

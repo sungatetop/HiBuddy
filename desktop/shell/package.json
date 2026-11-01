@@ -14,9 +14,13 @@
     "build": "tsdown",
     "watch": "tsdown --watch",
     "typecheck": "tsc --noEmit",
-    "start": "electron ."
+    "start": "electron .",
+    "deploy:host": "node -e \"require('node:fs').rmSync('build/host',{recursive:true,force:true})\" && pnpm --filter @hibuddy/desktop-host deploy --prod build/host",
+    "deploy:profile": "node -e \"require('node:fs').rmSync('build/profile',{recursive:true,force:true})\" && pnpm --filter hibuddy-profile deploy --prod build/profile",
+    "dist": "pnpm run deploy:host && pnpm run deploy:profile && node scripts/materialize-deploy.mjs build/host build/profile && electron-builder --win --config electron-builder.config.mjs"
   },
   "devDependencies": {
-    "electron": "44.7.0"
+    "electron": "44.7.0",
+    "electron-builder": "^26.17.0"
   }
 }
