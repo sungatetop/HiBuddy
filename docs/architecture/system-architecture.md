@@ -3,7 +3,7 @@ title: HiBuddy 系统架构与技术方案
 summary: HiBuddy（个人工作伙伴）的技术架构：以 deepseek-harness（dsh，MIT）为底座进行深度定制——dsh 运行时 + 自研插件集（品牌/工具/UI）+ hibuddy profile 装配 + 自建 Electron 壳；不 fork、不建 SPI，fork 仅作最后手段（路线见 ADR-003）
 keywords: [deepseek-harness, dsh, Cordis, 插件, bundle, profile, Electron, client-modules, Slots, BYOK]
 status: draft
-date: 2026-10-31
+date: 2026-11-01
 ---
 
 # HiBuddy 系统架构与技术方案
@@ -72,7 +72,7 @@ flowchart TB
 |---|---|---|
 | Agent 底座 | **deepseek-harness（`@deepseek-ai/*` npm 包，MIT）** | Cordis 插件容器 + 会话/工具/审批/子代理/交付物/工作区子系统；Node >= 24.9；版本锁定策略见 §13 |
 | 前端 | dsh client（React）+ `@hibuddy/web-ui` client 模块插件 | 不自建前端工程；HiBuddy UI 以 client 模块 + Slots 增量注入（dsh web-app 的 dist 由 dsh webserver serve，`base:'./'`） |
-| 桌面壳 | Electron（自建壳 + 宿） | 壳+宿分离、`ELECTRON_RUN_AS_NODE=1`、`--port 0`、`hibuddy-app://` 特权协议、细分沙箱 preload（复刻 dsh desktop 方案，[ADR-pending]） |
+| 桌面壳 | Electron（自建壳 + 宿） | 壳+宿分离、`ELECTRON_RUN_AS_NODE=1`、`--port 0`、渲染层 P0 直连宿 authenticatedUrl（`hibuddy-app://` 特权协议为 P1 加固项）、宿按名启动 `$DSH_HOME/profiles/hibuddy`（见 [ADR-004](../decisions/ADR-004-desktop-shell-host.md)） |
 | 移动端 | Flutter | 远期；经 dsh `packages/sdk`（stdio JSON-RPC）或 HTTP/SSE 接入同一 runtime |
 | 插件开发 | TypeScript；bundle 形态（manifest 声明 `dsh.bundle.patch` + JS 入口 + 可选 `dsh.client` 导出） | 包命名 `@hibuddy/*`；`engines.dsh` 声明兼容范围 |
 | 包管理 | pnpm workspace monorepo | profile 以 `workspace:*` 链接 HiBuddy 插件（开发态） |
@@ -107,8 +107,8 @@ flowchart TB
 
 自建 Electron **壳 + 宿**（复刻 dsh 模式，见 [dsh-desktop-analysis.md](../references/dsh-desktop-analysis.md)）：
 
-- `@hibuddy/desktop-shell`：Electron 主进程——窗口/托盘/通知、`hibuddy-app://` 特权协议（静态资源本地服务 + 认证转发）、细分沙箱 preload、宿进程生命周期（spawn/quit-inspection）。
-- `@hibuddy/desktop-host`：`ELECTRON_RUN_AS_NODE=1` 宿进程——内嵌 dsh runtime，`runProfile('hibuddy')` 启动，IPC 应答 ready/fatal/quit；`--port 0` 取 OS 随机端口回传壳。
+- `@hibuddy/desktop-shell`：Electron 主进程——窗口/托盘/通知、宿进程生命周期（spawn/quit-inspection）、导航导出闸；渲染层 P0 直连宿 authenticatedUrl（`hibuddy-app://` 特权协议 + 细分沙箱 preload 为 P1 加固项，见 [ADR-004](../decisions/ADR-004-desktop-shell-host.md)）。
+- `@hibuddy/desktop-host`：`ELECTRON_RUN_AS_NODE=1` 宿进程——依赖 `@deepseek-ai/dsh` 的 `runProfile` **按名启动 `$DSH_HOME/profiles/hibuddy`**（与 CLI/Web 同装配路径，插件安装/分层配置三端同源），IPC 应答 ready/fatal/quit；`--port 0` 取 OS 随机端口回传壳。
 
 ## 6. 工具执行与审批
 
