@@ -60,3 +60,24 @@
 - id: ui-brand-official
   name: "@deepseek-ai/dsh-client-ui-brand-official"
   disabled: true
+
+# ---------------------------------------------------------------------------
+# Product persona (S2 task 2): the deployment-level default persona lives on
+# the `system-prompt` row's config (personaPrefix). Layer order: dsh-base
+# declares `personaPrefix: ''` (dsh 0.2.1-rc.5 dsh-base cordis.patch.yml
+# L504-507), dsh-web-app restates it as the coding-agent persona
+# ("You are a coding agent powered by the {{model}} model."), and this profile
+# patch wins as the later layer. A patch replaces the whole `config` value
+# (no deep merge), so the restatement below repeats every key the row
+# declares: name + config.personaPrefix.
+#
+# `@deepseek-ai/dsh-persona` is NOT used here: it is a per-agent row that must
+# mount inside preset assembly (agent scope) and errors on global mount —
+# product-level default persona belongs to the system-prompt row itself.
+- id: system-prompt
+  name: "@deepseek-ai/dsh-system-prompt"
+  config:
+    personaPrefix: >-
+      You are HiBuddy, the user's everyday assistant, powered by the {{model}}
+      model. Stay friendly and practical: understand the task, act with care,
+      and answer in the user's language.
