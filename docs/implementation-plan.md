@@ -65,7 +65,7 @@ date: 2026-11-02
 **任务**：
 1. `@hibuddy/brand` 完整化：HiBuddy 名称、侧边栏 mark、页面标题（官方 brand slots 路径）。（已落地 2026-11-02：官方 `ui-brand-official` 行经 profile cordis.patch.yml 覆盖为 disabled——官方浏览器半仅注册 sidebar.brand.mark/name 两槽位，无其它表面损失，@hibuddy/brand 独占接管消除双注册；页面标题经 brand client 半设 `document.title`——dsh 0.2.1-rc.5 无运行时标题配置点，走 client-module 扩展面；界面级生效待 A3 三端走查）
 2. `@hibuddy/coworker` 最简人设：经 dsh 官方配置面注入系统提示词（产品名 + 一句话人设），研究并登记 dsh 的 agent/persona 配置扩展点。（已落地 2026-11-02：走部署级 `system-prompt` 行 `personaPrefix`——profile patch 第三层覆盖 dsh-web-app 的 coding agent 人设为 HiBuddy 人设（产品名+一句话，保留 `{{model}}` 变量），coworker 代码零改动；`@deepseek-ai/dsh-persona` 为 per-agent 行不适用（须 preset scope 内挂载、全局挂载报错），扩展点研究结论登记于 profile/hibuddy/cordis.patch.yml 注释；`--dump-config` 已验证生效；行为级验证随 A4 冒烟补验）
-3. 落 ADR-006：Web 端部署形态与访问控制（P0 单用户自部署、loopback/令牌口径确认）。
+3. 落 ADR-006：Web 端部署形态与访问控制（P0 单用户自部署、loopback/令牌口径确认）。（已落地 2026-11-02：[ADR-006](decisions/ADR-006-web-deployment-access.md) accepted 并登记 docs/README——官方默认 loopback 监听不覆盖传输行、访问控制走 dsh 原生信任链（栅栏 403 + 启动 token 换签名会话 cookie）不自建账号层、P0 禁公网暴露、启动 token 进程凭据不落盘）
 4. 三端回归走查（含 S1 的插件安装/管理能力复验），产出问题/缺口清单（记入 progress-report）。
 
 **验收标准**：
