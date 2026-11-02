@@ -82,6 +82,7 @@ export class HostProcess {
     this.readyReject = reject
   })
   private exitPromise: Promise<void> | undefined
+  private stdout = ''
   private stderr = ''
   private failureReported = false
   private stopping = false
@@ -115,7 +116,11 @@ export class HostProcess {
     this.child = child
     child.stderr?.setEncoding('utf8')
     child.stderr?.on('data', (chunk: string) => { this.stderr = (this.stderr + chunk).slice(-MAX_HOST_DIAGNOSTIC_CHARS) })
-    child.stdout?.pipe(process.stdout)
+    // Collect instead of piping to process.stdout: in the packaged GUI shell the
+    // parent's stdout is unwritable (Windows GUI subsystem, no console), and the
+    // resulting backpressure would deadlock the child on its first console.log.
+    child.stdout?.setEncoding('utf8')
+    child.stdout?.on('data', (chunk: string) => { this.stdout = (this.stdout + chunk).slice(-MAX_HOST_DIAGNOSTIC_CHARS) })
     child.on('message', (message: unknown) => {
       if (!isHostEvent(message)) {
         this.fail(new Error('hibuddy desktop host sent an invalid IPC event'))
@@ -136,7 +141,8 @@ export class HostProcess {
     child.once('error', (error) => { this.fail(error) })
     this.exitPromise = new Promise<void>((resolve) => {
       child.once('close', (code) => {
-        const suffix = this.stderr.trim() === '' ? '' : `: ${this.stderr.trim()}`
+        const diagnostic = [this.stderr.trim(), this.stdout.trim()].filter(part => part !== '').join('\n--- host stdout ---\n')
+        const suffix = diagnostic === '' ? '' : `: ${diagnostic}`
         if (code !== 0 && code !== null) this.fail(new Error(`hibuddy desktop host exited with ${String(code)}${suffix}`))
         else this.fail(new Error(`hibuddy desktop host stopped${suffix}`))
         resolve()
