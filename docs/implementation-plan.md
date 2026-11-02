@@ -3,7 +3,7 @@ title: HiBuddy P0 实施计划
 summary: P0 的分阶段执行计划（S1–S5）：S1 先把 dsh 基础设施三端（CLI/Web/桌面）全部复用跑通、验证 dsh 原生能力面完整性（插件安装/启停/分层配置）并建立编译打包链路，S2 起再按 PRD 需求做深度定制（品牌人设→核心工具/审批→生成式 UI→收尾双端交付）；每阶段含可判定的验收标准
 keywords: [实施计划, 里程碑, 验收标准, P0, 分阶段交付, 基础设施复用, 插件生态, HiBuddy]
 status: accepted
-date: 2026-11-01
+date: 2026-11-02
 ---
 
 # HiBuddy P0 实施计划
@@ -50,13 +50,13 @@ date: 2026-11-01
 8. 落 ADR-005：dsh 版本锁定与升级策略（engines.dsh 闸、升级冒烟流程、覆盖行登记）。
 
 **验收标准**：
-- [ ] A1 `pnpm build` 与 `pnpm typecheck` 全绿（含 desktop/* 包）。
-- [ ] A2 CLI：`pnpm smoke "只回复两个字：正常"` 输出「正常」；tui 模式可进入交互。
-- [ ] A3 Web：`pnpm exec dsh --profile hibuddy` 启动，浏览器打开原生界面完成一次真实多步任务（过程可见），刷新页面后会话与状态恢复。
-- [ ] A4 插件生态：示例插件经 CLI 安装后生效、经 Web UI 可见并可启停/卸载；`--patch` overlay 层序生效；HiBuddy 插件与第三方插件共存无冲突。
-- [ ] A5 桌面开发态：启动 desktop-shell，窗口加载内嵌 runtime 的界面并可完成一次对话任务。
-- [ ] A6 桌面打包：产出 Windows 可安装包；安装后应用可启动并跑通一次任务；关闭应用后 runtime 进程随退（无残留）。
-- [ ] A7 ADR-004、ADR-005 状态 accepted 并登记 docs/README；progress-report 有 S1 验收记录。
+- [x] A1 `pnpm build` 与 `pnpm typecheck` 全绿（含 desktop/* 包）。
+- [x] A2 CLI：`pnpm smoke "只回复两个字：正常"` 输出「正常」；tui 模式可进入交互。（验收记录：冒烟往返通过；tui 无对应运行时模板，计划偏差已在 progress-report S1 登记）
+- [x] A3 Web：`pnpm exec dsh --profile hibuddy` 启动，浏览器打开原生界面完成一次真实多步任务（过程可见），刷新页面后会话与状态恢复。
+- [x] A4 插件生态：示例插件经 CLI 安装后生效、经 Web UI 可见并可启停/卸载；`--patch` overlay 层序生效；HiBuddy 插件与第三方插件共存无冲突。
+- [x] A5 桌面开发态：启动 desktop-shell，窗口加载内嵌 runtime 的界面并可完成一次对话任务。
+- [ ] A6 桌面打包：产出 Windows 可安装包；安装后应用可启动并跑通一次任务；关闭应用后 runtime 进程随退（无残留）。（安装包已产出；win-unpacked 同产物启动/任务/随退已验，安装树比对待补）
+- [x] A7 ADR-004、ADR-005 状态 accepted 并登记 docs/README；progress-report 有 S1 验收记录。
 
 ### S2 品牌与人设基线（定制起点）
 
