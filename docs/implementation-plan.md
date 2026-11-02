@@ -63,7 +63,7 @@ date: 2026-11-02
 **目标**：第一个需求定制阶段：以 dsh 官方 brand 路径替换默认品牌，注入 HiBuddy 最简人设；验证"同一 profile 三端一致"；定制后 dsh 能力面不回归。
 
 **任务**：
-1. `@hibuddy/brand` 完整化：HiBuddy 名称、侧边栏 mark、页面标题（官方 brand slots 路径）。
+1. `@hibuddy/brand` 完整化：HiBuddy 名称、侧边栏 mark、页面标题（官方 brand slots 路径）。（已落地 2026-11-02：官方 `ui-brand-official` 行经 profile cordis.patch.yml 覆盖为 disabled——官方浏览器半仅注册 sidebar.brand.mark/name 两槽位，无其它表面损失，@hibuddy/brand 独占接管消除双注册；页面标题经 brand client 半设 `document.title`——dsh 0.2.1-rc.5 无运行时标题配置点，走 client-module 扩展面；界面级生效待 A3 三端走查）
 2. `@hibuddy/coworker` 最简人设：经 dsh 官方配置面注入系统提示词（产品名 + 一句话人设），研究并登记 dsh 的 agent/persona 配置扩展点。
 3. 落 ADR-006：Web 端部署形态与访问控制（P0 单用户自部署、loopback/令牌口径确认）。
 4. 三端回归走查（含 S1 的插件安装/管理能力复验），产出问题/缺口清单（记入 progress-report）。

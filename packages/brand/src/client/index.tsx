@@ -13,9 +13,15 @@ export const inject = ['slots']
  * Fill the sidebar brand slots as one declaration-aware registration set,
  * following the official brand package's composition pattern: wait on each
  * declaration, then install both occupants atomically via a generator.
+ * Also brand the page title: dsh ships a static `<title>` inside
+ * dsh-web-frontend/dist/index.html with no runtime config point (checked
+ * against dsh 0.2.1-rc.5 — no official client-ui package touches
+ * document.title), so the brand package owns it from the client-module
+ * extension surface instead of touching the private serving layer.
  * @param ctx - Client root context.
  */
 export function apply(ctx: ClientContext): void {
+  document.title = 'HiBuddy'
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', function* () {
       yield ctx.slots.register({ name: 'sidebar.brand.mark' }, HibuddyBrandMark)

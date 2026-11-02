@@ -41,3 +41,22 @@
   name: "@deepseek-ai/dsh-client-ui-settings-general"
   config:
     welcomeNoticeVersion: 2026-09-28.1
+
+# ---------------------------------------------------------------------------
+# Brand slot de-duplication (S2-1): @hibuddy/brand takes over the sidebar
+# brand slots. The official browser brand package registers the same two
+# generic slots (sidebar.brand.mark / sidebar.brand.name), so keeping both
+# mounted gives a priority-0 duplicate registration on each slot.
+#
+# Overridden official row (dsh 0.2.1-rc.5, dsh-web-app bundle cordis.patch.yml
+# L335-337 "Official occupants for the generic sidebar and conversation brand
+# slots"):
+#   - id: ui-brand-official
+#     name: '@deepseek-ai/dsh-client-ui-brand-official'
+# The official browser half registers ONLY those two sidebar slots (its
+# conversation hero stays on the declaring package's animated fish fallback,
+# i.e. the official build registers nothing there), so disabling this row
+# loses no other surface — @hibuddy/brand supplies both occupants.
+- id: ui-brand-official
+  name: "@deepseek-ai/dsh-client-ui-brand-official"
+  disabled: true
