@@ -28,6 +28,7 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { mapSessionEvent, newMappingState, terminalOf } from './events.ts'
 import { BridgeSessions, detachActive, sessionIdFor } from './sessions.ts'
 import type { SessionRecord } from './sessions.ts'
+import { answerPendings, cancelPendings, captureApproval } from './approvals.ts'
 import { SseSink } from './sse.ts'
 import type { RunAgentInput } from './types.ts'
 
@@ -135,7 +136,26 @@ export function apply(ctx: Context): void {
   // onto the session's open SSE run; every other session is ignored.
   ctx.on('session/event', (session, event) => {
     const record = sessions.ownsSession(session)
-    if (record !== undefined) pumpSessionEvent(record, event, record.sessionId)
+    if (record !== undefined) pumpSessionEvent(record, event, record.threadId)
+  })
+
+  // Disposed bridge sessions leave the registry (their pendings die cancelled).
+  ctx.on('session/disposed', (session) => {
+    const record = sessions.ownsSession(session)
+    if (record !== undefined) {
+      cancelPendings(record)
+      sessions.drop(session)
+    }
+  })
+
+  // Tail of the approval answerer chain: the coworker answerer runs first
+  // (L2 backstop, session grants); what reaches here needs a human decision.
+  // Bridge-owned sessions wait for the AG-UI client's resume answer; foreign
+  // (native Web UI) sessions delegate onward untouched.
+  ctx.on('approval/request', (req, next) => {
+    const record = sessions.ownsAgent(req.agent)
+    if (record === undefined) return next()
+    return captureApproval(record, { toolName: req.toolName, callId: req.callId, reason: req.displayReason?.en ?? req.reason })
   })
 
   // Deferred until the composition provides the web carrier + trust fence;
@@ -196,9 +216,13 @@ export function apply(ctx: Context): void {
           return
         }
 
+        // A resume POST continues an interrupted run (S3b-3): answers go to the
+        // captured pendings and the suspended turn continues in place. A fresh
+        // user message may ride along; alone it starts an ordinary new run.
+        const resumeEntries = Array.isArray(input.resume) ? input.resume : []
         const userText = lastUserText(input)
-        if (userText === undefined) {
-          jsonError(res, 400, 'bad-request', '"messages" must contain a user message with text')
+        if (resumeEntries.length === 0 && userText === undefined) {
+          jsonError(res, 400, 'bad-request', '"messages" must contain a user message with text (or "resume" answers)')
           return
         }
 
@@ -216,15 +240,25 @@ export function apply(ctx: Context): void {
         })
 
         sink.send({ type: 'RUN_STARTED', threadId: input.threadId, runId: input.runId, input })
-        try {
-          record.handle.agent.followup(createUserMessage({
-            content: [{ type: 'text', text: userText }],
-            source: { kind: 'user' },
-          }))
-        } catch (error) {
+        const answered = answerPendings(record, resumeEntries)
+        if (answered === 0 && resumeEntries.length > 0 && userText === undefined) {
+          // Nothing to continue and nothing to start: end the run honestly.
           detachActive(record, run.runId)
-          sink.send({ type: 'RUN_ERROR', message: `failed to start the run: ${String(error)}`, code: 'FOLLOWUP_FAILED' })
+          sink.send({ type: 'RUN_ERROR', message: 'resume answered no pending approval', code: 'UNKNOWN_INTERRUPT' })
           sink.close()
+          return
+        }
+        if (userText !== undefined) {
+          try {
+            record.handle.agent.followup(createUserMessage({
+              content: [{ type: 'text', text: userText }],
+              source: { kind: 'user' },
+            }))
+          } catch (error) {
+            detachActive(record, run.runId)
+            sink.send({ type: 'RUN_ERROR', message: `failed to start the run: ${String(error)}`, code: 'FOLLOWUP_FAILED' })
+            sink.close()
+          }
         }
       },
     }), `hibuddy-ag-ui-bridge: ${AGUI_PATH}`)

@@ -13,17 +13,28 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
+import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SseSink } from './sse.ts'
 import type { MappingState } from './events.ts'
 import { newMappingState } from './events.ts'
 
+/** One captured approval: the bridge answers it when the client resumes the run. */
+export interface PendingApproval {
+  readonly toolName: string
+  readonly callId: string | undefined
+  readonly resolve: (outcome: ApprovalOutcome) => void
+}
+
 /** One bridge-owned session: its agent handle plus the currently-streaming run. */
 export interface SessionRecord {
   readonly sessionId: SessionId
+  readonly threadId: string
   readonly handle: AgentHandle
   /** The run whose SSE response is currently open, if any (one at a time). */
   active: ActiveRun | undefined
+  /** Captured approvals awaiting a client resume answer, by interrupt id. */
+  readonly pendings: Map<string, PendingApproval>
 }
 
 /** The live output side of one POST /agui run. */
@@ -81,9 +92,16 @@ export class BridgeSessions {
     const existing = this.records.get(sessionId)
     if (existing !== undefined) return existing
     const handle = await this.openHandle(sessionId)
-    const record: SessionRecord = { sessionId, handle, active: undefined }
+    const record: SessionRecord = { sessionId, threadId, handle, active: undefined, pendings: new Map() }
     this.records.set(sessionId, record)
     return record
+  }
+
+  /** Drop a disposed session: the registry never drives a dead agent again. */
+  drop(session: Session): void {
+    for (const [id, record] of this.records) {
+      if (record.handle.agent.session === session) this.records.delete(id)
+    }
   }
 
   /** Create fresh, or resume the persisted session; creation is the fallback, not the rule. */

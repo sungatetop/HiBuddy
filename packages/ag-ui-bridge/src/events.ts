@@ -128,6 +128,17 @@ export function mapSessionEvent(event: SessionEvent, state: MappingState): AguiE
     }
     case 'todo/write':
       return [{ type: 'STATE_SNAPSHOT', snapshot: { todos: (data as { todos?: unknown }).todos ?? [] } }]
+    // Approval audit events have no AG-UI counterpart — carried as CUSTOM so
+    // clients can render an audit trail. The interactive pause itself is a
+    // RUN_FINISHED interrupt outcome emitted by the approval capture (S3b-3).
+    case 'approval/asked': {
+      const d = data as { id?: string; toolName?: string; callId?: string; reason?: string }
+      return [{ type: 'CUSTOM', name: 'hibuddy.approval.asked', value: d }]
+    }
+    case 'approval/decided': {
+      const d = data as { id?: string; outcome?: string }
+      return [{ type: 'CUSTOM', name: 'hibuddy.approval.decided', value: d }]
+    }
     default:
       return []
   }
