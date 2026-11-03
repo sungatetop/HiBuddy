@@ -20,11 +20,12 @@ date: 2026-11-02
 | S0 ✅ | 骨架与冒烟链路 | — | — | pnpm workspace + hibuddy/hibuddy-smoke 双 profile + 三插件骨架装配验证通过（2026-11-01） |
 | S1 | 基础设施复用与编译打包（CLI / Web / 桌面）+ dsh 能力面完整性验证 | —（纯 dsh 原生能力，零需求定制） | ADR-004、ADR-005 | 三端跑通：CLI 任务、Web 任务、桌面应用（开发态 + Windows 打包产物）；dsh 插件安装/管理全端可用 |
 | S2 | 品牌与人设基线（定制起点） | 闭环主干（FR-02/FR-06 走 dsh 原生能力） | ADR-006 | 三端以 HiBuddy 品牌与人设跑通真实任务 |
-| S3 | 核心插件：内置工具 + 审批分级 | FR-03、SR-01、FR-08（数据层） | —（ADR-008 条件性，见下） | 工具按 L0/L1 分级审批执行、免再询生效、全程留痕 |
+| S3 | 审批分级与留痕增强（复用 dsh 原生工具与审批主干） | FR-03、SR-01、FR-08（数据层） | ADR-009（ADR-008 条件性，见下） | 工具按 L0/L1 分级审批执行、免再询生效、全程留痕 |
+| S3b | AG-UI 协议桥 MVP（@hibuddy/ag-ui-bridge） | —（生态接入，超前铺路；见 ADR-009 §3） | ADR-009 | AG-UI 生态前端（CopilotKit）经 `/agui` 端点连 HiBuddy runtime 跑通对话+工具+审批闭环 |
 | S4 | 生成式 UI 与工作台定制 | FR-04、SR-02、FR-05 | ADR-007 | 对话内出现可交互界面（内嵌+画布）、交互可回传 |
 | S5 | P0 收尾与双端交付 | FR-01、FR-02、FR-06、FR-08、FR-09 + FR-07 | — | Web 端收尾 + 桌面独有能力 + 双端对等验收，P0 完成 |
 
-依赖顺序：S1 → S2 → S3 → S4 → S5。S1 建立的三端载体（同一 `hibuddy` profile）在后续阶段被全部复用：S2–S4 的定制（后端插件 + client 模块 + Slots）天然同时作用于 CLI/Web/桌面，故各阶段验收以 Web 端为主、S5 统一做双端对等验收。
+依赖顺序：S1 → S2 → S3 → S3b → S4 → S5。S1 建立的三端载体（同一 `hibuddy` profile）在后续阶段被全部复用：S2–S4 的定制（后端插件 + client 模块 + Slots）天然同时作用于 CLI/Web/桌面，故各阶段验收以 Web 端为主、S5 统一做双端对等验收。S3 范围缩减与 S3b 立项依据见 [ADR-009](decisions/ADR-009-s3-rescope-agui-bridge.md)——dsh 原生工具与审批主干直接复用，不自研工具；AG-UI 桥提前落地（生态接入验证）。
 
 **条件性 ADR**：ADR-008（L1 代码执行沙盒策略）仅当 S3 决定开启代码执行（PRD FR-03 默认关闭）时落地；P0 默认不开启则不阻塞。
 
@@ -76,25 +77,43 @@ date: 2026-11-02
 - [x] A5 dsh 能力面复验：品牌定制后插件安装/启停仍正常（能力面完整性原则的首次回归抽查）。（验收记录 2026-11-03：Web 插件面板正常渲染（内置插件配置/实验性插件/已安装插件三区），已安装列表正确显示 @hibuddy/brand、@hibuddy/coworker、@hibuddy/web-ui；S1 的 CLI 安装/启停用例已在 S1 验收，本轮抽查聚焦品牌定制后的能力面回归）
 - [x] A6 ADR-006 状态 accepted；progress-report 有 S2 验收记录。（验收记录 2026-11-03：ADR-006 于 2026-11-02 accepted 并登记 docs/README；S2 验收段已写入 progress-report，A1–A6 全项通过（2026-11-03 收官））
 
-### S3 核心插件：内置工具 + 审批风险分级
+### S3 审批分级与留痕增强（复用 dsh 原生工具与审批主干）
 
-**目标**：`@hibuddy/coworker` 具备真实操作能力，高风险动作处于用户控制之下（PRD FR-03 / SR-01），执行留痕满足 FR-08 的数据基础。
+**目标**：不自研工具与审批主干（dsh preset-standard 已挂 tool-fs/tool-web/bash 等 14+ 官方工具，审批经沙箱模式+执行期升级+`approval/request` waterfall 实证完整，见 [ADR-009](decisions/ADR-009-s3-rescope-agui-bridge.md) §1）；HiBuddy 只补三个 PRD 缺口——L1 写入默认需确认+会话内免再询、审批卡参数全文、L2 代码执行默认关闭（PRD FR-03 / SR-01），留痕复用原生 SessionEvent（FR-08 数据层）。
 
 **任务**：
-1. 内置工具（L0）：文件读取（限工作区）、网页读取——`ctx.tools.register` 注册，随工具声明风险等级。
-2. 内置工具（L1）：文件写入、文件整理。
-3. 审批 answerer 插件：L0 自动放行 / L1 挂起待批 / L2 默认禁用（代码执行开关关闭）；拒绝语义验证（拒绝→Agent 收到反馈继续调整，同一 Run 连续 3 次被拒则停下询问）。
-4. 免再询授权记忆：会话 × 工具 × 等级，存 dsh settings 命名空间；新会话失效。
-5. 审批事件与工具调用全量入会话日志（FR-08 时间线数据）。
-6. vitest 契约测试：工具注册、分级规则、answerer waterfall、授权记忆生命周期。
+1. `@hibuddy/coworker` 审批 answerer：`ctx.on('approval/request')` 实现分级判定——L0（读/网页）放行、L1（工作区写）挂起待批 + 「本会话×工具×等级」免再询记忆（命中返回 allowed-once，新会话失效）、L2（bash/pwsh）拒绝并提示默认关闭；拒绝连续 3 次计数建议模型停下询问（FR-03 规则 2）。
+2. 审批卡增强（`@hibuddy/web-ui` client 侧）：参数全文、影响范围说明、批准/拒绝/免再询三选项（默认卡不含参数全文与免再询）。
+3. L2 默认关闭：profile patch 禁用 bash/pwsh 工具行（注释登记官方现值与 dsh 版本，按 ADR-005 纪律）+ answerer 兜底。
+4. 留痕验证：原生 `approval/asked`/`approval/decided`/`tool/call`/`tool/result` 已全量入 session JSONL，行为验证并登记（不自建存储）。
+5. vitest 契约测试：分级规则、免再询记忆生命周期（会话×工具×等级）、拒绝计数。
 
 **验收标准**：
-- [ ] A1 `pnpm build`、`pnpm typecheck`、`vitest run` 全绿（新增契约测试覆盖上述 6 项）。
-- [ ] A2 Web 端：L0 工具自动执行且界面可见留痕，无需确认。
-- [ ] A3 Web 端：L1 工具触发审批卡（工具名/参数全文/影响范围/批准/拒绝/免再询）；批准后执行；「本会话内免再询」后同会话同类调用不再询问，新会话恢复询问。
-- [ ] A4 拒绝路径：Agent 收到拒绝反馈并继续（非报错终止）。
-- [ ] A5 headless 冒烟：`pnpm smoke` 下 L0 工具自动执行成功（L1 审批行为以 dsh headless 审批语义观测并记录）。
-- [ ] A6 progress-report 有 S3 验收记录；若决定开启代码执行则 ADR-008 已落，否则注明"默认关闭，不适用"。
+- [ ] A1 `pnpm build`、`pnpm typecheck`、`vitest run` 全绿（契约测试覆盖分级/免再询/拒绝计数）。
+- [ ] A2 Web 端：L0 工具自动执行且留痕可见，无需确认。
+- [ ] A3 Web 端：L1 写入触发审批卡（工具名/参数全文/影响范围/批准/拒绝/免再询）；「本会话内免再询」后同会话同类调用不再询问，新会话恢复询问。
+- [ ] A4 拒绝路径：Agent 收到拒绝反馈并继续（非报错终止）；同 Run 连续 3 次被拒后停下询问。
+- [ ] A5 L2：bash/pwsh 默认被拒（提示默认关闭）；headless 冒烟 `pnpm smoke` 正常（不受影响）。
+- [ ] A6 FR-08 数据层验证：审批与工具调用事件完整出现在 session 日志（时间/参数/审批来源可追溯）。
+- [ ] A7 progress-report 有 S3 验收记录；ADR-008 注明"默认关闭，不适用"。
+
+### S3b AG-UI 协议桥 MVP（@hibuddy/ag-ui-bridge）
+
+**目标**：把 dsh 会话暴露为 AG-UI 标准端点，AG-UI 生态前端可接入同一 runtime（[ADR-009](decisions/ADR-009-s3-rescope-agui-bridge.md) §3：方案 A——插件内 `ctx.webServer.register()` 挂 `POST /agui` SSE 端点，否决 dsh-sdk 外挂方案——无审批应答与密集帧）。MVP 验收形态 = CopilotKit 接入验证。
+
+**任务**：
+1. 创建 `@hibuddy/ag-ui-bridge` 插件骨架（dsh bundle + `ctx.webServer` 路由注册 + 鉴权），登记 profile 依赖。
+2. SessionEvent → AG-UI 事件映射层（turn/*→RUN_*、assistant/message→TEXT_MESSAGE_*、tool/*→TOOL_CALL_*、todo/write→STATE_*、approval 等→CUSTOM；映射表见 ADR-009 §3.2）。
+3. 审批闭环：`approval/asked` 合成 `RUN_FINISHED.outcome.interrupt`；恢复=新一轮 prompt 携带审批决定。
+4. 端到端验证：CopilotKit（或任意 AG-UI client）经 `/agui` 完成「文本对话 + 工具调用事件 + 审批中断恢复」最小闭环；dsh 原生 Web UI 行为零影响回归。
+5. vitest 契约测试：事件映射、SSE 编码、审批中断合成。
+
+**验收标准**：
+- [ ] A1 `pnpm build`、`pnpm typecheck`、`vitest run` 全绿。
+- [ ] A2 CopilotKit 前端连 `/agui`：发起任务可见流式文本与工具调用事件。
+- [ ] A3 审批闭环：触发 L1 审批时 AG-UI 侧收到 interrupt；恢复后 Run 继续。
+- [ ] A4 dsh 原生 Web UI 全量回归无影响（会话/审批/留痕不受桥影响）。
+- [ ] A5 progress-report 有 S3b 验收记录；映射退化项（消息粒度补发、无 resumption）登记缺口清单。
 
 ### S4 生成式 UI 与工作台定制
 

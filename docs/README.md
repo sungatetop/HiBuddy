@@ -15,6 +15,7 @@
 
 | ADR | 摘要 |
 |---|---|
+| [ADR-009-s3-rescope-agui-bridge.md](decisions/ADR-009-s3-rescope-agui-bridge.md) | S3 范围缩减与 AG-UI 桥立项：实证 dsh 已自带完整工具面（preset-standard 14+ 官方工具）与审批机制（沙箱模式×执行期升级+approval/request waterfall）后，S3 不再自研工具与审批主干，缩减为「审批 answerer 增量」（L1 免再询记忆/审批卡参数全文/L2 默认关闭）；AG-UI 桥提前为 S3b 专项——插件内 ctx.webServer 注册 /agui SSE 端点（方案 A，dsh-sdk 外挂方案因缺审批应答否决），MVP 验收=CopilotKit 接入闭环 |
 | [ADR-006-web-deployment-access.md](decisions/ADR-006-web-deployment-access.md) | Web 端部署形态与访问控制：P0 单用户自部署，官方默认 loopback 监听（127.0.0.1:3080，拒绝 wildcard bind），访问控制采用 dsh 原生信任链（连接栅栏 403 + 启动 token 换签名会话 cookie），不自建账号层；P0 禁止公网暴露，P1+ 远程访问走官方反向代理路径并须修订本 ADR；启动 token 为进程凭据不落盘 |
 | [ADR-005-dsh-version-pinning.md](decisions/ADR-005-dsh-version-pinning.md) | dsh 版本锁定与升级策略：@deepseek-ai/* 全家精确钉版维持整组发版配对；Electron 精确钉在 dsh 宿原生白名单指纹（禁 ^ 浮动）；engines.dsh 运行时闸；七步强制升级流程（changelog→覆盖行 diff→白名单→client 契约→build→冒烟→登记）；deploy 必须 hoisted 布局（isolated+dereference 丢相对 symlink 实测）；插件安装状态经 profile package.json+lock 入库复现 |
 | [ADR-004-desktop-shell-host.md](decisions/ADR-004-desktop-shell-host.md) | 桌面端壳+宿方案：自建 Electron 壳 + RunAsNode 宿进程复刻 dsh 模式；宿按名启动 $DSH_HOME/profiles/hibuddy（三端插件安装/分层配置同源互通）；P0 渲染层直连宿 authenticatedUrl，hibuddy-app:// 特权协议降为 P1 加固；IPC 消息集、--port 0 端口治理、quit-inspection、Windows 打包概要 |
