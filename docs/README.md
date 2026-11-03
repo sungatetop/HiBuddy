@@ -15,6 +15,7 @@
 
 | ADR | 摘要 |
 |---|---|
+| [ADR-007-generative-ui-format.md](decisions/ADR-007-generative-ui-format.md) | 生成式 UI 产出格式定案「组件指令」：模型经自定义 render_ui 工具输出 UI 指令 JSON，@hibuddy/web-ui 预置信任组件注册表渲染（内嵌=tool.call.toolview keyed slot、画布=sidebarRight tab 跨轮驻留版本递增），交互经 conversation.send 结构化回传；否决 ui4a harness 直接写前端代码路线（同源渲染无隔离，违反 SR-02 与验收 A5），iframe 生成代码列为 P1 演进候选 |
 | [ADR-009-s3-rescope-agui-bridge.md](decisions/ADR-009-s3-rescope-agui-bridge.md) | S3 范围缩减与 AG-UI 桥立项：实证 dsh 已自带完整工具面（preset-standard 14+ 官方工具）与审批机制（沙箱模式×执行期升级+approval/request waterfall）后，S3 不再自研工具与审批主干，缩减为「审批 answerer 增量」（L1 免再询记忆/审批卡参数全文/L2 默认关闭）；AG-UI 桥提前为 S3b 专项——插件内 ctx.webServer 注册 /agui SSE 端点（方案 A，dsh-sdk 外挂方案因缺审批应答否决），MVP 验收=CopilotKit 接入闭环 |
 | [ADR-008-l1-code-exec-sandbox-policy.md](decisions/ADR-008-l1-code-exec-sandbox-policy.md) | L1 代码执行沙盒策略：P0 默认关闭（L2 preset 禁用 + coworker 双闸兜底）故不适用，仅登记重立条件（未来开放代码执行时须先定沙箱档位/审批组合/免再询边界） |
 | [ADR-006-web-deployment-access.md](decisions/ADR-006-web-deployment-access.md) | Web 端部署形态与访问控制：P0 单用户自部署，官方默认 loopback 监听（127.0.0.1:3080，拒绝 wildcard bind），访问控制采用 dsh 原生信任链（连接栅栏 403 + 启动 token 换签名会话 cookie），不自建账号层；P0 禁止公网暴露，P1+ 远程访问走官方反向代理路径并须修订本 ADR；启动 token 为进程凭据不落盘 |

@@ -3,7 +3,7 @@ title: AG-UI 协议与生成式 UI 生态调研
 summary: 调研 AG-UI（Agent-User Interaction Protocol）的协议定位、事件模型、SDK 生态与应用它的热点开源项目（CopilotKit、OpenBot、openui 等），并为 HiBuddy 筛选参考项目 clone 至 thirdparty/；后补入运行时选型两仓（deepseek-harness、pi-mono）
 keywords: [AG-UI, Generative UI, CopilotKit, Agent, 事件流协议, thirdparty]
 status: accepted
-date: 2026-10-31
+date: 2026-11-03
 ---
 
 # AG-UI 协议与生成式 UI 生态调研
@@ -11,7 +11,7 @@ date: 2026-10-31
 ## 1. 调研目的与范围
 
 - 为 HiBuddy 项目的前期技术选型提供参考：摸清 Agent 与前端交互的标准化协议现状（AG-UI），以及生成式 UI（Generative UI）方向的热点开源实现。
-- 产出：筛选 6 个参考项目浅克隆到 `thirdparty/`（只读参考，不参与构建），本文档记录调研结论与各项目参考价值。
+- 产出：筛选参考项目浅克隆到 `thirdparty/`（只读参考，不参与构建），本文档记录调研结论与各项目参考价值。2026-11-03 追补克隆 dsh-generative-ui（ui4a harness，S4 生成式 UI 选型直接对照物，见 ADR-007）。
 
 ## 2. AG-UI 协议要点
 
@@ -59,6 +59,7 @@ date: 2026-10-31
 | [opentiny/genui-sdk](https://github.com/opentiny/genui-sdk) → `thirdparty/genui-sdk` | 182 | 华为 OpenTiny 出品：面向 Vue / Angular / React 的生成式 UI SDK | 跨框架生成式 UI 抽象思路（含 React 侧实现） |
 | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) → `thirdparty/deepseek-harness` | — | **HiBuddy 底座**（总体路线见 [ADR-003](../decisions/ADR-003-dsh-based-customization.md)；底座本体经 npm 依赖引入，此仓作源码对照）：Cordis 插件容器 + SessionEvent 日志 + approval/sandbox/subagent 子系统 + React Web Client；sparse 克隆（packages/apps/docs） | dsh 扩展面（插件/patch/brand slots/client 模块）实证、Web UI 分层与重连语义、Workspace/审批参考 |
 | [earendil-works/pi](https://github.com/earendil-works/pi) → `thirdparty/pi-mono` | 110k+ | 极简 agent 内核（`@earendil-works/pi-agent-core`，AgentEvent 11 种）+ pi-ai 统一多 Provider API；sparse 克隆（packages） | 不再作为独立运行时接入（ADR-003）——其 pi-ai 已被 dsh 吸收为 LLM 适配层（packages/llm/llm-pi-ai）；保留作自写 LLM 适配器时的对照 |
+| [MindLab-Research/dsh-generative-ui](https://github.com/MindLab-Research/dsh-generative-ui) → `thirdparty/dsh-generative-ui` | — | **dsh 的 ui4a 生成式 UI 插件**（2026-11-03 补克隆，服务 ADR-007）：模型直接写 React TSX（`````ui4a/tsx```` 围栏 / canvas 文件），浏览器内 esm.sh wasm 编译，同源渲染（无 iframe，卡片能力=会话能力 shim） | "harness 直接写前端代码"路线的第一手机制对照（双层教学 prompt+skill、内嵌围栏认领 DOM 观察、sidebarRight 画布、$dsh 能力闭集导入）；其无渲染隔离的设计与 HiBuddy SR-02 冲突，ADR-007 否决该路线时引用 |
 
 ## 4. 备选未 clone 项目
 
@@ -66,7 +67,6 @@ date: 2026-10-31
 
 - `tambo-ai/tambo`：React 生成式 UI SDK（HN 2026-02 发布 1.0）。
 - `langchain-ai/deepagents`：Deep Agents 框架，官方文档含 AG-UI adapter 接入（Python/TS）。
-- `MindLab-Research/dsh-generative-ui`：DeepSeek Harness 的 ui4a 生成式 UI 插件——"不诱导模型输出固定 UI schema，而是让它直接写前端代码、运行时强制边界"（组件原生 harness 路线）。
 - `miurla/morphic`：生成式 UI 的 AI 搜索引擎。
 - `vercel/ai`：Vercel AI SDK，RSC 生成式 UI 路线。
 
@@ -82,7 +82,7 @@ date: 2026-10-31
 - 只读参考：禁止修改第三方仓库内容；本项目不对其编译/打包/发布。
 - 浅克隆维护：需要更新时 `git pull --depth 1`；不引用其 git 历史。深仓可 sparse+blob:none 引入（deepseek-harness、pi-mono 即此方式）。
 - 各仓库 LICENSE（均 MIT）随仓库保留，引用其代码片段时注意许可证义务。
-- 克隆状态（2026-10-31）：8 个参考仓全部就位（ag-ui、CopilotKit、OpenBot、OpenIntelligentUI、openui、genui-sdk、deepseek-harness、pi-mono）。
+- 克隆状态（2026-11-03）：9 个参考仓全部就位（ag-ui、CopilotKit、OpenBot、OpenIntelligentUI、openui、genui-sdk、deepseek-harness、pi-mono、dsh-generative-ui）。openui 首次克隆损坏（.git 仅剩中断的临时 pack、0 对象），2026-11-03 删除重克隆修复；dsh-generative-ui 为 ADR-007 选型追补。
 
 ## 7. 主要来源
 
