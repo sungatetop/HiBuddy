@@ -12,7 +12,9 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, AgentRegistry } from '@deepseek-ai/dsh-agent'
+import type { AgentDefaultModelConfig } from '@deepseek-ai/dsh-agent-default-model'
+import type { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SseSink } from './sse.ts'
@@ -55,11 +57,22 @@ export function sessionIdFor(threadId: string): SessionId {
 
 /** Registry of every session the bridge owns, keyed by session id. */
 export class BridgeSessions {
-  private readonly ctx: Context
   private readonly records = new Map<string, SessionRecord>()
 
-  constructor(ctx: Context) {
-    this.ctx = ctx
+  /**
+   * The agents service captured during apply() — request handlers run outside
+   * the plugin's injection scope, so a lazy `ctx.agents` read there throws
+   * "without inject" (the ACP bridge learned this the hard way; see its
+   * "capture the injected service during apply" note).
+   */
+  private readonly agents: AgentRegistry
+  private readonly defaultModel: AgentDefaultModelConfig
+  private readonly presets: AgentPresetRegistry
+
+  constructor(agents: AgentRegistry, defaultModel: AgentDefaultModelConfig, presets: AgentPresetRegistry) {
+    this.agents = agents
+    this.defaultModel = defaultModel
+    this.presets = presets
   }
 
   /** The bridge-owned record for a live agent, or undefined for foreign sessions. */
@@ -104,15 +117,35 @@ export class BridgeSessions {
     }
   }
 
-  /** Create fresh, or resume the persisted session; creation is the fallback, not the rule. */
+  /**
+   * Create fresh, or resume the persisted session; creation is the fallback,
+   * not the rule. Composition parity with the web session-controller (its
+   * `composeAgent`): mount the deployment default agent preset in setup —
+   * without it the agent gets no preset tools at all (observed: only
+   * working_directory) — and pass the deployment default model as agent
+   * options so the request route and HiBuddy's `{{model}}` persona variable
+   * resolve. dsh 0.2.1-rc.5 reads the route from agent options when no
+   * durable selection exists.
+   */
   private async openHandle(sessionId: SessionId): Promise<AgentHandle> {
+    const selection = this.defaultModel.currentSelection()
+    const preset = await this.presets.resolve()
+    const mount = async (agentCtx: Context): Promise<void> => {
+      await this.presets.mount(agentCtx, preset.id)
+    }
     try {
-      return await this.ctx.agents.resume({ resumeSessionId: sessionId })
+      return await this.agents.resume({
+        resumeSessionId: sessionId,
+        agentOptions: { ...selection },
+        setup: mount,
+      })
     } catch {
       // No persisted session under this id (first run on the thread).
-      return this.ctx.agents.create({
+      return this.agents.create({
         sessionId,
-        meta: { cwd: process.cwd() },
+        meta: { cwd: process.cwd(), agentPreset: preset.id },
+        agentOptions: { ...selection },
+        setup: mount,
       })
     }
   }

@@ -35,6 +35,14 @@ import type { RunAgentInput } from './types.ts'
 /** Cordis function-plugin name. */
 export const name = 'hibuddy-ag-ui-bridge'
 
+/**
+ * Services this plugin requires before apply() runs. apply() captures them
+ * once: request handlers execute outside the plugin's injection scope, where a
+ * lazy `ctx.agents` read would throw "without inject" (see the ACP bridge's
+ * identical note).
+ */
+export const inject = ['agents', 'agentDefaultModel', 'agentPresets']
+
 /** Route path for the AG-UI HTTP+SSE endpoint. */
 export const AGUI_PATH = '/agui'
 
@@ -130,7 +138,7 @@ function pumpSessionEvent(record: SessionRecord, event: SessionEvent, threadId: 
 
 /** Wire the AG-UI endpoint for every composition that provides the web carrier. */
 export function apply(ctx: Context): void {
-  const sessions = new BridgeSessions(ctx)
+  const sessions = new BridgeSessions(ctx.agents, ctx.agentDefaultModel, ctx.agentPresets)
 
   // One global feed subscription: events of bridge-owned sessions are mapped
   // onto the session's open SSE run; every other session is ignored.
@@ -248,7 +256,11 @@ export function apply(ctx: Context): void {
           sink.close()
           return
         }
-        if (userText !== undefined) {
+        // Resume answers take precedence: a history-echoing client re-POSTs the
+        // full transcript, so an answered resume must NOT replay the last user
+        // text as a fresh followup — the suspended turn continues in place. A
+        // user message only starts a run when nothing was answered.
+        if (userText !== undefined && answered === 0) {
           try {
             record.handle.agent.followup(createUserMessage({
               content: [{ type: 'text', text: userText }],

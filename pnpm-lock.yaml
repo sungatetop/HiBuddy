@@ -69,6 +69,12 @@ importers:
       '@deepseek-ai/dsh-agent':
         specifier: 0.2.1-rc.5
         version: 0.2.1-rc.5(cbd9b78489f743dd32cfe135059e56db)
+      '@deepseek-ai/dsh-agent-default-model':
+        specifier: 0.2.1-rc.5
+        version: 0.2.1-rc.5(60908b082bf67f0d2be6c41b90ab8d8a)
+      '@deepseek-ai/dsh-agent-preset-registry':
+        specifier: 0.2.1-rc.5
+        version: 0.2.1-rc.5(08dbfe4c1e53bb24deddc310f46275c0)
       '@deepseek-ai/dsh-llm':
         specifier: 0.2.1-rc.5
         version: 0.2.1-rc.5(@deepseek-ai/cordis@4.0.5)
