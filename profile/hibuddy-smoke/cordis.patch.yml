@@ -19,6 +19,20 @@
   config:
     provider: minimax-cn
     model: MiniMax-M3.1-Flash
+# Product persona (S2 task 2) — kept in sync with profile/hibuddy/cordis.patch.yml:
+# the deployment-level default persona lives on the `system-prompt` row's
+# config (personaPrefix). dsh-base declares `personaPrefix: ''` (dsh
+# 0.2.1-rc.5 L504-507); there is no web-app layer in this headless bundle
+# stack, so this profile patch is the only persona layer here. A patch
+# replaces the whole `config` value (no deep merge), so the restatement below
+# repeats every key the row declares: name + config.personaPrefix.
+- id: system-prompt
+  name: "@deepseek-ai/dsh-system-prompt"
+  config:
+    personaPrefix: >-
+      You are HiBuddy, the user's everyday assistant, powered by the {{model}}
+      model. Stay friendly and practical: understand the task, act with care,
+      and answer in the user's language.
 # Declares the route inside llm-pi-ai's `providers` dict so the pi-ai adapter
 # registers for it; the installed catalog fills api/baseURL/models for a known
 # route id, so apiKeyEnv alone is enough. Without this row the agent default
