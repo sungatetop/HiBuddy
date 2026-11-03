@@ -49,3 +49,26 @@ date: 2026-11-02
 - **运维**：dsh 不自动加载 cwd/.env，凭据依赖进程环境（用户级 setx）或 dsh credentials service；junction 下 `dsh plugin add/remove` 后必须重跑 `pnpm profile:sync`（相对 symlink 跨 junction 失效）。
 - **观察项**：Web 启动初期 /plugins/events SSE 重试（自愈）；NSIS /S 静默模式限制（ADR-004 D8 登记）。
 - C 盘空间：AppData\Local\uv 缓存 264GB（环境问题，非项目缺陷），建议 `uv cache clean`。
+
+## S2 品牌与人设基线（验收日期 2026-11-03：Web 端通过；桌面端待重打包复验后收官）
+
+**范围**：@hibuddy/brand 完整化（侧边栏 mark/name、页面标题）、产品级人设注入（部署级 personaPrefix）、ADR-006（Web 部署形态与访问控制）、三端回归走查与 dsh 能力面复验。
+
+**验收结果**（对应 implementation-plan S2 A1–A6）：
+- **A1** `pnpm build`、`pnpm typecheck` 全绿（2026-11-03 复跑，含 title 拦截器泛型修复后的 brand 包）。
+- **A2** `--dump-config` 五 bundle 层序（dsh-base → dsh-web-app → @hibuddy/brand → @hibuddy/coworker → @hibuddy/web-ui）与 brand/coworker 配置行齐全；profile patch 覆盖（agent-default-model / ui-brand-official disabled / system-prompt 人设 / preset-standard / harness-dev-context disabled）全部在合并配置中。
+- **A3** Web 端通过（2026-11-03）：侧边栏 HiBuddy mark/name（fiber 确认 @hibuddy/brand 组件）、页面标题三态验证——空状态 "HiBuddy"、会话页 "<会话名> — HiBuddy"、新会话自动标题同步；桌面端待重打包（当前安装包内嵌 preset 覆盖与 title 拦截器之前的产物）。
+- **A4** Web 端通过（2026-11-03）：真实会话身份提问回复「我是 HiBuddy……由 MiniMax-M2.7 模型驱动」；trace「初始系统提示词」ground truth 首句 "You are HiBuddy, the user's everyday assistant, powered by the MiniMax-M2.7 model."，全文无 DeepSeek Harness / Web GUI 字样；桌面端同 A3 待重打包后复验。
+- **A5** Web 插件面板正常（内置插件配置/实验性插件/已安装插件三区渲染，@hibuddy 三包正确列出）；S1 CLI 安装/启停用例已在 S1 验收，本轮聚焦品牌定制后能力面回归。
+- **A6** ADR-006 accepted（2026-11-02）；本记录即 S2 验收登记。
+
+**阶段内修复的关键缺陷**：
+1. **页面标题被官方组件覆盖**：dsh-client-ui-layout 内置 `DocumentTitle` 组件硬编码 `productTitle = "DeepSeek Harness"`，会话标题变化/unmount 时覆写 `document.title`——S2-1 的简单赋值方案在会话页失效。修复：brand client apply 中 `Object.defineProperty(document, 'title', ...)` 实例级 setter 拦截，将写入标题中的 "DeepSeek Harness" 改写为 "HiBuddy"（触碰全部写入者；纯显示层，存储数据不受影响）。
+2. **preset persona 遮蔽部署级人设**：web 会话 agent 按 preset-standard 组装，其 `dsh-persona` 插件行以同名 section 在 agent scope 注册并遮蔽部署级 personaPrefix（dsh-persona "scope-only"，system-prompt "scoped section shadows a global section with the same name"）；prefix 置空时两种人设一起消失（空 section 渲染时丢弃）。修复：preset-standard 覆盖行中整行移除 persona 插件（preset 覆盖按行 id 替换完整 config.plugins 子列表、无深合并，其余行按官方清单重述并登记 ADR-005 升级 diff 纪律），部署级 personaPrefix 成为 web/headless 唯一人设源。
+3. **harness-dev-context 第二身份源**：dsh-web-app 捆绑的 `@deepseek-ai/dsh-harness-dev-context` 注入 "The runtime context names the DeepSeek Harness implementation checkout" / "You are interacting with the user through the DeepSeek Harness Web GUI" 两段系统提示词与两条运行时上下文（DSH checkout 路径 + GUI URL），模型据此自称 DeepSeek Harness。修复：按其官方 README 口径（"Disable that row in a profile patch when the agent should not learn the harness checkout or GUI URL"）整行禁用；该插件无配置项，禁用零功能损失。
+
+**缺口清单**（转入后续阶段）：
+- **PTC preset 人设**：preset-ptc / preset-minimal / preset-cordis 仍带官方 persona（coding / helpful engineer / coding）；标准模式不受影响，PTC 模式人设接管待后续阶段（preset 覆盖需整列表重述，改动成本高，按需处理）。
+- **Web 会话 hero**：会话空状态英雄区「探索未至之境」+ 鲸鱼图标仍为 dsh 默认素材（dsh-web-app hero 未接管）；P0 验收项不含 hero，登记待品牌深化阶段处理。
+- **DeepSeek 字样残留（低优先级）**：内置插件配置卡「设置 DeepSeek 的搜索提供方」等官方 UI 文案；默认工作区路径 `Documents\deepseek-harness\default-workspace`（dsh 默认命名）；运行时上下文 "Current DSH file policy" 等中性缩写。均为官方文案/路径层，非系统提示词身份段。
+- **桌面端**：重打包并复验 A3/A4 后 S2 收官（含 title 拦截器与两项 patch 的新产物）。

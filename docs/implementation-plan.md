@@ -63,18 +63,18 @@ date: 2026-11-02
 **目标**：第一个需求定制阶段：以 dsh 官方 brand 路径替换默认品牌，注入 HiBuddy 最简人设；验证"同一 profile 三端一致"；定制后 dsh 能力面不回归。
 
 **任务**：
-1. `@hibuddy/brand` 完整化：HiBuddy 名称、侧边栏 mark、页面标题（官方 brand slots 路径）。（已落地 2026-11-02：官方 `ui-brand-official` 行经 profile cordis.patch.yml 覆盖为 disabled——官方浏览器半仅注册 sidebar.brand.mark/name 两槽位，无其它表面损失，@hibuddy/brand 独占接管消除双注册；页面标题经 brand client 半设 `document.title`——dsh 0.2.1-rc.5 无运行时标题配置点，走 client-module 扩展面；界面级生效待 A3 三端走查）
-2. `@hibuddy/coworker` 最简人设：经 dsh 官方配置面注入系统提示词（产品名 + 一句话人设），研究并登记 dsh 的 agent/persona 配置扩展点。（已落地 2026-11-02：走部署级 `system-prompt` 行 `personaPrefix`——profile patch 第三层覆盖 dsh-web-app 的 coding agent 人设为 HiBuddy 人设（产品名+一句话，保留 `{{model}}` 变量），coworker 代码零改动；`@deepseek-ai/dsh-persona` 为 per-agent 行不适用（须 preset scope 内挂载、全局挂载报错），扩展点研究结论登记于 profile/hibuddy/cordis.patch.yml 注释；`--dump-config` 已验证生效；行为级验证随 A4 冒烟补验）
+1. `@hibuddy/brand` 完整化：HiBuddy 名称、侧边栏 mark、页面标题（官方 brand slots 路径）。（已落地 2026-11-02：官方 `ui-brand-official` 行经 profile cordis.patch.yml 覆盖为 disabled——官方浏览器半仅注册 sidebar.brand.mark/name 两槽位，无其它表面损失，@hibuddy/brand 独占接管消除双注册；页面标题经 brand client 半设 `document.title`——dsh 0.2.1-rc.5 无运行时标题配置点，走 client-module 扩展面；界面级生效待 A3 三端走查。走查补充 2026-11-03：dsh-client-ui-layout 内置 `DocumentTitle` 组件硬编码 productTitle="DeepSeek Harness"，每次会话标题变化都会覆写 `document.title`——简单赋值方案在会话页被覆盖，改为 brand apply 中 `Object.defineProperty(document, 'title', ...)` 实例级 setter 拦截，把写入标题中的 "DeepSeek Harness" 改写为 "HiBuddy"；空状态/会话页/新会话自动标题三态验证通过）
+2. `@hibuddy/coworker` 最简人设：经 dsh 官方配置面注入系统提示词（产品名 + 一句话人设），研究并登记 dsh 的 agent/persona 配置扩展点。（已落地 2026-11-02：走部署级 `system-prompt` 行 `personaPrefix`——profile patch 第三层覆盖 dsh-web-app 的 coding agent 人设为 HiBuddy 人设（产品名+一句话，保留 `{{model}}` 变量），coworker 代码零改动；`@deepseek-ai/dsh-persona` 为 per-agent 行不适用（须 preset scope 内挂载、全局挂载报错），扩展点研究结论登记于 profile/hibuddy/cordis.patch.yml 注释；`--dump-config` 已验证生效；行为级验证随 A4 冒烟补验。走查修正 2026-11-03：A4 行为级验证暴露两处偏差并修复——①官方 `preset-standard`（dsh-web-app presets/standard.patch.yml）内挂载的 `dsh-persona` 插件以同名 section 在 agent scope 注册并遮蔽部署级 personaPrefix（dsh-persona 标注 "scope-only"、system-prompt 注释 "scoped section shadows a global section with the same name"），即使 prefix 置空两种人设也一起消失，修复为在 preset-standard 覆盖行中整行移除 persona 插件（preset 覆盖替换完整 config.plugins 子列表，已按官方清单重述其余行）；②`harness-dev-context` 插件注入 "DeepSeek Harness implementation checkout" / "DeepSeek Harness Web GUI" 两段系统提示词与两条运行时上下文，构成第二身份源，按其官方 README 指明的口径整行禁用；修复后 trace「初始系统提示词」ground truth：首句 "You are HiBuddy, the user's everyday assistant, powered by the MiniMax-M2.7 model."，全文无 DeepSeek Harness）
 3. 落 ADR-006：Web 端部署形态与访问控制（P0 单用户自部署、loopback/令牌口径确认）。（已落地 2026-11-02：[ADR-006](decisions/ADR-006-web-deployment-access.md) accepted 并登记 docs/README——官方默认 loopback 监听不覆盖传输行、访问控制走 dsh 原生信任链（栅栏 403 + 启动 token 换签名会话 cookie）不自建账号层、P0 禁公网暴露、启动 token 进程凭据不落盘）
-4. 三端回归走查（含 S1 的插件安装/管理能力复验），产出问题/缺口清单（记入 progress-report）。
+4. 三端回归走查（含 S1 的插件安装/管理能力复验），产出问题/缺口清单（记入 progress-report）。（已落地 2026-11-03：Web 端走查完成——侧边栏 HiBuddy mark/name、空状态与会话页/自动标题三态、模型选择器 MiniMax-M2.7、真实会话人设验证（trace ground truth 前后对照）、插件面板与已安装 @hibuddy 三包渲染正常；桌面端待重打包后按同口径复验；缺口清单见 progress-report S2）
 
 **验收标准**：
-- [ ] A1 `pnpm build`、`pnpm typecheck` 全绿。
-- [ ] A2 `pnpm exec dsh --profile hibuddy --dump-config` 含五 bundle 层序与 brand/coworker 配置行。
+- [x] A1 `pnpm build`、`pnpm typecheck` 全绿。（验收记录 2026-11-03 复跑：含 title 拦截器泛型修复后的 brand 包，brand/desktop-host/web-ui 全部通过）
+- [x] A2 `pnpm exec dsh --profile hibuddy --dump-config` 含五 bundle 层序与 brand/coworker 配置行。（验收记录 2026-11-03：dump-config 层序标记 dsh-base → dsh-web-app → @hibuddy/brand → @hibuddy/coworker → @hibuddy/web-ui 齐全；brand/coworker 行、profile patch 三处覆盖（agent-default-model / ui-brand-official disabled / system-prompt 人设）与 preset-standard、harness-dev-context disabled 覆盖均在合并配置中）
 - [ ] A3 Web 与桌面端界面品牌均为 HiBuddy（侧边栏 mark/name、页面标题），非 dsh 默认品牌。
 - [ ] A4 Web 与桌面端各完成一次真实任务，Agent 行为体现人设（系统提示词生效）。
-- [ ] A5 dsh 能力面复验：品牌定制后插件安装/启停仍正常（能力面完整性原则的首次回归抽查）。
-- [ ] A6 ADR-006 状态 accepted；progress-report 有 S2 验收记录。
+- [x] A5 dsh 能力面复验：品牌定制后插件安装/启停仍正常（能力面完整性原则的首次回归抽查）。（验收记录 2026-11-03：Web 插件面板正常渲染（内置插件配置/实验性插件/已安装插件三区），已安装列表正确显示 @hibuddy/brand、@hibuddy/coworker、@hibuddy/web-ui；S1 的 CLI 安装/启停用例已在 S1 验收，本轮抽查聚焦品牌定制后的能力面回归）
+- [x] A6 ADR-006 状态 accepted；progress-report 有 S2 验收记录。（验收记录 2026-11-03：ADR-006 于 2026-11-02 accepted 并登记 docs/README；S2 验收段已写入 progress-report，Web 端通过、桌面端待重打包复验后勾 A3/A4 收官）
 
 ### S3 核心插件：内置工具 + 审批风险分级
 
