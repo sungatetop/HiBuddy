@@ -73,9 +73,18 @@ date: 2026-11-02
 - **DeepSeek 字样残留（低优先级）**：内置插件配置卡「设置 DeepSeek 的搜索提供方」等官方 UI 文案；默认工作区路径 `Documents\deepseek-harness\default-workspace`（dsh 默认命名）；运行时上下文 "Current DSH file policy" 等中性缩写。均为官方文案/路径层，非系统提示词身份段。
 - **桌面端**：已收官（2026-11-03）——新包 13:19 安装级复验通过：安装树 22,757 文件零丢失，内嵌新 patch 与 brand client，用户确认标题与身份人设均为 HiBuddy。
 
-## S3 审批分级与留痕增强（进行中：S3-1/S3-2/S3-3 已提交，留痕验证已登记，验收待 S3-5）
+## S3 审批分级与留痕增强（验收日期 2026-11-03：通过）
 
-**范围**：@hibuddy/coworker 审批 answerer（L2 代码执行默认关闭、L1 会话免再询授权、连续拒绝 3 次停下询问）、@hibuddy/web-ui 审批卡增强（参数全文/影响范围/免再询按钮）、preset-standard 无条件禁用 bash/pwsh、原生留痕行为验证。复用 dsh 原生工具与审批主干，不自建（ADR-009）。
+**范围**：@hibuddy/coworker 审批 answerer（L2 代码执行默认关闭、L1 会话免再询授权、连续拒绝 3 次停下询问）、@hibuddy/web-ui 审批卡增强（参数全文/影响范围/免再询按钮）、preset-standard 无条件禁用 bash/pwsh、vitest 契约测试、原生留痕行为验证。复用 dsh 原生工具与审批主干，不自建（ADR-009）。
+
+**验收结果**（对应 implementation-plan S3 A1–A7，2026-11-03）：
+- **A1** `pnpm build`、`pnpm typecheck`、`pnpm test` 全绿；契约测试 18 项（vitest 5，@hibuddy/coworker）：分级规则 4 + 免再询记忆生命周期 6 + 拒绝计数 6 + 阈值常量 2，覆盖 grading 表钉死（L2={bash,pwsh}）、grant 会话×工具隔离、strike 独立计数/允许清零/turn 重置/会话销毁。
+- **A2** Web 端通过（S3-2/S3-5 走查）：工作区内 L0 读写自动执行无需确认，`tool/call`/`tool/result` 全量入 session JSONL（S3-4 留痕验证）。
+- **A3** Web 端通过（S3-2 + S3-5 走查）：越权写入触发增强审批卡（工具名/参数全文 JSON/影响范围/拒绝/批准/本会话免再询）；「本会话免再询」后同会话同类调用不再询问（grant 命中，answerer 1ms 代答）；**新会话恢复询问**实测通过（session-394922b1 持 write grant，新会话 session-875bf89e 同类请求再次出全卡，grant 未跨会话）。
+- **A4** Web 端通过（S3-5 走查，session-875bf89e 同轮）：拒绝后模型收到拒绝原因并继续（给出后续选项，非报错终止）；指令化连试场景下连续拒绝 3 次后，第 4 次尝试命中 stop-and-ask 闸（pre-execute deny `stopAndAskReason`，无第 4 次 `approval/asked` 入痕——闸在审批管线之前），模型停止重试、向用户说明「沙箱策略 + 授权拒绝双重阻断」并请求决策。
+- **A5** L2 通过：bash/pwsh 装配级禁用（--dump-config 证实 standard preset 两行 `disabled: true`，S3-3）；运行时 coworker 双闸兜底（pre-execute deny + answerer 拒绝，契约测试钉死）；headless 冒烟 `pnpm smoke` 正常（MiniMax-M3.1-Flash 应答，身份正确，无工具依赖）。
+- **A6** FR-08 数据层通过（S3-4 留痕验证）：`approval/policy`/`approval/asked`/`approval/decided`/`tool/call`/`tool/result` 全量入 session JSONL（拼接 zstd 帧容器），事件链经 callId 可关联；人工决策（44.1s 时延）、免再询代答（1ms）、连续拒绝（3×rejected）均实测在案。P0 局限已登记（免再询授权在原生审计不可语义区分）。
+- **A7** 本记录即 S3 验收登记；[ADR-008](decisions/ADR-008-l1-code-exec-sandbox-policy.md) 已立（accepted）注明「默认关闭，不适用」及未来开启代码执行时的重立条件。
 
 ### 留痕行为验证（S3-4，2026-11-03）
 
