@@ -55,7 +55,7 @@ date: 2026-11-02
 - [x] A3 Web：`pnpm exec dsh --profile hibuddy` 启动，浏览器打开原生界面完成一次真实多步任务（过程可见），刷新页面后会话与状态恢复。
 - [x] A4 插件生态：示例插件经 CLI 安装后生效、经 Web UI 可见并可启停/卸载；`--patch` overlay 层序生效；HiBuddy 插件与第三方插件共存无冲突。
 - [x] A5 桌面开发态：启动 desktop-shell，窗口加载内嵌 runtime 的界面并可完成一次对话任务。
-- [ ] A6 桌面打包：产出 Windows 可安装包；安装后应用可启动并跑通一次任务；关闭应用后 runtime 进程随退（无残留）。（安装包已产出；win-unpacked 同产物启动/任务/随退已验；安装树比对完成 2026-11-03——`resources\host` 22,656 = 基准 22,656 零丢失，总数 22,757 = 22,756 + 安装期生成的卸载器 Uninstall HiBuddy.exe，注册表卸载项正常写入；剩安装后启动/任务/随退验证）
+- [x] A6 桌面打包：产出 Windows 可安装包；安装后应用可启动并跑通一次任务；关闭应用后 runtime 进程随退（无残留）。（2026-11-03 全部验证：全新安装零丢文件——`resources\host` 22,656 = 基准 22,656，总数 22,757 = +安装期生成卸载器；安装版启动链 shell.log 全通过——shell starting → spawning host → host ready → renderer loaded，死锁修复在安装版生效；用户确认真实任务回复正常（MiniMax-M2.7）；关闭后无 HiBuddy/electron 宿进程残留）
 - [x] A7 ADR-004、ADR-005 状态 accepted 并登记 docs/README；progress-report 有 S1 验收记录。
 
 ### S2 品牌与人设基线（定制起点）
