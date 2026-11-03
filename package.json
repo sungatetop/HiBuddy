@@ -11,6 +11,7 @@
     "build": "pnpm -r run build",
     "watch": "pnpm -r run watch",
     "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
     "profile:sync": "pwsh -NoProfile -File scripts/sync-profile.ps1",
     "smoke": "dsh --profile hibuddy-smoke",
     "dsh": "dsh"
