@@ -62,10 +62,12 @@ export function readInstruction(args: ToolArgs): RenderUiInstruction {
   }
 }
 
-/** True when the instruction carries everything its component needs to render. */
+/** True when the instruction carries everything its component needs to render.
+ *  `data` is optional (a form legitimately has no initial data — models omit
+ *  it), so only the identity, component key, and props gate the projection;
+ *  components treat absent `data` as empty and degrade via their own guards. */
 export function instructionReady(instruction: RenderUiInstruction): boolean {
   return instruction.id !== undefined
     && instruction.component !== undefined
     && instruction.props !== undefined
-    && instruction.data !== undefined
 }

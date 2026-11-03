@@ -9,12 +9,18 @@
  * failed renders degrade to a static view (see `render-ui-card.tsx`).
  */
 import type { ComponentType } from 'react'
+import type { GenuiLocaleKey } from './locales.ts'
 import type { RenderUiInstruction, UiComponentKey } from './instruction.ts'
+
+/** Translate bound to the `hibuddy-genui` namespace (card registration face). */
+export type SurfaceTranslate = (key: GenuiLocaleKey) => string
 
 /** Props every trusted surface component receives at render time. */
 export interface UiSurfaceProps {
   /** The parsed instruction; `props`/`data` are closed JSON values here. */
   instruction: RenderUiInstruction
+  /** Namespace translate for the surface's own copy. */
+  t: SurfaceTranslate
 }
 
 /** A registry surface component. */

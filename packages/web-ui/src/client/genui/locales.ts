@@ -5,6 +5,8 @@ export const zh = {
   preparing: '正在生成界面…',
   unknown: '模型请求了未注册的组件，已显示原始指令。',
   degraded: '组件渲染失败，已降级为静态内容。',
+  formRequired: '请填写必填项后再提交。',
+  formFilled: '已填写内容（回传功能将在下个版本接入会话）',
 } satisfies Record<string, string>
 
 /** Generative-UI dictionary key union. */
@@ -15,4 +17,6 @@ export const en: Record<GenuiLocaleKey, string> = {
   preparing: 'Generating UI…',
   unknown: 'The model requested an unregistered component; showing the raw instruction.',
   degraded: 'The component failed to render; showing static content instead.',
+  formRequired: 'Please fill in the required fields before submitting.',
+  formFilled: 'Submitted values (conversation round-trip lands in the next iteration)',
 }

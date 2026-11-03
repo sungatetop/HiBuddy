@@ -27,6 +27,8 @@ import { HibuddyApprovalCard } from './approval-card.tsx'
 import { en, zh, type ApprovalLocaleKey } from './locales.ts'
 import { en as genuiEn, zh as genuiZh, type GenuiLocaleKey } from './genui/locales.ts'
 import { RenderUiCard } from './genui/render-ui-card.tsx'
+import { registerGenuiSurfaces } from './genui/surfaces.ts'
+import { GenuiTurnTail } from './genui/turn-tail.tsx'
 
 /** Required services: Slot registry and copy. */
 export const inject = ['slots', 'locale']
@@ -52,6 +54,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
  * @param ctx - Client root context.
  */
 export function apply(ctx: ClientContext): void {
+  registerGenuiSurfaces()
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'hibuddy-web-ui: approval dictionaries')
   ctx.effect(
     () => ctx.locale.register(GENUI_NS, { zh: genuiZh, en: genuiEn }),
@@ -76,4 +79,9 @@ export function apply(ctx: ClientContext): void {
     key: 'render_ui',
     locale: GENUI_NS,
   }, RenderUiCard))
+  ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
+    name: 'conversation.chat.turnTail',
+    id: 'hibuddy-genui-tail',
+    locale: GENUI_NS,
+  }, GenuiTurnTail))
 }

@@ -13,11 +13,11 @@
  */
 import { Component, type CSSProperties, type ReactNode } from 'react'
 import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { StartedToolCall, ToolResultNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { instructionReady, readInstruction, type RenderUiInstruction } from './instruction.ts'
-import type { GenuiLocaleKey } from './locales.ts'
-import { uiSurfaceOf, type UiSurfaceProps } from './registry.ts'
+import { uiSurfaceOf, type SurfaceTranslate, type UiSurfaceProps } from './registry.ts'
 
 /** Full props of the registered toolview: phase owner seat + our locale. */
 export type RenderUiCardProps = ToolCallViewProps & PropsLocale<'hibuddy-genui'>
@@ -70,7 +70,7 @@ const styles = {
 }
 
 /** Translate bound to our namespace. */
-type Translate = (key: GenuiLocaleKey) => string
+type Translate = SurfaceTranslate
 
 /** Pretty-print a closed JSON value for the static fallback. */
 function pretty(value: unknown): string {
@@ -87,10 +87,7 @@ function pretty(value: unknown): string {
  * instructions (`degraded=false`), and render failures (`degraded=true`, via
  * the boundary below).
  */
-function FallbackSurface({ instruction, t, degraded }: UiSurfaceProps & {
-  t: Translate
-  degraded: boolean
-}): ReactNode {
+function FallbackSurface({ instruction, t, degraded }: UiSurfaceProps & { degraded: boolean }): ReactNode {
   return (
     <>
       {!degraded && instruction.component !== undefined && <p style={styles.note}>{t('unknown')}</p>}
@@ -101,16 +98,13 @@ function FallbackSurface({ instruction, t, degraded }: UiSurfaceProps & {
 }
 
 /** Error boundary: a throwing surface degrades to the static fallback (SR-02). */
-class SurfaceBoundary extends Component<
-  { instruction: RenderUiInstruction; t: Translate; children: ReactNode },
-  { failed: boolean }
-> {
+class SurfaceBoundary extends Component<{ surface: UiSurfaceProps; children: ReactNode }, { failed: boolean }> {
   override state = { failed: false }
   static getDerivedStateFromError(): { failed: boolean } {
     return { failed: true }
   }
   override render(): ReactNode {
-    if (this.state.failed) return <FallbackSurface instruction={this.props.instruction} t={this.props.t} degraded />
+    if (this.state.failed) return <FallbackSurface {...this.props.surface} degraded />
     return this.props.children
   }
 }
@@ -124,9 +118,35 @@ function SurfaceBody({ instruction, t }: { instruction: RenderUiInstruction; t: 
   const Surface = uiSurfaceOf(component)
   if (Surface === undefined) return <FallbackSurface instruction={instruction} t={t} degraded={false} />
   return (
-    <SurfaceBoundary instruction={instruction} t={t}>
-      <Surface instruction={instruction} />
+    <SurfaceBoundary surface={{ instruction, t }}>
+      <Surface instruction={instruction} t={t} />
     </SurfaceBoundary>
+  )
+}
+
+/**
+ * Settled generative-UI card: chrome (badge/title/summary) + registry surface.
+ * Shared by the toolview's start/result phases and the turn-tail mirror, so
+ * both placements render one identical card for the same call.
+ */
+export function GenuiSurfaceCard({ block, t }: { block: StartedToolCall | ToolResultNode; t: Translate }): ReactNode {
+  const instruction = readInstruction(block.args)
+  const component = instruction.component
+  const title = instruction.title || component || t('preparing')
+  return (
+    <div
+      style={styles.root}
+      data-hibuddy-genui=""
+      data-hibuddy-genui-component={component ?? ''}
+      data-hibuddy-genui-phase="result"
+    >
+      <div style={styles.head}>
+        {component !== undefined && <span style={styles.badge}>{component}</span>}
+        <span style={styles.title}>{title}</span>
+      </div>
+      {instruction.summary !== undefined && <p style={styles.summary}>{instruction.summary}</p>}
+      <SurfaceBody instruction={instruction} t={t} />
+    </div>
   )
 }
 
@@ -137,6 +157,9 @@ function SurfaceBody({ instruction, t }: { instruction: RenderUiInstruction; t: 
  */
 export function RenderUiCard(props: RenderUiCardProps): ReactNode {
   const { block, t } = props
+  // The phase discriminant owns the union; TS cannot correlate the two props,
+  // so the settled branch asserts the runtime-guaranteed narrow.
+  if (props.phase !== 'preparing') return <GenuiSurfaceCard block={block as StartedToolCall | ToolResultNode} t={t} />
   const instruction = readInstruction(block.args)
   const component = instruction.component
   const title = instruction.title || component || t('preparing')
@@ -145,17 +168,15 @@ export function RenderUiCard(props: RenderUiCardProps): ReactNode {
       style={styles.root}
       data-hibuddy-genui=""
       data-hibuddy-genui-component={component ?? ''}
-      data-hibuddy-genui-phase={props.phase}
+      data-hibuddy-genui-phase="preparing"
     >
       <div style={styles.head}>
         {component !== undefined && <span style={styles.badge}>{component}</span>}
         <span style={styles.title}>{title}</span>
-        {props.phase === 'preparing' && <StateDot state="ongoing" />}
+        <StateDot state="ongoing" />
       </div>
       {instruction.summary !== undefined && <p style={styles.summary}>{instruction.summary}</p>}
-      {props.phase === 'preparing'
-        ? <p style={styles.summary}>{t('preparing')}</p>
-        : <SurfaceBody instruction={instruction} t={t} />}
+      <p style={styles.summary}>{t('preparing')}</p>
     </div>
   )
 }
