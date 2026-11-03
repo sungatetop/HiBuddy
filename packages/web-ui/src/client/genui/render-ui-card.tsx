@@ -12,10 +12,11 @@
  * approval card does.
  */
 import { Component, type CSSProperties, type ReactNode } from 'react'
-import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StartedToolCall, ToolResultNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import { openGenuiCanvas } from './canvas-open.ts'
 import { instructionReady, readInstruction, type RenderUiInstruction } from './instruction.ts'
 import { uiSurfaceOf, type SurfaceTranslate, type UiSurfaceProps } from './registry.ts'
 
@@ -54,6 +55,7 @@ const styles = {
   },
   summary: { margin: 0, fontSize: 12, lineHeight: 1.6, color: 'var(--dsw-alias-label-tertiary)' },
   note: { margin: 0, fontSize: 12, lineHeight: 1.6, color: 'var(--dsw-alias-state-warn-primary)' },
+  canvasActions: { display: 'flex', justifyContent: 'flex-end' },
   raw: {
     margin: 0,
     padding: '8px 10px',
@@ -110,7 +112,7 @@ class SurfaceBoundary extends Component<{ surface: UiSurfaceProps; children: Rea
 }
 
 /** Settled body: registry surface when possible, static fallback otherwise. */
-function SurfaceBody({ instruction, t }: { instruction: RenderUiInstruction; t: Translate }): ReactNode {
+export function SurfaceBody({ instruction, t }: { instruction: RenderUiInstruction; t: Translate }): ReactNode {
   const component = instruction.component
   if (!instructionReady(instruction) || component === undefined) {
     return <FallbackSurface instruction={instruction} t={t} degraded={false} />
@@ -128,24 +130,37 @@ function SurfaceBody({ instruction, t }: { instruction: RenderUiInstruction; t: 
  * Settled generative-UI card: chrome (badge/title/summary) + registry surface.
  * Shared by the toolview's start/result phases and the turn-tail mirror, so
  * both placements render one identical card for the same call.
+ *
+ * Canvas routing (ADR-007 §3.3): a `target=canvas` instruction renders as a
+ * COMPACT card here (chrome + an open-canvas button) — the full surface lives
+ * in the right-sidebar canvas tab, keyed by the instruction id; the turn-tail
+ * recorder feeds that tab's version history.
  */
 export function GenuiSurfaceCard({ block, t }: { block: StartedToolCall | ToolResultNode; t: Translate }): ReactNode {
   const instruction = readInstruction(block.args)
   const component = instruction.component
   const title = instruction.title || component || t('preparing')
+  const canvasId = instruction.target === 'canvas' && instruction.id !== undefined ? instruction.id : undefined
   return (
     <div
       style={styles.root}
       data-hibuddy-genui=""
       data-hibuddy-genui-component={component ?? ''}
       data-hibuddy-genui-phase="result"
+      {...(canvasId !== undefined ? { 'data-hibuddy-genui-canvas': canvasId } : {})}
     >
       <div style={styles.head}>
-        {component !== undefined && <span style={styles.badge}>{component}</span>}
+        <span style={styles.badge}>{canvasId !== undefined ? 'canvas' : component}</span>
         <span style={styles.title}>{title}</span>
       </div>
       {instruction.summary !== undefined && <p style={styles.summary}>{instruction.summary}</p>}
-      <SurfaceBody instruction={instruction} t={t} />
+      {canvasId !== undefined
+        ? (
+            <div style={styles.canvasActions}>
+              <Button variant="outline" onClick={() => openGenuiCanvas(canvasId)}>{t('canvasOpen')}</Button>
+            </div>
+          )
+        : <SurfaceBody instruction={instruction} t={t} />}
     </div>
   )
 }

@@ -11,9 +11,12 @@
  * turns re-render their surfaces after a page reload (S4-4 version history
  * builds on this).
  */
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import type { ChatConversationViewNode, ChatNode, ChatSnapshot, ToolResultNode, UseChat } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import { openGenuiCanvas } from './canvas-open.ts'
+import { recordCanvasVersion } from './canvas-store.ts'
+import { readInstruction } from './instruction.ts'
 import { GenuiSurfaceCard } from './render-ui-card.tsx'
 
 /** Full props of a turnTail list entry: turn location + our locale. */
@@ -41,10 +44,25 @@ function settledRenderUiCalls(snapshot: ChatSnapshot, turn: number): ToolResultN
 /**
  * The registered turnTail entry: one mirror card per settled render_ui call
  * of this turn; entries without content return null (contract requirement).
+ *
+ * Canvas recording (ADR-007 §3.3): settled `target=canvas` calls are recorded
+ * into the canvas store here — the tail re-renders from the durable chat nodes
+ * on every page load, which rebuilds the canvas tab's version history after a
+ * reload. A brand-new canvas instance also auto-opens the canvas tab (reveal
+ * semantics; already-open tabs just re-reveal).
  */
 export function GenuiTurnTail(props: GenuiTurnTailProps): ReactNode {
   const { turn, useChat, t } = props
   const calls = useChat((snapshot) => settledRenderUiCalls(snapshot, turn.turn))
+  useEffect(() => {
+    if (calls === undefined) return
+    for (const call of calls) {
+      const instruction = readInstruction(call.args)
+      if (instruction.target !== 'canvas' || instruction.id === undefined) continue
+      const fresh = recordCanvasVersion(instruction, call.callId, turn.turn)
+      if (fresh) openGenuiCanvas(instruction.id)
+    }
+  }, [calls, turn.turn])
   if (calls === undefined || calls.length === 0) return null
   return (
     <div data-hibuddy-genui-tail="" style={{ display: 'grid', gap: 10 }}>
