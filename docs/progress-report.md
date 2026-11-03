@@ -72,3 +72,30 @@ date: 2026-11-02
 - **Web 会话 hero**：会话空状态英雄区「探索未至之境」+ 鲸鱼图标仍为 dsh 默认素材（dsh-web-app hero 未接管）；P0 验收项不含 hero，登记待品牌深化阶段处理。
 - **DeepSeek 字样残留（低优先级）**：内置插件配置卡「设置 DeepSeek 的搜索提供方」等官方 UI 文案；默认工作区路径 `Documents\deepseek-harness\default-workspace`（dsh 默认命名）；运行时上下文 "Current DSH file policy" 等中性缩写。均为官方文案/路径层，非系统提示词身份段。
 - **桌面端**：已收官（2026-11-03）——新包 13:19 安装级复验通过：安装树 22,757 文件零丢失，内嵌新 patch 与 brand client，用户确认标题与身份人设均为 HiBuddy。
+
+## S3 审批分级与留痕增强（进行中：S3-1/S3-2/S3-3 已提交，留痕验证已登记，验收待 S3-5）
+
+**范围**：@hibuddy/coworker 审批 answerer（L2 代码执行默认关闭、L1 会话免再询授权、连续拒绝 3 次停下询问）、@hibuddy/web-ui 审批卡增强（参数全文/影响范围/免再询按钮）、preset-standard 无条件禁用 bash/pwsh、原生留痕行为验证。复用 dsh 原生工具与审批主干，不自建（ADR-009）。
+
+### 留痕行为验证（S3-4，2026-11-03）
+
+**结论**：审批与工具执行全程经原生 SessionEvent 落入 session JSONL，不自建存储（PRD FR-08 数据层复用成立）。存储形态：`~/.dsh/sessions/<workspace-hash>/session-<id>/session.v4.jsonl.zstd`，拼接 zstd 帧容器（每帧一批事件，bsdtar/libzstd 或 node:zlib 可解）。
+
+以 S3-2 验收会话（session-b0897514，dsh 0.2.1-rc.5，46 帧）为 ground truth，事件链经 callId 全程可关联：
+
+| 环节 | 事件 | 关键字段 |
+|---|---|---|
+| 会话策略 | `approval/policy` | `data.policy` |
+| 升权请求 | `approval/asked` | `data.{id, toolName, callId, reason}`（reason 为模型升级理由全文） |
+| 审批决策 | `approval/decided` | `data.{id, outcome}`（allowed-once / denied 等） |
+| 工具调用 | `tool/call` | `data.{callId, name, arguments}`（arguments 完整参数 JSON 串） |
+| 工具结果 | `tool/result` | `data.message.toolCallId` + `content` + `isError` + `meta`（操作/路径） |
+
+两条越权写入（用户主目录，danger-full-access 升级）实测链：
+1. **人工审批**：`tool/call`(seq 61) → `approval/asked`(62) → `approval/decided`(63，人工决策时延 44.1s，outcome=allowed-once) → `tool/result`(64，isError=false)。
+2. **免再询自动应答**：`tool/call`(82) → `approval/asked`(83) → `approval/decided`(84，answerer 自动应答时延 1ms，outcome=allowed-once) → `tool/result`(85)。grant 命中不跳过原生审批管线——asked 照常入痕，由 answerer 在 waterfall 中代答。
+
+**P0 局限（登记）**：免再询授权在原生审计不可区分。grant 命中时代答与人工单次批准的 `approval/decided.outcome` 完全同值（无语义标记），仅 asked→decided 时延（1ms vs 秒级）可作旁证；grant 记录仅存于 @hibuddy/coworker 进程内 grants 表（会话级，`GET /hibuddy/approvals/grants` 可查，进程退出即失，不持久化）。如需语义级审计区分「人工批准」与「免再询自动批准」，须后续以独立事件通道补注——P0 不做，登记为已知局限。
+
+**缺口清单（S3 新增）**：
+- **ptc/minimal/cordis preset 仍带 shell 工具行**（S3-3）：preset 覆盖需整列表重述、维护成本高，与 S2 的 PTC 人设缺口同性质；运行时第二道闸（coworker tools/pre-execute L2 前置 deny + approval answerer 兜底，`l2DisabledReason`）不依赖 preset 装配，覆盖全部 preset。registry 默认 preset 为 standard（已禁用）。
