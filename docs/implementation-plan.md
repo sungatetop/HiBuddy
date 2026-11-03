@@ -71,10 +71,10 @@ date: 2026-11-02
 **验收标准**：
 - [x] A1 `pnpm build`、`pnpm typecheck` 全绿。（验收记录 2026-11-03 复跑：含 title 拦截器泛型修复后的 brand 包，brand/desktop-host/web-ui 全部通过）
 - [x] A2 `pnpm exec dsh --profile hibuddy --dump-config` 含五 bundle 层序与 brand/coworker 配置行。（验收记录 2026-11-03：dump-config 层序标记 dsh-base → dsh-web-app → @hibuddy/brand → @hibuddy/coworker → @hibuddy/web-ui 齐全；brand/coworker 行、profile patch 三处覆盖（agent-default-model / ui-brand-official disabled / system-prompt 人设）与 preset-standard、harness-dev-context disabled 覆盖均在合并配置中）
-- [ ] A3 Web 与桌面端界面品牌均为 HiBuddy（侧边栏 mark/name、页面标题），非 dsh 默认品牌。
-- [ ] A4 Web 与桌面端各完成一次真实任务，Agent 行为体现人设（系统提示词生效）。
+- [x] A3 Web 与桌面端界面品牌均为 HiBuddy（侧边栏 mark/name、页面标题），非 dsh 默认品牌。（验收记录 2026-11-03：Web 三态验证通过；桌面安装版用户确认标题 HiBuddy——安装树 22,757 = 22,756 载荷 + 卸载器零丢失，内嵌新 patch 与 brand 标题拦截器产物一致）
+- [x] A4 Web 与桌面端各完成一次真实任务，Agent 行为体现人设（系统提示词生效）。（验收记录 2026-11-03：Web 会话回复自称 HiBuddy/MiniMax-M2.7，trace「初始系统提示词」首句 "You are HiBuddy..."；桌面安装版用户真实提问确认回复自称 HiBuddy——persona 遮蔽修复与 harness-dev-context 禁用在安装版生效）
 - [x] A5 dsh 能力面复验：品牌定制后插件安装/启停仍正常（能力面完整性原则的首次回归抽查）。（验收记录 2026-11-03：Web 插件面板正常渲染（内置插件配置/实验性插件/已安装插件三区），已安装列表正确显示 @hibuddy/brand、@hibuddy/coworker、@hibuddy/web-ui；S1 的 CLI 安装/启停用例已在 S1 验收，本轮抽查聚焦品牌定制后的能力面回归）
-- [x] A6 ADR-006 状态 accepted；progress-report 有 S2 验收记录。（验收记录 2026-11-03：ADR-006 于 2026-11-02 accepted 并登记 docs/README；S2 验收段已写入 progress-report，Web 端通过、桌面端待重打包复验后勾 A3/A4 收官）
+- [x] A6 ADR-006 状态 accepted；progress-report 有 S2 验收记录。（验收记录 2026-11-03：ADR-006 于 2026-11-02 accepted 并登记 docs/README；S2 验收段已写入 progress-report，A1–A6 全项通过（2026-11-03 收官））
 
 ### S3 核心插件：内置工具 + 审批风险分级
 

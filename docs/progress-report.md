@@ -50,15 +50,15 @@ date: 2026-11-02
 - **观察项**：Web 启动初期 /plugins/events SSE 重试（自愈）；NSIS /S 静默模式限制（ADR-004 D8 登记）。
 - C 盘空间：AppData\Local\uv 缓存 264GB（环境问题，非项目缺陷），建议 `uv cache clean`。
 
-## S2 品牌与人设基线（验收日期 2026-11-03：Web 端通过；桌面端待重打包复验后收官）
+## S2 品牌与人设基线（验收日期 2026-11-03：Web 与桌面端全项通过，S2 收官）
 
 **范围**：@hibuddy/brand 完整化（侧边栏 mark/name、页面标题）、产品级人设注入（部署级 personaPrefix）、ADR-006（Web 部署形态与访问控制）、三端回归走查与 dsh 能力面复验。
 
 **验收结果**（对应 implementation-plan S2 A1–A6）：
 - **A1** `pnpm build`、`pnpm typecheck` 全绿（2026-11-03 复跑，含 title 拦截器泛型修复后的 brand 包）。
 - **A2** `--dump-config` 五 bundle 层序（dsh-base → dsh-web-app → @hibuddy/brand → @hibuddy/coworker → @hibuddy/web-ui）与 brand/coworker 配置行齐全；profile patch 覆盖（agent-default-model / ui-brand-official disabled / system-prompt 人设 / preset-standard / harness-dev-context disabled）全部在合并配置中。
-- **A3** Web 端通过（2026-11-03）：侧边栏 HiBuddy mark/name（fiber 确认 @hibuddy/brand 组件）、页面标题三态验证——空状态 "HiBuddy"、会话页 "<会话名> — HiBuddy"、新会话自动标题同步；桌面端产物级通过（2026-11-03 重打包 13:19：内嵌载荷 22,756 files = win-unpacked 22,756 零丢失，内嵌 profile patch 含 harness-dev-context disabled + preset-standard 覆盖（无 persona 行）+ brand client 含标题拦截器，与 Web 行为级验证产物一致），安装级行为复验待用户安装新包后登记。
-- **A4** Web 端通过（2026-11-03）：真实会话身份提问回复「我是 HiBuddy……由 MiniMax-M2.7 模型驱动」；trace「初始系统提示词」ground truth 首句 "You are HiBuddy, the user's everyday assistant, powered by the MiniMax-M2.7 model."，全文无 DeepSeek Harness / Web GUI 字样；桌面端同 A3——产物级通过，安装级行为复验待新包安装。
+- **A3** Web 与桌面端通过（2026-11-03）：Web——侧边栏 HiBuddy mark/name（fiber 确认 @hibuddy/brand 组件）、页面标题三态验证（空状态 "HiBuddy"、会话页 "<会话名> — HiBuddy"、新会话自动标题同步）；桌面——新包安装级复验通过（用户确认标题 HiBuddy）：安装树 22,757 = 22,756 载荷 + 卸载器零丢失，内嵌 profile patch（harness-dev-context disabled + preset-standard 覆盖无 persona 行）与 brand 标题拦截器产物与 Web 行为级验证一致。
+- **A4** Web 与桌面端通过（2026-11-03）：Web——真实会话身份提问回复「我是 HiBuddy……由 MiniMax-M2.7 模型驱动」，trace「初始系统提示词」ground truth 首句 "You are HiBuddy, the user's everyday assistant, powered by the MiniMax-M2.7 model."，全文无 DeepSeek Harness / Web GUI 字样；桌面——用户真实提问确认回复自称 HiBuddy，persona 遮蔽修复与 harness-dev-context 禁用在安装版生效。
 - **A5** Web 插件面板正常（内置插件配置/实验性插件/已安装插件三区渲染，@hibuddy 三包正确列出）；S1 CLI 安装/启停用例已在 S1 验收，本轮聚焦品牌定制后能力面回归。
 - **A6** ADR-006 accepted（2026-11-02）；本记录即 S2 验收登记。
 
@@ -71,4 +71,4 @@ date: 2026-11-02
 - **PTC preset 人设**：preset-ptc / preset-minimal / preset-cordis 仍带官方 persona（coding / helpful engineer / coding）；标准模式不受影响，PTC 模式人设接管待后续阶段（preset 覆盖需整列表重述，改动成本高，按需处理）。
 - **Web 会话 hero**：会话空状态英雄区「探索未至之境」+ 鲸鱼图标仍为 dsh 默认素材（dsh-web-app hero 未接管）；P0 验收项不含 hero，登记待品牌深化阶段处理。
 - **DeepSeek 字样残留（低优先级）**：内置插件配置卡「设置 DeepSeek 的搜索提供方」等官方 UI 文案；默认工作区路径 `Documents\deepseek-harness\default-workspace`（dsh 默认命名）；运行时上下文 "Current DSH file policy" 等中性缩写。均为官方文案/路径层，非系统提示词身份段。
-- **桌面端**：重打包完成并产物级验证（2026-11-03 13:19，载荷 22,756=22,756 零丢失，内嵌新 patch 与 brand client）；待用户安装新包做安装级行为复验（标题 + 身份提问）后勾 S2-A3/A4 收官。
+- **桌面端**：已收官（2026-11-03）——新包 13:19 安装级复验通过：安装树 22,757 文件零丢失，内嵌新 patch 与 brand client，用户确认标题与身份人设均为 HiBuddy。
