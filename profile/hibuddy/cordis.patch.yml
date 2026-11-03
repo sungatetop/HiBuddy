@@ -187,12 +187,26 @@
           maxBytes: 65536
       - id: time-context
         name: '@deepseek-ai/dsh-time-context'
+      # L2 code-execution tools default OFF (S3-3; ADR-009 / ADR-008): shell
+      # execution is an approval-graded capability the product keeps disabled
+      # until a dedicated enablement stage. First line of defense is the preset
+      # row; second is the @hibuddy/coworker approval answerer, which denies
+      # the same tool set with `l2DisabledReason` even if a tool row leaks
+      # back (e.g. upstream preset changes or a future plugin route).
+      #
+      # Overridden official rows (dsh 0.2.1-rc.5, dsh-web-app
+      # presets/standard.patch.yml): platform-conditional enables —
+      #   tool-bash: `disabled: !!js process.platform === 'win32'`
+      #   tool-pwsh: `disabled: !!js process.platform !== 'win32'`
+      # (exactly one shell per platform). This override disables both on every
+      # platform. Upgrade discipline (ADR-005): re-diff these rows when
+      # bumping dsh.
       - id: tool-bash
         name: '@deepseek-ai/dsh-tool-bash'
-        disabled: !!js process.platform === 'win32'
+        disabled: true
       - id: tool-pwsh
         name: '@deepseek-ai/dsh-tool-pwsh'
-        disabled: !!js process.platform !== 'win32'
+        disabled: true
       - id: tool-fs
         name: '@deepseek-ai/dsh-tool-fs'
       - id: tool-fs-search
