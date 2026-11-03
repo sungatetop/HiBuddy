@@ -1,9 +1,9 @@
 ---
 title: HiBuddy 进度与验收报告
-summary: 各阶段的验收记录与缺口清单：S0 骨架与冒烟链路（2026-11-01）、S1 基础设施复用与编译打包（2026-11-02）均通过；S2 起按实施计划的验收标准逐阶段登记
+summary: 各阶段的验收记录与缺口清单：S0 骨架与冒烟链路（2026-11-01）、S1 基础设施复用与编译打包（2026-11-02）、S2 品牌与人设基线（2026-11-03）、S3 审批分级与留痕（2026-11-03）、S3b AG-UI 桥 MVP（2026-11-03）均通过；每阶段含缺口清单
 keywords: [进度报告, 验收记录, 缺口清单, HiBuddy]
 status: accepted
-date: 2026-11-02
+date: 2026-11-03
 ---
 
 # HiBuddy 进度与验收报告
@@ -108,3 +108,28 @@ date: 2026-11-02
 
 **缺口清单（S3 新增）**：
 - **ptc/minimal/cordis preset 仍带 shell 工具行**（S3-3）：preset 覆盖需整列表重述、维护成本高，与 S2 的 PTC 人设缺口同性质；运行时第二道闸（coworker tools/pre-execute L2 前置 deny + approval answerer 兜底，`l2DisabledReason`）不依赖 preset 装配，覆盖全部 preset。registry 默认 preset 为 standard（已禁用）。
+
+## S3b AG-UI 协议桥 MVP（验收日期 2026-11-03：通过）
+
+**范围**：`@hibuddy/ag-ui-bridge` 插件（dsh bundle，[ADR-009](decisions/ADR-009-s3-rescope-agui-bridge.md) 方案 A）——`POST /agui` HTTP+SSE 端点（复用 dsh 连接栅栏鉴权：/connect 换 cookie + requestRejection）、SessionEvent→AG-UI 1.0 事件映射层、审批中断合成与 resume 回传闭环、vitest 契约测试 30 项。S3b-4 端到端验证暴露并修复四处装配/语义缺陷（inject 捕获纪律、preset 装配对齐 web composeAgent、默认模型路由、resume 优先）。
+
+**验收结果**（对应 implementation-plan S3b A1–A5）：
+- **A1** `pnpm typecheck`、`pnpm build`、`pnpm test` workspace 全绿；契约测试 48 项（ag-ui-bridge 30：事件映射 13 / SSE 编码 5 / 审批中断 9 / resume 优先 3 / terminalOf 等；coworker 18）。
+- **A2** 依任务 4「CopilotKit（或任意 AG-UI client）」口径以协议级 E2E client 验证（AG-UI 1.0 wire 契约，类型对照 thirdparty/ag-ui generated/types.ts）：认证交换（/connect?token → 302+Set-Cookie）、栅栏（未认证 POST → 401、GET → 405）、对话 run 全事件链（RUN_STARTED → STEP_STARTED/FINISHED → TEXT_MESSAGE 三连 → TOOL_CALL 三连+TOOL_CALL_RESULT → RUN_FINISHED）。**CopilotKit 浏览器端真机接入登记为缺口**（P1 生态阶段补）。
+- **A3** 审批闭环 E2E（写工作区外目录触发 L1 升权）：`approval/asked` → `RUN_FINISHED{outcome:interrupt, interrupts:[{reason:'tool-approval', toolCallId}]}`；resume `resolved` → allowed-once → 文件落盘成功；resume `cancelled` → cancelled → 工具被拒、模型放弃写入。一次性授权不持久（同会话再次同类请求再次中断，run3/run4 实测，符合设计）。
+- **A4** 原生 Web UI 全量回归（Playwright 对 3095 实例）：页面加载、发送「你是谁」、回复自称 HiBuddy（MiniMax-M2.7）、标题三态（`HiBuddy` → 会话页 `会话名 — HiBuddy`）、console 零错误（清空历史后重载验证；更早的 3080 报错为浏览器残留会话日志）；非桥会话的审批请求经 coworker answerer 原生透传，桥不劫持（代码路径 + S3 走查双证）。
+- **A5** 本记录即 S3b 验收登记；映射退化项与缺口见下。
+
+**S3b-4 修复记录**（提交 7629b3f，E2E 暴露→逐一修复→复测通过）：
+1. **inject 捕获纪律**：请求回调运行在插件注入作用域之外，懒读 `ctx.agents` 抛 "cannot get property without inject"——模块级 `export const inject` + apply() 期捕获三服务（照 ACP 桥同款注释先例）。
+2. **preset 装配**：setup 内 `presets.mount`（对齐 web session-controller `composeAgent`）+ `meta.agentPreset` 记录——缺失时会话仅 working_directory 一个工具（实测 69+ 步空转的根因）。
+3. **默认模型路由**：`agentDefaultModel.currentSelection()` → agentOptions 传入 create/resume——缺失时 persona 变量 `{{model}}` 无值（RUN_ERROR: prompt variable has no value）。
+4. **resume 优先**：已应答的 resume 不再把末条用户文本重放为新 followup（防回传全历史的客户端造成重复回合）；抽纯函数 `planRun`（判别联合）+ 契约测试钉死。
+
+**缺口清单（S3b 新增）**：
+- **token 级流缺失（MVP 退化）**：assistant 文本以整消息单 delta 补发（TEXT_MESSAGE_CONTENT 一帧全文）；dsh 进程内 token 流无公开订阅 API（映射层注释同口径），待公开面出现后升级为逐 token 补发。
+- **无 resumption（MVP 退化）**：SSE 断开后 turn 在服务端继续执行至终态，客户端重连不能重新附着同一 run（得到新 run；会话历史经 dsh resume 保留，不丢上下文）。
+- **取消后重试语义待定**：resume cancelled 后模型可能重试同一工具并再次触发中断（E2E run4 终态为 interrupt 而非 success）——「取消后是否阻止同轮重试」属产品语义决策，P1 定。
+- **桥不建授权存储（设计决策）**：桥侧审批应答一律一次性（allowed-once/cancelled），不推断持久 grant；原生 UI 的会话级免再询 grant 经 coworker answerer 链生效、不达桥。
+- **CopilotKit 浏览器端真机接入**：A2 以协议级 E2E client 验证；CopilotKit provider/runtime 端到端接入待 P1 生态阶段（ADR-009 MVP 验收形态的完整闭环）。
+- **审批审计 AG-UI 侧仅 CUSTOM 载体**：approval/asked/decided 以 CUSTOM 事件透出（AG-UI 1.0 无标准审批事件类型）；「人工批准 vs 免再询代答」语义区分同 S3 P0 局限。

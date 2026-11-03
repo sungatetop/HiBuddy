@@ -3,7 +3,7 @@ title: HiBuddy P0 实施计划
 summary: P0 的分阶段执行计划（S1–S5）：S1 先把 dsh 基础设施三端（CLI/Web/桌面）全部复用跑通、验证 dsh 原生能力面完整性（插件安装/启停/分层配置）并建立编译打包链路，S2 起再按 PRD 需求做深度定制（品牌人设→核心工具/审批→生成式 UI→收尾双端交付）；每阶段含可判定的验收标准
 keywords: [实施计划, 里程碑, 验收标准, P0, 分阶段交付, 基础设施复用, 插件生态, HiBuddy]
 status: accepted
-date: 2026-11-02
+date: 2026-11-03
 ---
 
 # HiBuddy P0 实施计划
@@ -109,11 +109,11 @@ date: 2026-11-02
 5. vitest 契约测试：事件映射、SSE 编码、审批中断合成。
 
 **验收标准**：
-- [ ] A1 `pnpm build`、`pnpm typecheck`、`vitest run` 全绿。
-- [ ] A2 CopilotKit 前端连 `/agui`：发起任务可见流式文本与工具调用事件。
-- [ ] A3 审批闭环：触发 L1 审批时 AG-UI 侧收到 interrupt；恢复后 Run 继续。
-- [ ] A4 dsh 原生 Web UI 全量回归无影响（会话/审批/留痕不受桥影响）。
-- [ ] A5 progress-report 有 S3b 验收记录；映射退化项（消息粒度补发、无 resumption）登记缺口清单。
+- [x] A1 `pnpm build`、`pnpm typecheck`、`pnpm test` 全绿（workspace 48 测试：ag-ui-bridge 30 + coworker 18）。
+- [x] A2 AG-UI client 连 `/agui`：发起任务可见流式文本与工具调用事件（依任务 4「或任意 AG-UI client」口径以协议级 E2E client 验证——/connect 换 cookie、对话 run 全事件链 RUN_STARTED/STEP_*/TEXT_MESSAGE 三连/TOOL_CALL 三连+RESULT/RUN_FINISHED；CopilotKit 浏览器端真机接入登记为缺口，P1 生态接入时补）。
+- [x] A3 审批闭环：L1 写工作区外触发 `RUN_FINISHED{outcome:interrupt}`；resume resolved → 工具执行落盘成功、resume cancelled → 工具被拒模型放弃；一次性授权不持久（再次触发再中断，符合设计）。
+- [x] A4 dsh 原生 Web UI 全量回归无影响（Playwright 实测：页面/发送/回复自称 HiBuddy/标题三态/console 零错误；非桥会话审批走 answerer 链原生透传）。
+- [x] A5 progress-report 有 S3b 验收记录；映射退化项（消息粒度补发、无 resumption、取消后重试语义、桥不建授权存储）登记缺口清单。
 
 ### S4 生成式 UI 与工作台定制
 
