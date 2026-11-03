@@ -1,0 +1,8 @@
+# HiBuddy AG-UI bridge bundle layer: mounts the host-side plugin.
+# src/index.ts registers POST /agui (AG-UI 1.0 HTTP+SSE transport, ADR-009 §3):
+# dsh SessionEvent -> AG-UI event mapping, approval interrupt/resume loop,
+# dsh-native trust fence (connection.requestRejection) for auth. The bridge
+# only adds a route — dsh's native Web UI channels are untouched.
+- insert:
+    - id: hibuddy-ag-ui-bridge
+      name: '@hibuddy/ag-ui-bridge'
