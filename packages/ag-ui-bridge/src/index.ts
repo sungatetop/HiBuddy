@@ -120,6 +120,27 @@ function lastUserText(input: RunAgentInput): string | undefined {
   return undefined
 }
 
+/** What one POST should do after resume answers were delivered (pure, pinned by tests). */
+export type RunPlan =
+  | { readonly action: 'continue-suspended' }
+  | { readonly action: 'start-run'; readonly userText: string }
+  | { readonly action: 'dead-resume' }
+
+/**
+ * Resume precedence decision (S3b-4 fix): a history-echoing client re-POSTs
+ * the full transcript, so an answered resume must NOT replay the last user
+ * text as a fresh followup — the suspended turn continues in place. A user
+ * message only starts a run when nothing was answered; a resume that answered
+ * nothing and carries no user text ends the run honestly (an empty POST is
+ * rejected before this decision runs).
+ */
+export function planRun(answered: number, userText: string | undefined): RunPlan {
+  if (answered === 0) {
+    return userText === undefined ? { action: 'dead-resume' } : { action: 'start-run', userText }
+  }
+  return { action: 'continue-suspended' }
+}
+
 /** Send a run's mapped events, closing the run on the turn's terminal event. */
 function pumpSessionEvent(record: SessionRecord, event: SessionEvent, threadId: string): void {
   const run = record.active
@@ -249,21 +270,18 @@ export function apply(ctx: Context): void {
 
         sink.send({ type: 'RUN_STARTED', threadId: input.threadId, runId: input.runId, input })
         const answered = answerPendings(record, resumeEntries)
-        if (answered === 0 && resumeEntries.length > 0 && userText === undefined) {
+        const plan = planRun(answered, userText)
+        if (plan.action === 'dead-resume') {
           // Nothing to continue and nothing to start: end the run honestly.
           detachActive(record, run.runId)
           sink.send({ type: 'RUN_ERROR', message: 'resume answered no pending approval', code: 'UNKNOWN_INTERRUPT' })
           sink.close()
           return
         }
-        // Resume answers take precedence: a history-echoing client re-POSTs the
-        // full transcript, so an answered resume must NOT replay the last user
-        // text as a fresh followup — the suspended turn continues in place. A
-        // user message only starts a run when nothing was answered.
-        if (userText !== undefined && answered === 0) {
+        if (plan.action === 'start-run') {
           try {
             record.handle.agent.followup(createUserMessage({
-              content: [{ type: 'text', text: userText }],
+              content: [{ type: 'text', text: plan.userText }],
               source: { kind: 'user' },
             }))
           } catch (error) {
