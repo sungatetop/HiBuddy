@@ -1,6 +1,9 @@
-# HiBuddy coworker core bundle layer: mounts the host-side plugin.
-# Tools/persona/approval-grading registrations land in src/index.ts as the
-# first tools are implemented (dsh extension points per ADR-003 §4).
+# HiBuddy coworker bundle layer: mounts the host-side plugin.
+# src/index.ts registers the approval layer (S3, ADR-009 §2):
+# tools/pre-execute L2 default-off + stop-and-ask gate, approval/request
+# answerer with session re-ask grants (免再询, grants API on ctx.webServer),
+# turn/start streak reset. HiBuddy does not add tools — preset-standard's
+# official tool set is reused as-is.
 - insert:
     - id: hibuddy-coworker
       name: '@hibuddy/coworker'
