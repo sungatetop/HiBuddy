@@ -79,6 +79,16 @@ export interface RunErrorEvent extends EventBase {
   code?: string
 }
 
+export interface StepStartedEvent extends EventBase {
+  type: 'STEP_STARTED'
+  stepName: string
+}
+
+export interface StepFinishedEvent extends EventBase {
+  type: 'STEP_FINISHED'
+  stepName: string
+}
+
 export interface TextMessageStartEvent extends EventBase {
   type: 'TEXT_MESSAGE_START'
   messageId: string
@@ -138,6 +148,8 @@ export type AguiEvent =
   | RunStartedEvent
   | RunFinishedEvent
   | RunErrorEvent
+  | StepStartedEvent
+  | StepFinishedEvent
   | TextMessageStartEvent
   | TextMessageContentEvent
   | TextMessageEndEvent
