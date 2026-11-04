@@ -9,7 +9,7 @@
 | 产品文档 | [product/requirements.md](product/requirements.md) | PRD：HiBuddy（个人常驻智能体）的 P0 范围、常驻层增量范围（§3.2，FR-10）、对象模型（含常驻层对象草案）、功能需求（会话/任务/工具审批/生成式界面/共享状态/BYOK/双端一致）与共享规则；定位修订依据 ADR-010 |
 | 架构文档 | [architecture/system-architecture.md](architecture/system-architecture.md) | 技术方案：基于 deepseek-harness（dsh，npm 依赖，MIT）深度定制——hibuddy profile 装配 + @hibuddy/* 插件集（品牌/核心工具/Web UI 定制/AG-UI 桥）+ 自建 Electron 壳+宿；不 fork、不建 SPI（路线见 ADR-003） |
 | 计划与报告 | [implementation-plan.md](implementation-plan.md) | P0 实施计划：先复用后定制——S1 跑通 dsh 三端基础设施与能力面完整性（插件安装/启停）并打包，S2 起定制（品牌人设→核心工具/审批→AG-UI 桥 MVP→生成式 UI→收尾双端交付）；S6 生态接入与上游跟进，S7 常驻/主动层（ADR-010）；每阶段任务、前置 ADR 与可判定验收标准 |
-| 计划与报告 | [progress-report.md](progress-report.md) | 各阶段验收记录与缺口清单：S0–S5 已通过（P0 交付；S5 双端对等 + 全流程 E2E 2026-11-04 收官） |
+| 计划与报告 | [progress-report.md](progress-report.md) | 各阶段验收记录与缺口清单：S0–S6 已通过（P0 交付 + S6 生态接入 2026-11-04 收官：CopilotKit 真机三场景、上游热激活缺口定界为 junction 部署 × pnpm 相对 symlink 并修复） |
 
 ## 决策文档（docs/decisions/）
 

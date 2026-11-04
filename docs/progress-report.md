@@ -1,6 +1,6 @@
 ---
 title: HiBuddy 进度与验收报告
-summary: 各阶段的验收记录与缺口清单：S0 骨架与冒烟链路（2026-11-01）、S1 基础设施复用与编译打包（2026-11-02）、S2 品牌与人设基线（2026-11-03）、S3 审批分级与留痕（2026-11-03）、S3b AG-UI 桥 MVP（2026-11-03）、S4 生成式 UI 与工作台定制（2026-11-04）、S5 P0 收尾与双端交付（2026-11-04）均通过——P0 交付；每阶段含缺口清单
+summary: 各阶段的验收记录与缺口清单：S0 骨架与冒烟链路（2026-11-01）、S1 基础设施复用与编译打包（2026-11-02）、S2 品牌与人设基线（2026-11-03）、S3 审批分级与留痕（2026-11-03）、S3b AG-UI 桥 MVP（2026-11-03）、S4 生成式 UI 与工作台定制（2026-11-04）、S5 P0 收尾与双端交付（2026-11-04）、S6 生态接入与上游跟进（2026-11-04）均通过——P0 交付；每阶段含缺口清单
 keywords: [进度报告, 验收记录, 缺口清单, HiBuddy]
 status: accepted
 date: 2026-11-04
@@ -218,3 +218,42 @@ date: 2026-11-04
 1. **插件热激活失败的开关语义**：组件 activate 失败（dsh 上游缺口，见上节）后行内开关仍为开启态、状态文本「未运行」——失败后开关回弹或显示错误态会更直观（dsh 上游组件，P1 随升级跟进）。
 2. **添加插件对话框按钮可及性**：主按钮「安装」与镜像下拉「安装源」仅一字之差，屏幕阅读器/自动化选择器场景有歧义（视觉无碍）。
 3. **Run 时间线入口发现性**：入口在右栏 start-door 引导胶囊，会话进行中打开需先点「打开右侧边栏」——P1 可考虑在 turn tail 上加时间线直达入口。
+
+## S6 生态接入与上游跟进（验收日期 2026-11-04：通过）
+
+### 消费侧评估：CORS 与鉴权（S6-1，桥零改动）
+
+结论：**桥本体零改动**。dsh 的 fence 栅栏（Origin/Host 须与 authority 同源 + `/connect` 换 cookie）是有意安全设计，不做跨源放开；消费侧以**同源反向代理**接入（demo 的 vite proxy：`/connect` 与 `/agui` → dsh 3080，`changeOrigin` + 覆写 `origin` 头同 authority），SSE 无压缩流式透传即通。连通性实测：无效 token 401、未过栅栏 403、过栅栏探针 GET `/agui` 405；AG-UI 桥在 answerer 层捕获审批、不依赖 mux 转发，不受 dsh API 默认 `interactions=none` 的 cookie 配置影响。
+
+### CopilotKit 最小消费端真机三场景（S6-2，commit 56d50df）
+
+交付 `packages/ag-ui-bridge/examples/copilotkit-demo/`（独立 workspace，不入根构建）：React 19 + `@copilotkit/react-core` v2 + `@ag-ui/client` HttpAgent（钉 1.0.2）。关键接线（CopilotKit v2 API 实证）：`CopilotKitProvider` 必须传 `agentId`（否则 `useInterrupt` 解析不到默认 agent 渲染崩溃）+ `agents__unsafe_dev_only` 注入实例 + `credentials:"include"` 携带栅栏 cookie；`useInterrupt` 渲染审批中断卡（批准 = resolve / 拒绝 = cancel）；`useDefaultRenderTool()` 提供内置工具卡。
+
+三场景真机联调通过（dsh web 3080 + MiniMax-M3.1-Flash）：
+1. **流式文本**：两轮对话回复流式落屏。
+2. **工具调用**：glob/working_directory/read 全链路 + 工具渲染器警告消失（协议层证据）+ 答复正确渲染。
+3. **审批中断 → resume**：L1 越权写入触发 interrupt 卡 → 批准 → resume POST（`RunAgentInput.resume`，`status:'resolved'`）→ 同 turn 续跑 → 文件落盘内容正确；dsh 会话 JSONL ground truth：`approval/asked` → `approval/decided allowed-once` → 同 turn 后续 step → `turn/end completed`。
+
+**桥协议修复（strict 客户端不变量）**：`@ag-ui/client` 1.0 严格状态机拒绝「steps 未关闭时 RUN_FINISHED」与「孤立 STEP_FINISHED」——桥在审批捕获与 turn 终局两条路径先补 `STEP_FINISHED`（`MappingState.openStep` 跟踪），resume 后新 run 收到中断前 step 的 `step/end` 为孤立事件、条件映射丢弃。补 4 项契约测试。
+
+**回归**：桥 35 + coworker 18 + web-ui 40 = 93 单测全绿；Web E2E 7/7 全过。其中 recovery ×2 + run-timeline 首轮超时失败，session JSONL ground truth 定界为**测试环境问题**：dsh web 实际工作区为 `D:\HibuddyWorkspace`（用户改过默认工作区路径），与测试默认 `~/Documents/deepseek-harness/default-workspace` 错位——「工作区内写入」预期全部落到沙箱外被拒，模型行为分叉（自行升级审批 / ask_user_question）导致 turn 挂死；以 `HIBUDDY_E2E_WORKSPACE` 对齐后 53s 全过（approval/genui 不受错位影响故首轮通过）。
+
+**观察项（CopilotKit v2 客户端行为，未定论）**：process C 轮审批捕获后 7.4s 出现**无人工点击的**自动 resume POST（`status:resolved` → `allowed-once`）。performance 时序见三笔 POST（其一无 turn 对应）；对照 CopilotKit `run-handler.ts` follow-up 机制（非 `tool_call` reason 中断应返回 waiting 不续跑）机制未完全定论。桥契约本身无违规（resume POST 合法触发 answerPendings），但「无人工批准即 allowed-once」具安全含义——登记为 CopilotKit v2 客户端行为观察项，S7-B 常驻层设计审批面时复核。
+
+### 上游缺口定界：热激活 ERR_MODULE_NOT_FOUND（S6-3，commit 89b59ed）
+
+S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：UI 装 `dsh-plugin-whale-pet@0.2.9`（安装成功、package.json 登记 dependencies + `dsh.profile.plugins`、包落 profile node_modules）→ 运行中启用无报错（懒加载，activate 不在运行时触发 import）→ **重启后装配期失败**：`dsh: warning: 1 entry did not activate` + `ERR_MODULE_NOT_FOUND: Cannot find package 'dsh-plugin-whale-pet' imported from C:\Users\chenb\.dsh\profiles\hibuddy\`（提示 `Did you mean to import ".../lib/index.js"?` 为 exports 误报，实际 exports 有 `.` 主入口）。
+
+**根因（HiBuddy 特有，非 dsh 上游缺陷）**：plugin-manager 经 pnpm 安装生成**相对 symlink**（`..\..\..\node_modules\.pnpm\<pkg>@ver\...`，基准 = node_modules 目录）；原生部署下相对目标可解析，而 HiBuddy profile 经 junction 映射进 `$DSH_HOME/profiles/hibuddy`——dsh 从 junction 路径启动时相对基准落到 `C:\Users\chenb\.dsh\`，断链。对照实验：同一 symlink 从真实路径 `D:\GenUI\profile\hibuddy` import 成功、从 junction 路径失败；`@hibuddy/*` workspace 链接为**绝对** symlink（pnpm workspace link 行为）故不受影响。S2 的 absolutize 修复只覆盖 `@scope/` 下 workspace 链接、漏顶层 registry 包。
+
+**修复（HiBuddy 侧可修，commit 89b59ed）**：`sync-profile.ps1` absolutize 逻辑扩展到 node_modules 顶层（registry 包 symlink），以 **Junction** 重写（无需管理员提权，沙盒受限环境可用）。验证：absolutize 后 junction 视图 import OK；dsh 重启装配无激活警告；client 宠物组件正常渲染（完整链路此前已走通）。**用户口径：UI 装/卸第三方插件后跑一次 `pnpm profile:sync` 即修复链接。**
+
+**上游 issue 材料要点**（如需反馈 dsh 上游）：① plugin-manager 的 pnpm add 建议产出绝对链接或 Junction（Windows）；② 激活失败的行内开关仍为开启态、状态文本「未运行」（S5 UX P1 同源）；③ exports 误报提示（`Did you mean to import .../lib/index.js?` 与实际 exports 不符）。
+
+### S6 验收登记（对应 implementation-plan A1–A5，2026-11-04 收官）
+
+- **A1** CopilotKit 消费端浏览器真机经 `/agui` 完成对话：流式文本 + 工具调用事件均可见（S6-2 场景 1/2）。
+- **A2** 审批中断恢复真机复验：L1 越权写入触发 interrupt 卡，批准后 resume 续跑、文件落盘正确（S6-2 场景 3 + JSONL ground truth）。
+- **A3** 桥改造评估结论：零改动（CORS/鉴权为 dsh fence 安全设计，消费侧同源反代接入）；回归 93 单测 + Web E2E 7/7 全绿；桥协议 strict 客户端不变量两处修复 + 4 项契约测试。
+- **A4** 上游缺口结论：重启**不**恢复（S5 假设证伪）；根因 = junction 部署 × pnpm 相对 symlink（HiBuddy 特有，非上游缺陷）；HiBuddy 侧修复落地（89b59ed）+ 用户口径 + issue 材料要点。
+- **A5** 本记录即 S6 验收登记；implementation-plan S6 节已勾选。

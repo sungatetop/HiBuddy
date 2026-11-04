@@ -172,11 +172,11 @@ date: 2026-11-04
 4. 上游缺口跟进：复现 UI 安装第三方插件（dsh-plugin-whale-pet）运行中激活失败 → 重启 dsh 进程 → 判定激活是否恢复；登记结论（「需重启」语义 / 需深挖安装路径），沉淀上游 issue 材料要点。
 
 **验收标准**：
-- [ ] A1 CopilotKit 消费端（浏览器真机）经 `/agui` 完成对话：流式文本可见、工具调用事件可见。
-- [ ] A2 审批中断恢复在真机前端复验：L1 越权写入触发 interrupt 呈现，resume 决定后任务继续/按决定收场。
-- [ ] A3 桥改造评估结论登记：CORS/鉴权适配改动清单（或零改动结论）；dsh 原生 Web UI 与桥回归零影响（vitest + E2E 全绿）。
-- [ ] A4 上游缺口结论登记：重启后激活恢复与否的判定与证据入 progress-report；含上游 issue 材料要点。
-- [ ] A5 progress-report 有 S6 验收记录；implementation-plan 本节勾选。
+- [x] A1 CopilotKit 消费端（浏览器真机）经 `/agui` 完成对话：流式文本可见、工具调用事件可见。（S6-2 场景 1/2，commit 56d50df）
+- [x] A2 审批中断恢复在真机前端复验：L1 越权写入触发 interrupt 呈现，resume 决定后任务继续/按决定收场。（S6-2 场景 3 + 会话 JSONL ground truth）
+- [x] A3 桥改造评估结论登记：CORS/鉴权适配改动清单（或零改动结论）；dsh 原生 Web UI 与桥回归零影响（vitest + E2E 全绿）。（零改动，fence 为安全设计、消费侧同源反代；93 单测 + Web E2E 7/7；桥协议 strict 客户端不变量两处修复）
+- [x] A4 上游缺口结论登记：重启后激活恢复与否的判定与证据入 progress-report；含上游 issue 材料要点。（重启**不**恢复——S5 假设证伪；根因 = junction 部署 × pnpm 相对 symlink，HiBuddy 特有非上游缺陷；HiBuddy 侧修复 89b59ed）
+- [x] A5 progress-report 有 S6 验收记录；implementation-plan 本节勾选。（2026-11-04 收官）
 
 ### S7 常驻/主动层（S7-A 原型验证 → S7-B 自研 @hibuddy/resident）
 
@@ -213,5 +213,5 @@ date: 2026-11-04
 | S3b | 2026-11-03 | 通过 | [progress-report §S3b](progress-report.md) |
 | S4 | 2026-11-04 | 通过 | [progress-report §S4](progress-report.md) |
 | S5 | 2026-11-04 | 通过 | [progress-report §S5](progress-report.md) |
-| S6 | — | 未开始 | — |
+| S6 | 2026-11-04 | 通过 | [progress-report §S6](progress-report.md) |
 | S7 | — | 未开始（立项 2026-11-04，ADR-010） | — |
