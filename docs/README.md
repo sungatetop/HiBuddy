@@ -6,15 +6,16 @@
 
 | 类别 | 文档 | 摘要 |
 |---|---|---|
-| 产品文档 | [product/requirements.md](product/requirements.md) | PRD：HiBuddy（个人工作伙伴）的 P0 范围、对象模型、功能需求（会话/任务/工具审批/生成式界面/共享状态/BYOK/双端一致）与共享规则 |
+| 产品文档 | [product/requirements.md](product/requirements.md) | PRD：HiBuddy（个人常驻智能体）的 P0 范围、常驻层增量范围（§3.2，FR-10）、对象模型（含常驻层对象草案）、功能需求（会话/任务/工具审批/生成式界面/共享状态/BYOK/双端一致）与共享规则；定位修订依据 ADR-010 |
 | 架构文档 | [architecture/system-architecture.md](architecture/system-architecture.md) | 技术方案：基于 deepseek-harness（dsh，npm 依赖，MIT）深度定制——hibuddy profile 装配 + @hibuddy/* 插件集（品牌/核心工具/Web UI 定制/AG-UI 桥）+ 自建 Electron 壳+宿；不 fork、不建 SPI（路线见 ADR-003） |
-| 计划与报告 | [implementation-plan.md](implementation-plan.md) | P0 实施计划：先复用后定制——S1 跑通 dsh 三端基础设施与能力面完整性（插件安装/启停）并打包，S2 起定制（品牌人设→核心工具/审批→AG-UI 桥 MVP→生成式 UI→收尾双端交付）；每阶段任务、前置 ADR 与可判定验收标准 |
+| 计划与报告 | [implementation-plan.md](implementation-plan.md) | P0 实施计划：先复用后定制——S1 跑通 dsh 三端基础设施与能力面完整性（插件安装/启停）并打包，S2 起定制（品牌人设→核心工具/审批→AG-UI 桥 MVP→生成式 UI→收尾双端交付）；S6 生态接入与上游跟进，S7 常驻/主动层（ADR-010）；每阶段任务、前置 ADR 与可判定验收标准 |
 | 计划与报告 | [progress-report.md](progress-report.md) | 各阶段验收记录与缺口清单：S0–S5 已通过（P0 交付；S5 双端对等 + 全流程 E2E 2026-11-04 收官） |
 
 ## 决策文档（docs/decisions/）
 
 | ADR | 摘要 |
 |---|---|
+| [ADR-010-resident-proactive-agent.md](decisions/ADR-010-resident-proactive-agent.md) | 产品定位修订——个人常驻智能体：常驻运行/事件驱动/主动执行/人管目标与验收（对标 dsh Super-agent 与 OpenMuse）；实现路线混合式——S7-A 先装 dsh-superagent-prototype 真机验证 dsh 常驻机制，S7-B 自研 @hibuddy/resident 面向个人场景（首批事件源=定时/周期任务）；S6 收尾不受影响，AG-UI 桥与常驻层正交 |
 | [ADR-007-generative-ui-format.md](decisions/ADR-007-generative-ui-format.md) | 生成式 UI 产出格式定案「组件指令」：模型经自定义 render_ui 工具输出 UI 指令 JSON，@hibuddy/web-ui 预置信任组件注册表渲染（内嵌=tool.call.toolview keyed slot、画布=sidebarRight tab 跨轮驻留版本递增），交互经 conversation.send 结构化回传；否决 ui4a harness 直接写前端代码路线（同源渲染无隔离，违反 SR-02 与验收 A5），iframe 生成代码列为 P1 演进候选 |
 | [ADR-009-s3-rescope-agui-bridge.md](decisions/ADR-009-s3-rescope-agui-bridge.md) | S3 范围缩减与 AG-UI 桥立项：实证 dsh 已自带完整工具面（preset-standard 14+ 官方工具）与审批机制（沙箱模式×执行期升级+approval/request waterfall）后，S3 不再自研工具与审批主干，缩减为「审批 answerer 增量」（L1 免再询记忆/审批卡参数全文/L2 默认关闭）；AG-UI 桥提前为 S3b 专项——插件内 ctx.webServer 注册 /agui SSE 端点（方案 A，dsh-sdk 外挂方案因缺审批应答否决），MVP 验收=CopilotKit 接入闭环 |
 | [ADR-008-l1-code-exec-sandbox-policy.md](decisions/ADR-008-l1-code-exec-sandbox-policy.md) | L1 代码执行沙盒策略：P0 默认关闭（L2 preset 禁用 + coworker 双闸兜底）故不适用，仅登记重立条件（未来开放代码执行时须先定沙箱档位/审批组合/免再询边界） |

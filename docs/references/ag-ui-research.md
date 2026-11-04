@@ -93,7 +93,7 @@ date: 2026-11-04
 - 只读参考：禁止修改第三方仓库内容；本项目不对其编译/打包/发布。
 - 浅克隆维护：需要更新时 `git pull --depth 1`；不引用其 git 历史。深仓可 sparse+blob:none 引入（deepseek-harness、pi-mono 即此方式）。
 - 各仓库 LICENSE（均 MIT）随仓库保留，引用其代码片段时注意许可证义务。
-- 克隆状态（2026-11-03）：9 个参考仓全部就位（ag-ui、CopilotKit、OpenBot、OpenIntelligentUI、openui、genui-sdk、deepseek-harness、pi-mono、dsh-generative-ui）。openui 首次克隆损坏（.git 仅剩中断的临时 pack、0 对象），2026-11-03 删除重克隆修复；dsh-generative-ui 为 ADR-007 选型追补。2026-11-04 追补克隆 OpenMuse（AG-UI 应用侧完整实现，sparse：apps/server、apps/mobile、apps/worker、packages、docs）。
+- 克隆状态（2026-11-03）：9 个参考仓全部就位（ag-ui、CopilotKit、OpenBot、OpenIntelligentUI、openui、genui-sdk、deepseek-harness、pi-mono、dsh-generative-ui）。openui 首次克隆损坏（.git 仅剩中断的临时 pack、0 对象），2026-11-03 删除重克隆修复；dsh-generative-ui 为 ADR-007 选型追补。2026-11-04 追补克隆 OpenMuse（AG-UI 应用侧完整实现，sparse：apps/server、apps/mobile、apps/worker、packages、docs）；2026-11-04 追补克隆 dsh-superagent-prototype（dsh 官方 Super-agent 研究原型，bundle 形态，常驻/主动层机制对照——定位依据见 ADR-010）。
 
 ## 7. 主要来源
 

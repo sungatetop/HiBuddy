@@ -1,7 +1,7 @@
 ---
 title: HiBuddy P0 实施计划
-summary: P0 的分阶段执行计划（S1–S5）：S1 先把 dsh 基础设施三端（CLI/Web/桌面）全部复用跑通、验证 dsh 原生能力面完整性（插件安装/启停/分层配置）并建立编译打包链路，S2 起再按 PRD 需求做深度定制（品牌人设→核心工具/审批→生成式 UI→收尾双端交付）；每阶段含可判定的验收标准
-keywords: [实施计划, 里程碑, 验收标准, P0, 分阶段交付, 基础设施复用, 插件生态, HiBuddy]
+summary: P0 的分阶段执行计划（S1–S7）：S1 先把 dsh 基础设施三端（CLI/Web/桌面）全部复用跑通、验证 dsh 原生能力面完整性（插件安装/启停/分层配置）并建立编译打包链路，S2 起再按 PRD 需求做深度定制（品牌人设→核心工具/审批→生成式 UI→收尾双端交付）；S6 为 P0 后续（AG-UI 桥 CopilotKit 生态真机接入 + dsh 上游热激活缺口收口）；S7 为定位修订后的常驻/主动层（ADR-010：先验 dsh-superagent-prototype 原型，再自研 @hibuddy/resident）；每阶段含可判定的验收标准
+keywords: [实施计划, 里程碑, 验收标准, P0, 分阶段交付, 基础设施复用, 插件生态, AG-UI, 常驻智能体, HiBuddy]
 status: accepted
 date: 2026-11-04
 ---
@@ -24,8 +24,10 @@ date: 2026-11-04
 | S3b | AG-UI 协议桥 MVP（@hibuddy/ag-ui-bridge） | —（生态接入，超前铺路；见 ADR-009 §3） | ADR-009 | AG-UI 生态前端（CopilotKit）经 `/agui` 端点连 HiBuddy runtime 跑通对话+工具+审批闭环 |
 | S4 | 生成式 UI 与工作台定制 | FR-04、SR-02、FR-05 | ADR-007 | 对话内出现可交互界面（内嵌+画布）、交互可回传 |
 | S5 | P0 收尾与双端交付 | FR-01、FR-02、FR-06、FR-08、FR-09 + FR-07 | — | Web 端收尾 + 桌面独有能力 + 双端对等验收，P0 完成 |
+| S6 | 生态接入与上游跟进（P0 后续） | —（S3b 缺口收口 + 上游缺口跟进） | — | CopilotKit 浏览器端真机经 `/agui` 跑通对话+工具+审批闭环；上游热激活缺口结论登记 |
+| S7 | 常驻/主动层（定位修订后增量，见 [ADR-010](decisions/ADR-010-resident-proactive-agent.md)） | FR-10、§3.2 常驻层 | ADR-010 | S7-A：dsh-superagent-prototype 真机验证常驻机制并沉淀结论；S7-B：`@hibuddy/resident` 面向个人场景（首批事件源=定时/周期任务）常驻执行闭环 |
 
-依赖顺序：S1 → S2 → S3 → S3b → S4 → S5。S1 建立的三端载体（同一 `hibuddy` profile）在后续阶段被全部复用：S2–S4 的定制（后端插件 + client 模块 + Slots）天然同时作用于 CLI/Web/桌面，故各阶段验收以 Web 端为主、S5 统一做双端对等验收。S3 范围缩减与 S3b 立项依据见 [ADR-009](decisions/ADR-009-s3-rescope-agui-bridge.md)——dsh 原生工具与审批主干直接复用，不自研工具；AG-UI 桥提前落地（生态接入验证）。
+依赖顺序：S1 → S2 → S3 → S3b → S4 → S5 → S6 → S7。S1 建立的三端载体（同一 `hibuddy` profile）在后续阶段被全部复用：S2–S4 的定制（后端插件 + client 模块 + Slots）天然同时作用于 CLI/Web/桌面，故各阶段验收以 Web 端为主、S5 统一做双端对等验收。S3 范围缩减与 S3b 立项依据见 [ADR-009](decisions/ADR-009-s3-rescope-agui-bridge.md)——dsh 原生工具与审批主干直接复用，不自研工具；AG-UI 桥提前落地（生态接入验证）。S7 立项依据见 [ADR-010](decisions/ADR-010-resident-proactive-agent.md)——定位修订为个人常驻智能体，混合路线（先验原型再自研）；S6 收尾不阻塞 S7-A 启动。
 
 **条件性 ADR**：ADR-008（L1 代码执行沙盒策略）仅当 S3 决定开启代码执行（PRD FR-03 默认关闭）时落地；P0 默认不开启则不阻塞。
 
@@ -159,6 +161,38 @@ date: 2026-11-04
 - [x] A6 双端对等清单（FR-01～06）逐项通过；dsh 能力面终验通过（含第三方插件在桌面端安装/启停）。（S5-6 对等清单表 + 2026-11-04 补验 dsh-plugin-whale-pet@0.2.9 安装/启停/卸载全链路；登记 dsh 上游热激活缺口 ERR_MODULE_NOT_FOUND——对照实验定界为 0.2.1-rc.5 上游行为，双端一致，见 progress-report S5）
 - [x] A7 Playwright（Web 全流程）与 Electron driver（桌面）E2E 全绿；progress-report 有 S5 验收记录 → **P0 完成**。（S5-7 commit 48769f6：Web 7/7（2.1m）+ 桌面 1/1（20.7s）；S5 验收登记 2026-11-04）
 
+### S6 生态接入与上游跟进（P0 后续）
+
+**目标**：收口两笔登记在案的缺口——① S3b A2 缺口：CopilotKit 浏览器端**真机**接入 `/agui` 最小闭环（S3b 当时以协议级 E2E client 代验，见 [ag-ui-research](references/ag-ui-research.md) §3.1 OpenMuse 对照：消费侧用 CopilotKit 现成转换层 + `@ag-ui/client` HttpAgent，桥只需是标准 AG-UI POST 端点）；② S5 登记的 dsh 0.2.1-rc.5 上游热激活缺口（UI 安装第三方插件运行中 activate 报 ERR_MODULE_NOT_FOUND）——验证「重启进程后激活恢复」并收口结论。范围不含 P1 功能与 S5 的三条 UX P1 建议（另行按需处理）。
+
+**任务**：
+1. AG-UI 桥消费侧评估与必要改造：`/agui` 端点跨源浏览器消费所需的 CORS（OPTIONS 预检、响应头）；鉴权复用 `/connect` 换 cookie 姿势对 CopilotKit HttpAgent 的适配性；桥本体若无缺口则零改动。
+2. CopilotKit 最小消费端：React 演示应用（`@ag-ui/client` HttpAgent / CopilotKit React SDK 指向 `/agui`），置于 `packages/ag-ui-bridge/` 下作为桥的生态验证交付物；不新增顶层目录。
+3. 真机三场景验证：文本流式、工具调用事件、审批中断恢复（`RUN_FINISHED{outcome:interrupt}` 呈现 + resume 决定后继续）。
+4. 上游缺口跟进：复现 UI 安装第三方插件（dsh-plugin-whale-pet）运行中激活失败 → 重启 dsh 进程 → 判定激活是否恢复；登记结论（「需重启」语义 / 需深挖安装路径），沉淀上游 issue 材料要点。
+
+**验收标准**：
+- [ ] A1 CopilotKit 消费端（浏览器真机）经 `/agui` 完成对话：流式文本可见、工具调用事件可见。
+- [ ] A2 审批中断恢复在真机前端复验：L1 越权写入触发 interrupt 呈现，resume 决定后任务继续/按决定收场。
+- [ ] A3 桥改造评估结论登记：CORS/鉴权适配改动清单（或零改动结论）；dsh 原生 Web UI 与桥回归零影响（vitest + E2E 全绿）。
+- [ ] A4 上游缺口结论登记：重启后激活恢复与否的判定与证据入 progress-report；含上游 issue 材料要点。
+- [ ] A5 progress-report 有 S6 验收记录；implementation-plan 本节勾选。
+
+### S7 常驻/主动层（S7-A 原型验证 → S7-B 自研 @hibuddy/resident）
+
+**目标**：把 HiBuddy 从"会话内被动应答"升级为"个人常驻智能体"——常驻运行、事件驱动、主动执行、人管目标与验收（[ADR-010](decisions/ADR-010-resident-proactive-agent.md)）。混合路线：S7-A 先安装官方 `dsh-superagent-prototype`（dsh bundle，与 0.2.1-rc.5 兼容）真机验证 dsh 常驻机制面，沉淀结论；S7-B 据此自研 `@hibuddy/resident` 面向个人场景（首批事件源 = 定时/周期任务），复用 coworker 审批分级、生成式 UI、会话留痕。
+
+**任务**（S7-B 详细任务与验收标准在 S7-A 结论登记后补全；先验证后定验收）：
+1. **S7-A 原型验证**：安装 `dsh-superagent-prototype` 到 hibuddy profile（遵守 ADR-005 版本纪律，核对 peer 依赖与 patch 层序）；真机验证 Router 常驻、Worker 并行、事件触发（GitHub 轮询可用最小配置）、SQLite 持久化与崩溃恢复；结论（机制可用性 / 与 0.2.1-rc.5 的兼容偏差 / 对 S7-B 的机制借鉴清单）登记 progress-report。
+2. **S7-B 设计**：`@hibuddy/resident` 模块设计（事件源框架、工作项/调度/持久化、通知面、与 coworker 审批分级咬合、常驻面板信息架构）落 docs/module-design/，安全口径（免打扰窗、Worker 权限授予——不采纳原型的 danger-full-access）随设计定稿。
+3. **S7-B 实施**：首批事件源 = 定时/周期任务（含 Monitor 式周期监控：条件+间隔+去重指纹+退避）；通知先落库再触达（桌面端系统级通知升级）；常驻面板（Web 端先行）。
+4. 回归：能力面完整性回归（横切纪律 1）+ 既有 vitest/E2E 全绿 + 常驻链路新增契约测试。
+
+**验收标准**（S7-A 部分先行登记）：
+- [ ] A1 S7-A：原型在 hibuddy profile 真机运行，Router 常驻 + 事件触发分派 + 持久化恢复三机制至少各一项行为证据入 progress-report。
+- [ ] A2 S7-A：与 0.2.1-rc.5 的兼容结论（含已知偏差清单）登记；卸载原型后 profile 回归原状（能力面完整性抽查通过）。
+- [ ] A3 S7-B：任务与验收标准依 S7-A 结论登记本节（占位）。
+
 ## 3. 横切纪律（全阶段通用）
 
 1. **能力面完整性（最高优先）**：HiBuddy = dsh 完整能力 + 增量定制。定制 patch 只做 insert 与自身插件 config；禁止用 `disabled`/覆盖裁剪 dsh 原生子系统（插件安装/启停、分层配置、settings、凭证、审批基线等），确有冲突须在 patch 注释登记理由与 dsh 版本。每阶段验收含能力面回归抽查（S1 建立用例，后续阶段复验）。
@@ -178,4 +212,6 @@ date: 2026-11-04
 | S3 | 2026-11-03 | 通过 | [progress-report §S3](progress-report.md) |
 | S3b | 2026-11-03 | 通过 | [progress-report §S3b](progress-report.md) |
 | S4 | 2026-11-04 | 通过 | [progress-report §S4](progress-report.md) |
-| S5 | — | 未开始 | — |
+| S5 | 2026-11-04 | 通过 | [progress-report §S5](progress-report.md) |
+| S6 | — | 未开始 | — |
+| S7 | — | 未开始（立项 2026-11-04，ADR-010） | — |
