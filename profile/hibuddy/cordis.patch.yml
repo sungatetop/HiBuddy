@@ -9,61 +9,23 @@
 # version it was checked against. Use `disabled: true` instead of removal.
 
 # ---------------------------------------------------------------------------
-# Smoke-test LLM: MiniMax (until a DeepSeek account is signed in).
+# LLM routing: the built-in DeepSeek provider is the product default.
 #
-# dsh ships a built-in `minimax-cn` pi-ai provider route (checked against
-# @deepseek-ai/dsh-llm-pi-ai@0.2.1-rc.5 / @earendil-works/pi-ai@1.4.0):
-#   env key       : MINIMAX_CN_API_KEY        (global platform: MINIMAX_API_KEY, route id `minimax`)
-#   endpoint      : https://api.minimaxi.com/anthropic (anthropic-messages)
-#   catalog models: MiniMax-M2.7 | MiniMax-M2.7-highspeed | MiniMax-M3 | MiniMax-M3.1-Flash
-# The API key itself lives ONLY in the environment variable — never in this
-# file, never in git.
-#
-# Overridden official row (dsh 0.2.1-rc.5, dsh-base bundle):
+# History (S0–S4): smoke tests ran on the built-in `minimax-cn` pi-ai route —
+# the override row `- id: agent-default-model → {provider: minimax-cn, model:
+# MiniMax-*}` plus an `llm-pi-ai` providers row declaring
+# `minimax-cn.apiKeyEnv: MINIMAX_CN_API_KEY` (needed, else NO_ADAPTER —
+# checked against dsh-llm-pi-ai 0.2.1-rc.5). Both rows were removed in S5-0
+# when the DeepSeek key became available: this patch no longer overrides
+# `agent-default-model`, so the official default applies (dsh 0.2.1-rc.5,
+# dsh-base bundle):
 #   - id: agent-default-model
 #     config: {provider: deepseek-official, model: deepseek-flash}
-- id: agent-default-model
-  config:
-    provider: minimax-cn
-    model: MiniMax-M2.7
-# Declares the route inside llm-pi-ai's `providers` dict so the pi-ai adapter
-# registers for it; the installed catalog fills api/baseURL/models for a known
-# route id, so apiKeyEnv alone is enough. Without this row the agent default
-# model above fails with NO_ADAPTER (checked against dsh-llm-pi-ai 0.2.1-rc.5).
-# The key itself lives ONLY in MINIMAX_CN_API_KEY — dsh does not auto-load the
-# repo-root .env, so export it via setx or inject it into the process env.
-- id: llm-pi-ai
-  config:
-    providers:
-      minimax-cn:
-        apiKeyEnv: MINIMAX_CN_API_KEY
-        models:
-          - id: MiniMax-M2.7
-            name: MiniMax-M2.7
-            contextWindow: 204800
-            maxTokens: 131072
-            input:
-              - text
-          - id: MiniMax-M2.7-highspeed
-            name: MiniMax-M2.7-highspeed
-            contextWindow: 204800
-            maxTokens: 131072
-            input:
-              - text
-          - id: MiniMax-M3
-            name: MiniMax-M3
-            contextWindow: 1000000
-            maxTokens: 524288
-            input:
-              - text
-              - image
-          - id: MiniMax-M3.1-Flash
-            name: MiniMax-M3.1-Flash
-            contextWindow: 1000000
-            maxTokens: 524288
-            input:
-              - text
-              - image
+# The built-in `deepseek-official` route reads DEEPSEEK_API_KEY from the
+# process env (dsh does not auto-load the repo-root .env — inject via setx or
+# load .env into the process env before launching). If a non-DeepSeek smoke
+# provider is needed again, restore the override rows above following the
+# S0–S4 pattern.
 - id: ui-settings-general
   name: "@deepseek-ai/dsh-client-ui-settings-general"
   config:

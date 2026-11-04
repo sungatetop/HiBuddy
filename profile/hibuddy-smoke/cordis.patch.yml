@@ -1,24 +1,20 @@
 # HiBuddy smoke-profile patch layer (headless variant).
 #
-# Mirrors profile/hibuddy/cordis.patch.yml's smoke-test LLM override; keep the
-# two files in sync while the smoke default model is MiniMax.
-#
-# dsh built-in `minimax-cn` provider route (checked against
-# @deepseek-ai/dsh-llm-pi-ai@0.2.1-rc.5 / @earendil-works/pi-ai@1.4.0):
-#   env key       : MINIMAX_CN_API_KEY   (global platform: MINIMAX_API_KEY, route id `minimax`)
-#   endpoint      : https://api.minimaxi.com/anthropic (anthropic-messages)
-#   catalog models: MiniMax-M2.7 | MiniMax-M2.7-highspeed | MiniMax-M3 | MiniMax-M3.1-Flash
-# The key lives ONLY in the MINIMAX_CN_API_KEY environment variable (repo-root
-# .env is a convenience store, but dsh does NOT auto-load it — export via setx
-# or inject it into the process environment). Never commit it.
-#
-# Overridden official row (dsh 0.2.1-rc.5, dsh-base bundle):
+# LLM routing history (S0–S4): smoke default model was MiniMax via the built-in
+# `minimax-cn` pi-ai route — an `agent-default-model` override row plus an
+# `llm-pi-ai` providers row declaring `minimax-cn.apiKeyEnv:
+# MINIMAX_CN_API_KEY` (needed, else NO_ADAPTER — checked against
+# dsh-llm-pi-ai 0.2.1-rc.5). Both rows were removed in S5-0 together with
+# profile/hibuddy/cordis.patch.yml's copy when the DeepSeek key became
+# available: the official default now applies (dsh 0.2.1-rc.5, dsh-base
+# bundle):
 #   - id: agent-default-model
 #     config: {provider: deepseek-official, model: deepseek-flash}
-- id: agent-default-model
-  config:
-    provider: minimax-cn
-    model: MiniMax-M3.1-Flash
+# The built-in `deepseek-official` route reads DEEPSEEK_API_KEY from the
+# process env (dsh does NOT auto-load the repo-root .env — inject it before
+# launching). If a non-DeepSeek smoke provider is needed again, restore the
+# override rows following the S0–S4 pattern.
+
 # Product persona (S2 task 2) — kept in sync with profile/hibuddy/cordis.patch.yml:
 # the deployment-level default persona lives on the `system-prompt` row's
 # config (personaPrefix). dsh-base declares `personaPrefix: ''` (dsh
@@ -33,12 +29,3 @@
       You are HiBuddy, the user's everyday assistant, powered by the {{model}}
       model. Stay friendly and practical: understand the task, act with care,
       and answer in the user's language.
-# Declares the route inside llm-pi-ai's `providers` dict so the pi-ai adapter
-# registers for it; the installed catalog fills api/baseURL/models for a known
-# route id, so apiKeyEnv alone is enough. Without this row the agent default
-# model above fails with NO_ADAPTER (checked against dsh-llm-pi-ai 0.2.1-rc.5).
-- id: llm-pi-ai
-  config:
-    providers:
-      minimax-cn:
-        apiKeyEnv: MINIMAX_CN_API_KEY
