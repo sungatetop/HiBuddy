@@ -4,6 +4,7 @@ import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PendingApproval } from '@deepseek-ai/dsh-client-ui-approval/client'
 import type { ChatNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import { recordApprovalDecision } from './run-timeline/decisions.ts'
 
 /**
  * Wire path of the coworker session-grant API. Must stay in sync with
@@ -107,8 +108,17 @@ function ApprovalFlow(props: HibuddyApprovalProps): ReactNode {
       setGrantFailed(true)
     })
   }
-  const onReject = (): Promise<void> => approval.answer('rejected')
-  const onApprove = (): Promise<void> => approval.answer('allowed-once')
+  // Decision mirror (S5-2, FR-08/SR-01): successful answers join the Run
+  // timeline by callId; the durable audit stays in the session log (a denial
+  // also re-emerges via the failed tool result after a reload).
+  const onReject = async (): Promise<void> => {
+    await approval.answer('rejected')
+    recordApprovalDecision(approval.callId, approval.toolName, 'rejected')
+  }
+  const onApprove = async (): Promise<void> => {
+    await approval.answer('allowed-once')
+    recordApprovalDecision(approval.callId, approval.toolName, 'approved')
+  }
   const onAllowSession = async (): Promise<void> => {
     const response = await fetch(GRANTS_PATH, {
       method: 'POST',
@@ -117,6 +127,7 @@ function ApprovalFlow(props: HibuddyApprovalProps): ReactNode {
     })
     if (!response.ok) throw new Error(`grant request failed: ${String(response.status)}`)
     await approval.answer('allowed-once')
+    recordApprovalDecision(approval.callId, approval.toolName, 'waived')
   }
   return (
     <div style={styles.root} data-hibuddy-approval="" aria-busy={answered}>

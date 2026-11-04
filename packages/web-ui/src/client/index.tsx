@@ -38,10 +38,19 @@
  * family settings namespace). The check runs host-side through the `hibuddy`
  * Typert remote namespace (`verifyProvider`): one minimal completion, no key
  * material ever reaches the client.
+ *
+ * S5-2 (FR-08): Run-timeline tab — same two-stage registration as the canvas,
+ * plus a `guide` capsule on the start page as the user-reachable entry (the
+ * body defaults to the latest run; run chips switch turns). The body reads the
+ * viewed session binding's event source directly (no
+ * chat-scope coupling), so timelines live-append while a run streams and
+ * rebuild from durable history after a page reload. Approval decisions
+ * pressed on HiBuddy cards are recorded into a page-lifetime mirror and
+ * joined into the timeline by callId.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ISessions, SessionEventSource } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { PendingApproval } from '@deepseek-ai/dsh-client-ui-approval/client'
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
@@ -52,6 +61,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import { IconClockOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { HibuddyApprovalCard } from './approval-card.tsx'
 import { en as byokEn, zh as byokZh, type ByokLocaleKey } from './byok/locales.ts'
 import { RecommendCard } from './byok/recommend-card.tsx'
@@ -67,6 +77,8 @@ import { registerGenuiSurfaces } from './genui/surfaces.ts'
 import { setSharedStateOpener } from './genui/shared-state-open.ts'
 import { GenuiSharedStateTab } from './genui/shared-state-tab.tsx'
 import { GenuiTurnTail } from './genui/turn-tail.tsx'
+import { en as runEn, zh as runZh, type RunLocaleKey } from './run-timeline/locales.ts'
+import { GenuiRunTimelineTab } from './run-timeline/tab.tsx'
 import type { VerifyProviderOutcome } from '../verify-provider.ts'
 
 /** Required services: Slot registry, copy, the right-Sidebar faces (canvas), sessions (send-back), and the typed Remote mount. */
@@ -81,6 +93,9 @@ const GENUI_NS = 'hibuddy-genui'
 /** Locale namespace of the BYOK Models-page cards. */
 const BYOK_NS = 'hibuddy-byok'
 
+/** Locale namespace of the Run-timeline tab. */
+const RUN_NS = 'hibuddy-run'
+
 /** Adapter-family settings namespaces whose provider cards carry the check. */
 const PROVIDER_SETTINGS_NS = ['llm-deepseek', 'llm-pi-ai'] as const
 
@@ -92,6 +107,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'hibuddy-genui': GenuiLocaleKey
     /** HiBuddy BYOK Models-page cards copy. */
     'hibuddy-byok': ByokLocaleKey
+    /** HiBuddy Run-timeline tab copy. */
+    'hibuddy-run': RunLocaleKey
   }
 }
 
@@ -109,6 +126,10 @@ declare module '@deepseek-ai/dsh-client-ui-sidebar-right/client' {
     /** Canvas instance to reveal — the render_ui instruction id. */
     'hibuddy-genui-canvas': {
       readonly canvasId: string
+    }
+    /** Run to reveal in the timeline tab — the conversation turn number. */
+    'hibuddy-run-timeline': {
+      readonly turn: number
     }
   }
 }
@@ -144,6 +165,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   ctx.effect(() => locale.register(NS, { zh, en }), 'hibuddy-web-ui: approval dictionaries')
   ctx.effect(() => locale.register(GENUI_NS, { zh: genuiZh, en: genuiEn }), 'hibuddy-web-ui: generative-UI dictionaries')
   ctx.effect(() => locale.register(BYOK_NS, { zh: byokZh, en: byokEn }), 'hibuddy-web-ui: BYOK dictionaries')
+  ctx.effect(() => locale.register(RUN_NS, { zh: runZh, en: runEn }), 'hibuddy-web-ui: run-timeline dictionaries')
   // BYOK (S5-1, FR-06): the host-side probe seam folded into the wire result —
   // carrier failures fold into RemoteResult's error branch, so only assembly
   // faults reject; both map onto the card's outcome union.
@@ -225,6 +247,36 @@ export async function apply(ctx: ClientContext): Promise<void> {
     key: 'hibuddy.shared-state',
     locale: GENUI_NS,
   }, GenuiSharedStateTab))
+  // Run-timeline tab (S5-2, FR-08): same two-stage registration. The body owns
+  // its data — it reads the viewed session binding's event source directly
+  // (the contiguous window the Conversation assembles from), so live append
+  // and durable rebuild both come for free without any chat-scope feeder.
+  const getEventSource = (sessionId: string): SessionEventSource | undefined =>
+    (sessions as unknown as ISessions).binding(sessionId as never)?.eventSource
+  ctx.effect(() => ctx.sidebarRightTabs.register({
+    id: 'hibuddy.run-timeline',
+    kind: 'hibuddy-run-timeline',
+    title: () => locale.resolveText({ en: 'Run timeline', zh: 'Run 时间线' }),
+    // FR-08 user entry: a guide capsule on the start page opens the timeline
+    // page (no navigation params — the body defaults to the latest run; run
+    // chips switch turns). Picking it replaces the guide, per dockkit doors.
+    guide: [{
+      id: 'timeline',
+      order: 100,
+      icon: IconClockOutlineRegular,
+      title: () => locale.resolveText({ en: 'Run timeline', zh: 'Run 时间线' }),
+      description: () => locale.resolveText({
+        en: 'Review every run of this session',
+        zh: '回看本会话每次 Run 的过程与输出',
+      }),
+    }],
+  }), 'hibuddy-web-ui: run-timeline tab type')
+  ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+    name: 'sidebar.right.pane.tab',
+    key: 'hibuddy.run-timeline',
+    locale: RUN_NS,
+    inject: () => ({ getEventSource }),
+  }, GenuiRunTimelineTab))
   // Opener seam: flow cards call openGenuiCanvas(id) — the command uses the
   // captured sidebar face (handlers run outside the injection scope).
   setCanvasOpener((canvasId) => {
