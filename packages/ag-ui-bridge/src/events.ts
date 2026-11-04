@@ -18,10 +18,25 @@ import type { AguiEvent } from './types.ts'
 export interface MappingState {
   /** Most recent assistant message id — TOOL_CALL_START.parentMessageId target. */
   lastAssistantMessageId: string | undefined
+  /** Step currently open on the wire (STEP_STARTED without STEP_FINISHED). */
+  openStep: string | undefined
 }
 
 export function newMappingState(): MappingState {
-  return { lastAssistantMessageId: undefined }
+  return { lastAssistantMessageId: undefined, openStep: undefined }
+}
+
+/**
+ * Close a still-open step, if any. AG-UI 1.0 clients (e.g. @ag-ui/client's
+ * HttpAgent state machine) reject RUN_FINISHED/RUN_ERROR while a step is
+ * active, so every terminal path must finish the open step first — the native
+ * Web UI tolerates the violation, strict clients do not (S6-2 finding).
+ */
+export function closeOpenStep(state: MappingState): AguiEvent | undefined {
+  if (state.openStep === undefined) return undefined
+  const event: AguiEvent = { type: 'STEP_FINISHED', stepName: state.openStep }
+  state.openStep = undefined
+  return event
 }
 
 /** Visible text of one assistant stream: text-chunk deltas joined (content fallback below). */
@@ -94,10 +109,21 @@ export function mapSessionEvent(event: SessionEvent, state: MappingState): AguiE
   // installed SessionEventMap union — compare on the widened string.
   const type: string = event.type
   switch (type) {
-    case 'step/start':
-      return [{ type: 'STEP_STARTED', stepName: `step-${(data as { step: number }).step}` }]
-    case 'step/end':
-      return [{ type: 'STEP_FINISHED', stepName: `step-${(data as { step: number }).step}` }]
+    case 'step/start': {
+      const stepName = `step-${(data as { step: number }).step}`
+      state.openStep = stepName
+      return [{ type: 'STEP_STARTED', stepName }]
+    }
+    case 'step/end': {
+      const stepName = `step-${(data as { step: number }).step}`
+      // A resumed turn finishes the step started before its interruption, but
+      // each POST opens a fresh run with a fresh mapper — to the client that
+      // step was never started, and strict clients reject the orphan
+      // STEP_FINISHED. Drop it; closeOpenStep owns real open-step teardown.
+      if (state.openStep !== stepName) return []
+      state.openStep = undefined
+      return [{ type: 'STEP_FINISHED', stepName }]
+    }
     case 'assistant/message': {
       const d = data as { message: { id: string; content: readonly ContentBlock[] }; stream: unknown }
       state.lastAssistantMessageId = d.message.id

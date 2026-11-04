@@ -1,0 +1,147 @@
+/* Minimal demo chrome. CopilotChat brings its own styled surface via
+   @copilotkit/react-core/v2/styles.css; only the gate and the approval card
+   are custom here. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: #101418;
+  color: #e6e8eb;
+}
+
+/* --- token gate ------------------------------------------------------- */
+
+.gate {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gate-card {
+  width: 380px;
+  padding: 32px;
+  border-radius: 12px;
+  background: #1a2027;
+  border: 1px solid #2a323c;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gate-card h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.gate-sub {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #8b949e;
+}
+
+.gate-card input {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #2a323c;
+  background: #101418;
+  color: inherit;
+  font-size: 14px;
+}
+
+.gate-card button {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  background: #2f6feb;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.gate-card button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.gate-error {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #6b2c2c;
+  background: #2a1616;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+/* --- chat shell ------------------------------------------------------- */
+
+.app-shell {
+  height: 100%;
+  padding: 12px;
+}
+
+.chat {
+  height: 100%;
+}
+
+/* --- approval interrupt card ------------------------------------------ */
+
+.approval-card {
+  margin: 8px 0;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid #4a3b1d;
+  background: #241d10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.approval-title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.approval-message {
+  margin: 0;
+  font-size: 13px;
+  color: #d8c9a3;
+  white-space: pre-wrap;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.approval-actions button {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.approval-actions .approve {
+  background: #2f6feb;
+  color: white;
+}
+
+.approval-actions .reject {
+  background: #3a1d1d;
+  color: #ff9b9b;
+  border: 1px solid #6b2c2c;
+}

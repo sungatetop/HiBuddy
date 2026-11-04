@@ -25,7 +25,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import { mapSessionEvent, newMappingState, terminalOf } from './events.ts'
+import { closeOpenStep, mapSessionEvent, newMappingState, terminalOf } from './events.ts'
 import { BridgeSessions, detachActive, sessionIdFor } from './sessions.ts'
 import type { SessionRecord } from './sessions.ts'
 import { answerPendings, cancelPendings, captureApproval } from './approvals.ts'
@@ -147,6 +147,10 @@ function pumpSessionEvent(record: SessionRecord, event: SessionEvent, threadId: 
   if (run === undefined) return
   if (event.type === 'turn/end') {
     const terminal = terminalOf(event.data.reason, threadId, run.runId)
+    // Strict AG-UI clients reject terminals with an active step; error turns
+    // can end mid-step, so close any open step before the terminal event.
+    const close = closeOpenStep(run.mapper)
+    if (close !== undefined) run.sink.send(close)
     run.sink.send(terminal)
     run.sink.close()
     detachActive(record, run.runId)

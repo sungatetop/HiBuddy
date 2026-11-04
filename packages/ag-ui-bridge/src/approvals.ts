@@ -16,6 +16,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
+import { closeOpenStep } from './events.ts'
 import type { SessionRecord } from './sessions.ts'
 import { detachActive } from './sessions.ts'
 
@@ -44,6 +45,10 @@ export function captureApproval(record: SessionRecord, req: { toolName: string; 
 
   const run = record.active
   if (run !== undefined) {
+    // Strict AG-UI clients reject RUN_FINISHED with an active step — close it
+    // first (approval requests fire mid-step by construction).
+    const close = closeOpenStep(run.mapper)
+    if (close !== undefined) run.sink.send(close)
     run.sink.send({
       type: 'RUN_FINISHED',
       threadId: record.threadId,

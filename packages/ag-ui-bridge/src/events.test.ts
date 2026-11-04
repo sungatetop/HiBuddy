@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import { mapSessionEvent, newMappingState, terminalOf } from './events.ts'
+import { closeOpenStep, mapSessionEvent, newMappingState, terminalOf } from './events.ts'
 
 /** Minimal SessionEvent literal — the mapper reads only type/data. */
 function ev(type: string, data: unknown): SessionEvent {
@@ -15,10 +15,40 @@ function ev(type: string, data: unknown): SessionEvent {
 
 describe('mapSessionEvent（ADR-009 §3.2 映射表）', () => {
   it('maps step lifecycle to STEP_STARTED/STEP_FINISHED with step-N names', () => {
-    expect(mapSessionEvent(ev('step/start', { step: 2 }), newMappingState()))
+    const state = newMappingState()
+    expect(mapSessionEvent(ev('step/start', { step: 2 }), state))
       .toEqual([{ type: 'STEP_STARTED', stepName: 'step-2' }])
-    expect(mapSessionEvent(ev('step/end', { step: 2 }), newMappingState()))
+    expect(mapSessionEvent(ev('step/end', { step: 2 }), state))
       .toEqual([{ type: 'STEP_FINISHED', stepName: 'step-2' }])
+  })
+
+  describe('openStep 跟踪（strict 客户端终局不变量，S6-2）', () => {
+    it('tracks the open step through step/start and clears it on step/end', () => {
+      const state = newMappingState()
+      mapSessionEvent(ev('step/start', { step: 1 }), state)
+      expect(state.openStep).toBe('step-1')
+      mapSessionEvent(ev('step/end', { step: 1 }), state)
+      expect(state.openStep).toBeUndefined()
+    })
+
+    it('closeOpenStep returns STEP_FINISHED for the open step and clears it', () => {
+      const state = newMappingState()
+      mapSessionEvent(ev('step/start', { step: 3 }), state)
+      expect(closeOpenStep(state)).toEqual({ type: 'STEP_FINISHED', stepName: 'step-3' })
+      expect(state.openStep).toBeUndefined()
+      expect(closeOpenStep(state)).toBeUndefined()
+    })
+
+    it('drops an orphan step/end whose step was never started in this run segment', () => {
+      const state = newMappingState()
+      // Resumed-run segment: the client never saw step/start for step-1.
+      expect(mapSessionEvent(ev('step/end', { step: 1 }), state)).toEqual([])
+      expect(state.openStep).toBeUndefined()
+    })
+
+    it('closeOpenStep is a no-op when no step is open', () => {
+      expect(closeOpenStep(newMappingState())).toBeUndefined()
+    })
   })
 
   it('maps assistant/message to the TEXT_MESSAGE trio carrying the whole text as one delta', () => {

@@ -62,6 +62,20 @@ describe('captureApproval（RUN_FINISHED interrupt 合成）', () => {
     expect(pending).toBeInstanceOf(Promise)
   })
 
+  it('finishes an open step before RUN_FINISHED (strict-client invariant, S6-2)', () => {
+    const record = makeRecord()
+    activeRun(record)
+    const { mapper, sink } = record.active! as unknown as { mapper: ReturnType<typeof newMappingState>; sink: ReturnType<typeof makeSink> }
+    mapper.openStep = 'step-1'
+
+    captureApproval(record, { toolName: 'write' })
+
+    expect(sink.send).toHaveBeenCalledTimes(2)
+    expect(sink.send.mock.calls[0][0]).toEqual({ type: 'STEP_FINISHED', stepName: 'step-1' })
+    expect(sink.send.mock.calls[1][0]).toMatchObject({ type: 'RUN_FINISHED' })
+    expect(mapper.openStep).toBeUndefined()
+  })
+
   it('falls back to a tool-named message when no reason is given', () => {
     const record = makeRecord()
     activeRun(record)
