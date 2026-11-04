@@ -9,7 +9,7 @@
 | 产品文档 | [product/requirements.md](product/requirements.md) | PRD：HiBuddy（个人工作伙伴）的 P0 范围、对象模型、功能需求（会话/任务/工具审批/生成式界面/共享状态/BYOK/双端一致）与共享规则 |
 | 架构文档 | [architecture/system-architecture.md](architecture/system-architecture.md) | 技术方案：基于 deepseek-harness（dsh，npm 依赖，MIT）深度定制——hibuddy profile 装配 + @hibuddy/* 插件集（品牌/核心工具/Web UI 定制/AG-UI 桥）+ 自建 Electron 壳+宿；不 fork、不建 SPI（路线见 ADR-003） |
 | 计划与报告 | [implementation-plan.md](implementation-plan.md) | P0 实施计划：先复用后定制——S1 跑通 dsh 三端基础设施与能力面完整性（插件安装/启停）并打包，S2 起定制（品牌人设→核心工具/审批→AG-UI 桥 MVP→生成式 UI→收尾双端交付）；每阶段任务、前置 ADR 与可判定验收标准 |
-| 计划与报告 | [progress-report.md](progress-report.md) | 各阶段验收记录与缺口清单：S0–S3b 已通过（S0 2026-11-01 起，S3b AG-UI 桥 MVP 2026-11-03 收官） |
+| 计划与报告 | [progress-report.md](progress-report.md) | 各阶段验收记录与缺口清单：S0–S4 已通过（S0 2026-11-01 起，S4 生成式 UI 与工作台定制 2026-11-04 收官） |
 
 ## 决策文档（docs/decisions/）
 

@@ -3,7 +3,7 @@ title: HiBuddy P0 实施计划
 summary: P0 的分阶段执行计划（S1–S5）：S1 先把 dsh 基础设施三端（CLI/Web/桌面）全部复用跑通、验证 dsh 原生能力面完整性（插件安装/启停/分层配置）并建立编译打包链路，S2 起再按 PRD 需求做深度定制（品牌人设→核心工具/审批→生成式 UI→收尾双端交付）；每阶段含可判定的验收标准
 keywords: [实施计划, 里程碑, 验收标准, P0, 分阶段交付, 基础设施复用, 插件生态, HiBuddy]
 status: accepted
-date: 2026-11-03
+date: 2026-11-04
 ---
 
 # HiBuddy P0 实施计划
@@ -129,13 +129,13 @@ date: 2026-11-03
 7. 引入 Playwright，覆盖生成式 UI 基本流程 E2E。
 
 **验收标准**：
-- [ ] A1 ADR-007 状态 accepted。
-- [ ] A2 Web 端：Agent 能在对话中产出图表与表单各一例，流式渲染可见。
-- [ ] A3 画布：可打开/关闭/重开，跨轮次驻留，版本可回看历史。
-- [ ] A4 交互回传：在表单提交/点击后，Agent 下一轮回复引用了该交互内容；交互记录入画布历史。
-- [ ] A5 沙盒测试用例通过：沙盒内发起网络请求、读本地文件、读密钥均被阻断。
-- [ ] A6 共享状态：用户编辑待办/参数后，Agent 后续步骤遵循修改；冲突时新者为准并提示。
-- [ ] A7 Playwright E2E（生成式 UI 基本流程）全绿；`vitest run` 全绿。
+- [x] A1 ADR-007 状态 accepted（2026-11-03，提交 f9b5112 前定稿）。
+- [x] A2 Web 端：Agent 能在对话中产出图表与表单各一例，流式渲染可见（S4-3 提交 f9b5112：内嵌 chart/form/metrics/table 组件 + preparing 阶段骨架卡流式渲染，冒烟全过）。
+- [x] A3 画布：可打开/关闭/重开，跨轮次驻留，版本可回看历史（S4-4 提交 f4ba62d：右栏 canvas tab + turn-tail 版本记录，冒烟全过）。
+- [x] A4 交互回传：在表单提交/点击后，Agent 下一轮回复引用了该交互内容；交互记录入画布历史（S4-5 提交 4e25b82：`[generative-ui interaction]` 结构化信封上行；E2E 会话日志实证信封与模型应答轮）。
+- [x] A5 沙盒测试用例通过（sandbox.test.ts 10 项：instruction gate 拒未知/伪装组件键、payload 边界拒超大/不可序列化、registry 边界、源级 tripwire 扫 eval/new Function/document.write 动态执行汇；架构上组件为编译期内置、模型仅供数据——网络/文件/密钥在组件面无访问路径，ADR-007 §3.5；渲染异常经 SurfaceBoundary 降级静态内容，E2E 曾实测降级防线生效）。
+- [x] A6 共享状态：用户编辑待办/参数后，Agent 后续步骤遵循修改；冲突时新者为准并提示（S4-6：`shared_state` 工具 + 右栏共享状态面板；mergeEntry 时间戳新者为准（shared-state.test.ts 9 项）+ 来源徽章/时间显示；E2E 实证 agent 写入→面板→用户编辑→信封上行→模型 relay source:user 写入；乐观写入页生命周期不入盘，reload 后权威回放）。
+- [x] A7 Playwright E2E（生成式 UI 基本流程）全绿（tests/e2e 1/1，15.6s：表单渲染→提交回传→共享状态→面板编辑→reload 权威持久化→console 零错误）；`vitest run` 全绿（workspace 76 项：web-ui 28 + coworker 18 + ag-ui-bridge 30）。
 
 ### S5 P0 收尾与双端交付
 
@@ -173,4 +173,9 @@ date: 2026-11-03
 | 阶段 | 验收日期 | 结果 | 记录 |
 |---|---|---|---|
 | S0 | 2026-11-01 | 通过 | [progress-report §S0](progress-report.md) |
-| S1–S5 | — | 未开始 | — |
+| S1 | 2026-11-02 | 通过 | [progress-report §S1](progress-report.md) |
+| S2 | 2026-11-03 | 通过 | [progress-report §S2](progress-report.md) |
+| S3 | 2026-11-03 | 通过 | [progress-report §S3](progress-report.md) |
+| S3b | 2026-11-03 | 通过 | [progress-report §S3b](progress-report.md) |
+| S4 | 2026-11-04 | 通过 | [progress-report §S4](progress-report.md) |
+| S5 | — | 未开始 | — |

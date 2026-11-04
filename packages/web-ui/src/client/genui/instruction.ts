@@ -70,4 +70,24 @@ export function instructionReady(instruction: RenderUiInstruction): boolean {
   return instruction.id !== undefined
     && instruction.component !== undefined
     && instruction.props !== undefined
+    && payloadWithinCap(instruction.props, instruction.data)
+}
+
+/** Serialized size cap for one instruction's props/data (sandbox hardening):
+ *  the surfaces project model data straight into the DOM, so an oversized or
+ *  non-serializable payload is rejected into the static fallback (SR-02)
+ *  instead of being rendered. */
+export const INSTRUCTION_PAYLOAD_CAP = 256 * 1024
+
+/** True when props/data are serializable and within {@link INSTRUCTION_PAYLOAD_CAP}. */
+export function payloadWithinCap(props: unknown, data: unknown): boolean {
+  for (const value of [props, data]) {
+    if (value === undefined) continue
+    try {
+      if ((JSON.stringify(value) ?? '').length > INSTRUCTION_PAYLOAD_CAP) return false
+    } catch {
+      return false
+    }
+  }
+  return true
 }

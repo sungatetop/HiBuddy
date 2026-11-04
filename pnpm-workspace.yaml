@@ -2,7 +2,8 @@ packages:
   - profile/*
   - packages/*
   - desktop/*
-  # tests 在跨端测试阶段加入
+  - tests/*
+  # tests: 跨端集成测试（S4-7 起：Playwright E2E）
 
 # pnpm 12 settings moved here (package.json "pnpm" field is no longer read).
 # Native / postinstall builds required by the dsh runtime.

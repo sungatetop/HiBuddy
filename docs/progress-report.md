@@ -1,9 +1,9 @@
 ---
 title: HiBuddy 进度与验收报告
-summary: 各阶段的验收记录与缺口清单：S0 骨架与冒烟链路（2026-11-01）、S1 基础设施复用与编译打包（2026-11-02）、S2 品牌与人设基线（2026-11-03）、S3 审批分级与留痕（2026-11-03）、S3b AG-UI 桥 MVP（2026-11-03）均通过；每阶段含缺口清单
+summary: 各阶段的验收记录与缺口清单：S0 骨架与冒烟链路（2026-11-01）、S1 基础设施复用与编译打包（2026-11-02）、S2 品牌与人设基线（2026-11-03）、S3 审批分级与留痕（2026-11-03）、S3b AG-UI 桥 MVP（2026-11-03）、S4 生成式 UI 与工作台定制（2026-11-04）均通过；每阶段含缺口清单
 keywords: [进度报告, 验收记录, 缺口清单, HiBuddy]
 status: accepted
-date: 2026-11-03
+date: 2026-11-04
 ---
 
 # HiBuddy 进度与验收报告
@@ -133,3 +133,28 @@ date: 2026-11-03
 - **桥不建授权存储（设计决策）**：桥侧审批应答一律一次性（allowed-once/cancelled），不推断持久 grant；原生 UI 的会话级免再询 grant 经 coworker answerer 链生效、不达桥。
 - **CopilotKit 浏览器端真机接入**：A2 以协议级 E2E client 验证；CopilotKit provider/runtime 端到端接入待 P1 生态阶段（ADR-009 MVP 验收形态的完整闭环）。
 - **审批审计 AG-UI 侧仅 CUSTOM 载体**：approval/asked/decided 以 CUSTOM 事件透出（AG-UI 1.0 无标准审批事件类型）；「人工批准 vs 免再询代答」语义区分同 S3 P0 局限。
+
+## S4 生成式 UI 与工作台定制（验收日期 2026-11-04：通过）
+
+**范围**：ADR-007 定案（组件指令而非前端代码）+ `@hibuddy/web-ui` 插件——Slots 注入、`render_ui` 工具（chart/form/table/metrics 内置组件，内嵌+画布双形态，流式渲染）、`[generative-ui interaction]` 交互回传信封、SR-02 沙盒边界（编译期内置组件 + payload 闸 + SurfaceBoundary 降级）、FR-05 共享任务状态（`shared_state` 工具 + 右栏面板，来源标识/时间戳新者为准）、Playwright E2E 套件（tests/e2e）。分 3 笔提交：S4-3 f9b5112（内置组件+内嵌流式）、S4-4 f4ba62d（画布形态）、S4-5 4e25b82（交互回传），S4-6（沙盒测试+共享状态+E2E）一笔收官。
+
+**验收结果**（对应 implementation-plan S4 A1–A7）：
+- **A1** [ADR-007](decisions/ADR-007-generative-ui-format.md) accepted（2026-11-03）。
+- **A2/A3** 内嵌 chart/form/metrics/table 四组件 + preparing 阶段骨架卡流式渲染；画布开/关/重开、跨轮驻留、turn-tail 版本递增可回看（S4-3/S4-4 冒烟全过）。
+- **A4** 表单提交 → `[generative-ui interaction]` 结构化信封上行 → 模型下一轮引用；E2E 会话 JSONL 实证信封与应答轮。
+- **A5** sandbox.test.ts 10 项：instruction gate（拒未知/伪装组件键）、payload 边界（拒超大 256KB/不可序列化）、registry 边界、源级 tripwire（扫 eval/new Function/document.write）；架构上模型仅供数据、组件编译期内置——网络/文件/密钥在组件面无访问路径（ADR-007 §3.5）；SurfaceBoundary 渲染异常降级静态内容（E2E 排障期实测降级防线生效）。
+- **A6** `shared_state` 工具（get/set，source 标识）+ 右栏共享状态面板（首个 agent 写入自动显现）；mergeEntry 时间戳新者为准（shared-state.test.ts 9 项）；用户面板编辑乐观更新（user 徽章）→ `[shared-state update]` 信封上行 → 模型 relay 写入（source:user）；乐观写入页生命周期不入盘，reload 后权威回放。
+- **A7** Playwright E2E 1/1（15.6s，tests/e2e，真实 MiniMax 模型：canvas 表单渲染→填写提交→回传→共享状态 agent 写入→面板编辑→relay→reload 权威持久化→console 零错误）；vitest workspace 76 项全绿（web-ui 28 + coworker 18 + ag-ui-bridge 30）；typecheck/build 全绿。
+
+**S4-6 过程修复记录**（E2E 走查暴露，逐一修复后复测通过）：
+1. **closed() 闸**：turn-tail 消费 `PartialArguments` 时对流中视图跳过（`closed()` 未达不落库）——流式中间态曾被 canvas store 按 call id 去重后永久驻留（坏快照粘滞）；shared-state effect 同闸（value 未闭合不记）。
+2. **text/value 双读**：`PartialArguments.value(key)` 只读非字符串完成值（字符串返回 undefined），共享状态 value 读取改为 `text('value') ?? value('value')`。
+3. **共享状态 tab 显现 seam**：tab 类型注册 ≠ 自动出现；镜像 canvas-open 模式（`revealSharedState` 每会话每页生命周期一次）+ index.tsx 安装 opener。
+4. **宿侧形状闸（assertPlainArrays）**：`render_ui` execute 按 component 校验关键数组字段为纯 JSON 数组（form.fields/chart.series+data.items/table.columns+data.rows/metrics.items），坏形状 throw → 管道落 isError 结果（`Error: <message>` 模型可读）→ 模型同轮自愈重试；正常指令仍 no-op（ADR-007 §3.2 不变）。
+5. **E2E 防假绿加固**：turn 完成同步锚定原生「已完成，用时 N 秒」尾标按钮（`getByRole` 精确计数，文本匹配歧义弃用）；关键断言只认工具调用落定后的 DOM（表单元素/面板行），乐观或信封文本不可伪造；reload 权威持久化断言收尾。
+
+**缺口清单（S4 新增）**：
+- **MiniMax M2.x `{item:[...]}` 数组包装缺陷**（模型输出缺陷，非本项目代码缺陷）：该模型对 JSON 数组参数会系统性输出 proto 风格 `{item:[...]}` 包装（会话 JSONL tool/call 事件实证 5/5 复现；工具 description 强调无效；JSON 字面量照抄 prompt 下 1 次通过——稳定性随措辞/采样波动）。SR-02 降级防线按设计兜底（坏形状→静态降级不崩溃）；已加宿侧 assertPlainArrays 闸（isError + 教学文案）让模型同轮自愈；E2E 当轮模型直出纯数组未触发闸。若后续换模型（DeepSeek 官方源等）该缺陷预计自然消失，闸门保留为通用防线。
+- **turn-tail 版本记录依赖客户端在线**：画布版本历史由 turn-tail 前端记录，页面未打开的历史轮不计入（dsh 会话持久化保完整工具调用，可回放渲染，但版本轴是客户端视角）。
+- **共享状态 Run 级作用域为会话内存**：面板数据源 = 会话内工具调用回放 + 页面生命周期乐观写入，无独立持久化 store（会话删除即随之消失；跨会话共享属 P1 语义，未纳入）。
+- **E2E 覆盖面**：单条串行 happy path（ADR-007 基本流程）；降级路径（坏形状→静态回退）由 vitest 与本轮手工走查覆盖，未入 E2E 断言（需稳定诱导模型产出坏形状，不可靠）；S5 按计划扩展 P0 全流程 E2E。

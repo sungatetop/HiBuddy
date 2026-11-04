@@ -14,6 +14,13 @@ export const zh = {
   canvasLatest: '最新',
   canvasTurn: '来自第 {n} 轮',
   canvasInteractions: '交互记录',
+  stateTitle: '共享状态',
+  stateEmpty: '暂无共享状态：Agent 调用 shared_state 写入，或你在下方编辑后，键值在此出现。',
+  stateKeyPh: '键（如 todo）',
+  stateValuePh: '值（JSON 或文本）',
+  stateSave: '写入',
+  stateSent: '已发给 Agent 写入共享状态，下一轮生效。',
+  stateHint: '双方可编辑：你的写入由 Agent 代记（来源标为 user），冲突时以时间新者为准并提示。',
 } satisfies Record<string, string>
 
 /** Generative-UI dictionary key union. */
@@ -33,4 +40,11 @@ export const en: Record<GenuiLocaleKey, string> = {
   canvasLatest: 'Latest',
   canvasTurn: 'from turn {n}',
   canvasInteractions: 'Interactions',
+  stateTitle: 'Shared state',
+  stateEmpty: 'No shared state yet: agent shared_state writes and your own edits below appear here.',
+  stateKeyPh: 'key (e.g. todo)',
+  stateValuePh: 'value (JSON or text)',
+  stateSave: 'Write',
+  stateSent: 'Sent to the agent; it takes effect next turn.',
+  stateHint: 'Both sides edit: your write is journaled by the agent (source "user"); on conflict the newest write wins and is reported.',
 }

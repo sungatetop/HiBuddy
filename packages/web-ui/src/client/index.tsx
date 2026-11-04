@@ -26,6 +26,11 @@
  * ConversationController.send resolves to internally) — so surface components
  * (form submit) can push one structured text message into the session as a
  * queued turn.
+ *
+ * S4-6: shared-state panel (FR-05). Registers the right-sidebar tab whose
+ * body lists the run-level shared task state with source/time provenance;
+ * the user's edit lands optimistically and is relayed to the agent as one
+ * `[shared-state update]` queued-turn message (the send-back seam).
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -45,6 +50,8 @@ import { setConversationSender } from './genui/conversation-send.ts'
 import { en as genuiEn, zh as genuiZh, type GenuiLocaleKey } from './genui/locales.ts'
 import { RenderUiCard } from './genui/render-ui-card.tsx'
 import { registerGenuiSurfaces } from './genui/surfaces.ts'
+import { setSharedStateOpener } from './genui/shared-state-open.ts'
+import { GenuiSharedStateTab } from './genui/shared-state-tab.tsx'
 import { GenuiTurnTail } from './genui/turn-tail.tsx'
 
 /** Required services: Slot registry, copy, the right-Sidebar faces (canvas), and sessions (send-back). */
@@ -128,10 +135,27 @@ export function apply(ctx: ClientContext): void {
     key: 'hibuddy.genui-canvas',
     locale: GENUI_NS,
   }, GenuiCanvasTab))
+  // Shared-state tab (S4-6, FR-05): the user's editing surface for the
+  // run-level shared task state — same two-stage registration as the canvas.
+  ctx.effect(() => ctx.sidebarRightTabs.register({
+    id: 'hibuddy.shared-state',
+    kind: 'hibuddy-shared-state',
+    title: () => locale.resolveText({ en: 'Shared state', zh: '共享状态' }),
+  }), 'hibuddy-web-ui: shared-state tab type')
+  ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+    name: 'sidebar.right.pane.tab',
+    key: 'hibuddy.shared-state',
+    locale: GENUI_NS,
+  }, GenuiSharedStateTab))
   // Opener seam: flow cards call openGenuiCanvas(id) — the command uses the
   // captured sidebar face (handlers run outside the injection scope).
   setCanvasOpener((canvasId) => {
     sidebarRight.openTab('hibuddy-genui-canvas', { params: { canvasId } })
+  })
+  // Shared-state opener seam (S4-6): the turn tails reveal the panel on the
+  // first observed write; no navigation params for this kind.
+  setSharedStateOpener(() => {
+    sidebarRight.openTab('hibuddy-shared-state')
   })
   // Send-back seam (S4-5): surface events become one queued-turn text message.
   // The attribute path (`scope(id).conversation`) demands the caller run inside

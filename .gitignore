@@ -25,3 +25,7 @@ profile/*/workspace/
 # dsh plugin-manager runtime state (install logs / temp store from
 # `dsh plugin --profile` operations against the synced junction)
 profile/*/.plugin-manager/
+
+# Playwright transient output
+tests/e2e/test-results/
+tests/e2e/playwright-report/

@@ -29,7 +29,8 @@
   "scripts": {
     "build": "tsdown",
     "watch": "tsdown --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.0"
@@ -50,6 +51,7 @@
     "@deepseek-ai/dsh-client-ui-tool": "0.2.1-rc.5",
     "@deepseek-ai/dsh-tools": "0.2.1-rc.5",
     "@types/react": "^18.3.0",
-    "react": "^18.2.0"
+    "react": "^18.2.0",
+    "vitest": "^5.0.5"
   }
 }
