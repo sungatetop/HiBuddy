@@ -15,12 +15,10 @@
 # the override row `- id: agent-default-model → {provider: minimax-cn, model:
 # MiniMax-*}` plus an `llm-pi-ai` providers row declaring
 # `minimax-cn.apiKeyEnv: MINIMAX_CN_API_KEY` (needed, else NO_ADAPTER —
-# checked against dsh-llm-pi-ai 0.2.1-rc.5). Both rows were removed in S5-0
-# when the DeepSeek key became available: this patch no longer overrides
-# `agent-default-model`, so the official default applies (dsh 0.2.1-rc.5,
-# dsh-base bundle):
-#   - id: agent-default-model
-#     config: {provider: deepseek-official, model: deepseek-flash}
+# checked against dsh-llm-pi-ai 0.2.1-rc.5). S5-0 removed those rows so the
+# official default applied; S5-4 restated them explicitly again (see the
+# "Explicit default-model declaration" section at the end of this file) so
+# the product route cannot drift with dsh-base defaults.
 # The built-in `deepseek-official` route reads DEEPSEEK_API_KEY from the
 # process env (dsh does not auto-load the repo-root .env — inject via setx or
 # load .env into the process env before launching). If a non-DeepSeek smoke
@@ -291,3 +289,25 @@
       - id: tool-plugin-market
         name: '@deepseek-ai/dsh-plugin-market/tools'
         disabled: true
+# ---------------------------------------------------------------------------
+# Explicit default-model declaration (S5-4): restate the two routing rows
+# instead of relying on the official defaults, so the product route cannot
+# drift when the dsh-base bundle changes its defaults. `llm-pi-ai` with an
+# empty `providers` map clears the built-in third-party catalog (minimax etc.;
+# BYOK custom providers added in settings do not depend on it). Overridden
+# official rows (dsh 0.2.1-rc.5, dsh-base cordis.patch.yml):
+#   - id: llm-pi-ai — mounted with built-in providers predeclared.
+#   - id: agent-default-model — mounted with NO config keys (official default
+#     is {provider: deepseek-official, model: deepseek-flash}); the explicit
+#     `reasoningEffort: high` restates the adapter default (dsh-llm-deepseek
+#     config.d.ts: default `high`), so behavior is identical.
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  config:
+    providers: {}
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: deepseek-official
+    model: deepseek-flash
+    reasoningEffort: high
