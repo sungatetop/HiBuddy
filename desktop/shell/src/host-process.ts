@@ -16,6 +16,16 @@ export interface HostQuitInspection {
   readonly scheduledTasks: boolean
 }
 
+/**
+ * Desktop-notification report (S5-5, FR-07): the host observes approval waits
+ * and finished top-level runs; the shell decides whether a toast is warranted.
+ */
+export interface HostNotification {
+  readonly kind: 'approval' | 'run-finished'
+  readonly toolName?: string
+  readonly outcome?: 'completed' | 'blocked' | 'error' | 'max-tokens'
+}
+
 /** Host failure reported over IPC before the process exited. */
 export class HostFatalError extends Error {
   constructor(message: string, readonly diagnostic: string | undefined) {
@@ -30,6 +40,8 @@ type HostEvent =
   | { readonly type: 'shutdown-complete' }
   | { readonly type: 'quit-inspection'; readonly requestId: number; readonly activeTasks: boolean
     ; readonly scheduledTasks: boolean; readonly error?: string }
+  | { readonly type: 'notify'; readonly kind: HostNotification['kind']; readonly toolName?: string
+    ; readonly outcome?: HostNotification['outcome'] }
 
 const MAX_HOST_DIAGNOSTIC_CHARS = 64 * 1024
 /** A slower host counts as unknown work and the shell asks before quitting (dsh parity). */
@@ -54,6 +66,12 @@ function isHostEvent(message: unknown): message is HostEvent {
       return Number.isSafeInteger(candidate.requestId)
       && typeof candidate.activeTasks === 'boolean' && typeof candidate.scheduledTasks === 'boolean'
       && (candidate.error === undefined || typeof candidate.error === 'string')
+    case 'notify':
+      return (candidate.kind === 'approval' || candidate.kind === 'run-finished')
+      && (candidate.toolName === undefined || typeof candidate.toolName === 'string')
+      && (candidate.outcome === undefined || candidate.outcome === 'completed'
+        || candidate.outcome === 'blocked' || candidate.outcome === 'error'
+        || candidate.outcome === 'max-tokens')
     default:
       return false
   }
@@ -97,12 +115,14 @@ export class HostProcess {
    * @param hostEntry - Absolute path of the built @hibuddy/desktop-host entry.
    * @param projectDir - Host working directory (.env project layer and process cwd).
    * @param onFailure - Receives the first unexpected child failure, including after readiness.
+   * @param onNotify - Receives host-reported desktop-notification events (S5-5, FR-07).
    */
   constructor(
     private readonly node: string,
     private readonly hostEntry: string,
     private readonly projectDir: string,
     private readonly onFailure?: (error: Error) => void,
+    private readonly onNotify?: (notification: HostNotification) => void,
   ) {}
 
   /** Start this child once and await its web application URL. */
@@ -136,6 +156,8 @@ export class HostProcess {
         const request = this.controlRequests.get(message.requestId)
         if (message.error === undefined) request?.resolve(message)
         else request?.reject(new Error(message.error))
+      } else if (message.type === 'notify') {
+        this.onNotify?.({ kind: message.kind, toolName: message.toolName, outcome: message.outcome })
       }
     })
     child.once('error', (error) => { this.fail(error) })

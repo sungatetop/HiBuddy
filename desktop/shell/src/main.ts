@@ -5,12 +5,12 @@
  * navigation gate; all Node authority stays in the host child process.
  */
 
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, Notification, shell } from 'electron'
 import { appendFileSync, cpSync, existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { HostProcess, HostFatalError } from './host-process.js'
+import { HostProcess, HostFatalError, type HostNotification } from './host-process.js'
 import { createTray } from './tray.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -52,6 +52,40 @@ const logFile = join(app.getPath('userData'), 'shell.log')
 function log(message: string): void {
   try { appendFileSync(logFile, `${new Date().toISOString()} ${message}\n`) } catch { /* diagnostics only */ }
   console.log(`[hibuddy-shell] ${message}`)
+}
+
+/**
+ * FR-07 (S5-5): system toast for approval waits and finished runs — only when
+ * the user is not looking at the window (unfocused or minimized). Clicking the
+ * toast brings the window back. The host always reports; this is the gate.
+ */
+function showDesktopNotification(notification: HostNotification): void {
+  const window = mainWindow
+  if (window === undefined || window.isDestroyed()) return
+  const focused = window.isFocused() && !window.isMinimized()
+  log(`desktop notify ${notification.kind}: ${focused ? 'suppressed (window focused)' : 'shown'}`)
+  if (focused) return
+  const content = notification.kind === 'approval'
+    ? { title: 'HiBuddy 等待审批', body: `工具 ${notification.toolName ?? '未知'} 正在等待你的审批。` }
+    : notification.outcome === 'error'
+      ? { title: 'HiBuddy 任务失败', body: '一次任务已结束（失败）。' }
+      : notification.outcome === 'blocked'
+        ? { title: 'HiBuddy 任务受阻', body: '一次任务已结束（受阻）。' }
+        : notification.outcome === 'max-tokens'
+          ? { title: 'HiBuddy 任务结束', body: '一次任务已结束（达到输出上限）。' }
+          : { title: 'HiBuddy 任务完成', body: '一次任务已完成。' }
+  const toast = new Notification({
+    title: content.title,
+    body: content.body,
+    icon: join(here, '../assets/hibuddy.png'),
+  })
+  toast.on('click', () => {
+    if (window.isDestroyed()) return
+    if (window.isMinimized()) window.restore()
+    window.show()
+    window.focus()
+  })
+  toast.show()
 }
 
 function createWindow(): BrowserWindow {
@@ -146,6 +180,9 @@ async function main(): Promise<void> {
   })
 
   await app.whenReady()
+  // Windows toasts require an AppUserModelID: packaged builds must match the
+  // electron-builder appId (NSIS shortcut registration); dev uses the exe path.
+  app.setAppUserModelId(packaged ? 'cn.hibuddy.desktop' : process.execPath)
   log(`shell starting (packaged=${String(packaged)}); hostEntry=${hostEntry}; projectDir=${projectDir}`)
   ensureDshProfile()
   createTray({
@@ -168,7 +205,7 @@ async function main(): Promise<void> {
       detail: detail.slice(0, 4000),
       buttons: ['确定'],
     }).finally(() => app.exit(1))
-  })
+  }, showDesktopNotification)
 
   mainWindow = createWindow()
   // Loading placeholder until the host reports its authenticated URL.

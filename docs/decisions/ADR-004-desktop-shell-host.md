@@ -81,8 +81,11 @@ spawn(process.execPath, ['--expose-internals', hostEntry], {
 | `fatal` | `{ message, diagnostic }` | 启动失败（diagnostic 为完整 inspect 后的错误）；随后退出码 1 |
 | `shutdown-complete` | — | 收到 `shutdown` 并完成排空后 |
 | `quit-inspection` | `{ requestId, activeTasks, scheduledTasks }` | 应答壳的检查请求 |
+| `notify` | `{ kind: 'approval', toolName }` 或 `{ kind: 'run-finished', outcome }` | S5-5 追加（FR-07）：审批等待（2s 未被自动应答）或顶层 Run 结束（completed/blocked/error；subagent 会话与用户中止的 turn 不报）；壳按窗口焦点决定是否弹系统通知 |
 
 壳 → 宿：`shutdown`（请求排空退出）、`quit-inspection { requestId }`。
+
+`notify` 为 HiBuddy 对 P0 子集的唯一扩展（dsh 桌面协议自有通知通道，其宿装配不可复用——HiBuddy 宿以 `runProfile` 装配，观测器在宿侧 post-boot 注册：`approval/request` prepend 观测 + 竞态窗口区分自动应答与真人等待、`session/event` 的 `turn/end` 按 `session.header.origin === 'subagent'` 过滤）。
 
 P0 不实现 dsh 的 `file-drag-resource`/`update-tasks`/`platform-session`/`plugin-operation`（对应能力为 P1/P1+）。
 

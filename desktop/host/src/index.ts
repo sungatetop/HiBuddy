@@ -9,6 +9,7 @@
  * Wire protocol (shell ⇄ host), the P0 subset of dsh's desktop protocol:
  *   host → shell: starting{runId} · ready{url} · fatal{message,diagnostic}
  *                 · shutdown-complete · quit-inspection{requestId,activeTasks,scheduledTasks}
+ *                 · notify{kind:approval,toolName} · notify{kind:run-finished,outcome} (S5-5, FR-07)
  *   shell → host: shutdown · quit-inspection{requestId}
  */
 
@@ -23,6 +24,8 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-schedule'
+import type {} from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-workspace'
 
 const PROFILE = 'hibuddy'
@@ -41,6 +44,8 @@ type HostEvent =
   | { readonly type: 'shutdown-complete' }
   | ({ readonly type: 'quit-inspection'; readonly requestId: number } & Partial<QuitInspection>
     & { readonly error?: string })
+  | { readonly type: 'notify'; readonly kind: 'approval'; readonly toolName: string }
+  | { readonly type: 'notify'; readonly kind: 'run-finished'; readonly outcome: 'completed' | 'blocked' | 'error' | 'max-tokens' }
 
 function send(message: HostEvent): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -78,6 +83,47 @@ function installQuitInspection(ctx: Context): () => Promise<QuitInspection> {
     }
     return { activeTasks, scheduledTasks }
   }
+}
+
+/** How long an unanswered approval counts as "waiting for the user" (FR-07). */
+const APPROVAL_NOTIFY_DELAY_MS = 2_000
+
+/**
+ * Desktop-notification state source (S5-5, FR-07): approval waits and finished
+ * top-level runs. The host always reports; the shell owns the focus check.
+ *
+ * The approval observer must sit AHEAD of the auto-answerers to see the wait:
+ * prepending puts it first on the root scope, it delegates immediately via
+ * next(), and an instant auto-answer (免再询 grant hit, L2 backstop) resolves
+ * inside the race window while a human-answered request — the remotes bridge
+ * presenting the browser card — stays pending past the delay.
+ */
+function installNotifications(ctx: Context): void {
+  ctx.on('approval/request', async (req, next) => {
+    const outcome = next()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const stillWaiting = await Promise.race([
+      // A rejected outcome must not reject the observer; the original outcome
+      // is returned verbatim below either way.
+      outcome.then(() => false, () => false),
+      new Promise<true>((resolve) => {
+        timer = setTimeout(() => resolve(true), APPROVAL_NOTIFY_DELAY_MS)
+      }),
+    ]).finally(() => { clearTimeout(timer) })
+    if (stillWaiting) void send({ type: 'notify', kind: 'approval', toolName: req.toolName })
+    return outcome
+  }, { prepend: true })
+  // Finished runs: top-level sessions only (subagent children carry origin:
+  // 'subagent' in their header). Aborted turns are user-initiated and
+  // interrupted/forked are offline log-repair markers (never emitted live) —
+  // all three stay silent.
+  ctx.on('session/event', (session, event) => {
+    if (event.type !== 'turn/end') return
+    if (session.header.origin === 'subagent') return
+    const kind = event.data.reason.kind
+    if (kind === 'aborted' || kind === 'interrupted' || kind === 'forked') return
+    void send({ type: 'notify', kind: 'run-finished', outcome: kind })
+  })
 }
 
 async function main(): Promise<void> {
@@ -125,6 +171,7 @@ async function main(): Promise<void> {
   process.once('disconnect', () => { void stop() })
 
   const { ctx } = await application
+  installNotifications(ctx)
   const inspectQuit = installQuitInspection(ctx)
   const url = ctx.connection.authenticatedUrl(`${ctx.webServer.protocol}//127.0.0.1:${String(ctx.webServer.port)}`)
   await send({ type: 'ready', url })
