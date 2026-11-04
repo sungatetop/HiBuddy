@@ -1,6 +1,6 @@
 ---
 title: HiBuddy 进度与验收报告
-summary: 各阶段的验收记录与缺口清单：S0 骨架与冒烟链路（2026-11-01）、S1 基础设施复用与编译打包（2026-11-02）、S2 品牌与人设基线（2026-11-03）、S3 审批分级与留痕（2026-11-03）、S3b AG-UI 桥 MVP（2026-11-03）、S4 生成式 UI 与工作台定制（2026-11-04）均通过；S5 进行中（S5-0～S5-6 完成，含双端对等清单），每阶段含缺口清单
+summary: 各阶段的验收记录与缺口清单：S0 骨架与冒烟链路（2026-11-01）、S1 基础设施复用与编译打包（2026-11-02）、S2 品牌与人设基线（2026-11-03）、S3 审批分级与留痕（2026-11-03）、S3b AG-UI 桥 MVP（2026-11-03）、S4 生成式 UI 与工作台定制（2026-11-04）、S5 P0 收尾与双端交付（2026-11-04）均通过——P0 交付；每阶段含缺口清单
 keywords: [进度报告, 验收记录, 缺口清单, HiBuddy]
 status: accepted
 date: 2026-11-04
@@ -159,9 +159,9 @@ date: 2026-11-04
 - **共享状态 Run 级作用域为会话内存**：面板数据源 = 会话内工具调用回放 + 页面生命周期乐观写入，无独立持久化 store（会话删除即随之消失；跨会话共享属 P1 语义，未纳入）。
 - **E2E 覆盖面**：单条串行 happy path（ADR-007 基本流程）；降级路径（坏形状→静态回退）由 vitest 与本轮手工走查覆盖，未入 E2E 断言（需稳定诱导模型产出坏形状，不可靠）；S5 按计划扩展 P0 全流程 E2E。
 
-## S5 P0 收尾与双端交付（进行中：S5-0～S5-6 完成，S5-7 与收官验收待办）
+## S5 P0 收尾与双端交付（验收日期 2026-11-04：通过，P0 交付）
 
-**范围**：BYOK 增强（FR-06）、FR-08/09 验证补缺、FR-02 细节（120s 提示/重试/Run 摘要）、FR-07 桌面独有能力（通知+服务随启停，S5-5 commit 6bd9fe8）、双端对等清单（S5-6）、全流程 E2E + Electron driver（S5-7，待办）。
+**范围**：BYOK 增强（FR-06）、FR-08/09 验证补缺、FR-02 细节（120s 提示/重试/Run 摘要）、FR-07 桌面独有能力（通知+服务随启停，S5-5 commit 6bd9fe8）、双端对等清单（S5-6）、全流程 E2E + Electron driver（S5-7 commit 48769f6）。
 
 ### 双端对等清单（S5-6，2026-11-04；对应 implementation-plan A6）
 
@@ -179,4 +179,42 @@ date: 2026-11-04
 
 **走查附加发现**：宿进程退出后客户端操作得到明确错误反馈（toast「启用失败：client api: pluginManager/setBundleEnabled failed: Failed to fetch」+ 左下角「重新连接中…」状态）——FR-09 断线反馈在桌面端正向佐证。
 
-**A6 残项**：第三方 marketplace 插件「安装」全流程未实测（本轮以实验性插件启停 + `添加插件` 入口可见为证）；S5 收官 A6 登记时按需补验。
+### 全流程 E2E 与 Electron driver（S5-7，2026-11-04，commit 48769f6；对应 implementation-plan A7）
+
+**Web 套件（Playwright，workers=1，真实模型，7/7 通过 2.1m）**——`tests/e2e/spec/`：
+
+| spec | 验证内容 |
+|---|---|
+| approval.spec.ts（3 项） | 工作区外写入触发 danger-full-access 升级审批卡：批准 → 文件落盘 + Run 时间线「已批准」行；拒绝 → 循环拒三轮后模型放弃、文件不落盘；会话免再询 → 同会话同类调用不再出卡（grant 随会话销亡） |
+| genui.spec.ts（1 项） | S4 流程回归：render_ui 表单 → 提交 → `[generative-ui interaction]` 信封上行 → 模型 relay → shared_state 面板 → reload 权威持久化 |
+| recovery.spec.ts（2 项） | NtSuspendProcess 冻结 dsh 宿 30s 恢复后 in-flight run 续跑完成、文件落盘；mid-run reload 页面后 run 完成 + Run 时间线从持久历史重建 |
+| run-timeline.spec.ts（1 项） | Run 摘要（目标/工具调用统计/耗时）+ 工具行「完成」+ Markdown 导出（`hibuddy-run-{turn}-{ts}.md`，内容含摘要/时间线/工具调用） |
+
+**桌面套件（Electron driver，1/1 通过 20.7s）**——desktop.spec.ts：beforeAll spawn `@hibuddy/desktop-shell` → shell.log 增量解析 host ready URL（token 字符类含 `-_`）→ 同链路走 render_ui 表单 + 审批批准落盘 + console 零错误；afterAll WM_CLOSE 优雅退出 + taskkill 兜底 + scratch 清理。桌面 spec 由独立 playwright.desktop.config.ts 承载（主配置 testIgnore 排除）。
+
+**测试基建关键口径**（helpers.ts，供后续 spec 复用）：Lexical composer 唯一可靠输入 = Playwright `fill()`（execCommand 会被编辑器回滚）；turn 完成同步锚 = 原生「已完成，用时 N 秒」tail 按钮计数（信封/乐观写入会提前出现，不能用）；dsh 默认会话工作区（`~/Documents/deepseek-harness/default-workspace`）才是 sandbox workspace-write 根——工作区外绝对路径写入 + `ESCALATE_NOW` 指令（直接升级重试、不先征求意见）才能稳定触发审批卡，否则模型会先解释再询问（首轮 reject 测试 4 分钟超时的根因）。
+
+### A6 残项补验：第三方插件安装全流程（2026-11-04，桌面 dev 宿 + Web 对照）
+
+桌面 dev 宿走查 `dsh-plugin-whale-pet@0.2.9` 全链路：添加插件对话框（npm 包名 / 镜像选择 / 来源警示）→ 安装成功（对勾 + 版本 + 查看安装任务 + 立即启用）→ 已安装列表与 `@hibuddy/*` 4 包共存 → 详情页（组件 whale-pet / 来源 `dsh-plugin-whale-pet@^0.2.9` / 版本）→ 组件级开关停用（「已关闭 / 1 已停用」）→ 恢复启用 → 卸载确认 → 卸载还原（无残留）。失败路径同验：`@deepseek-ai/dsh-subagent-codex` 被版本闸拒绝且原因明确（`declares no dsh.bundle`）。
+
+**登记缺口（dsh 上游，非 HiBuddy 缺陷）**：运行中进程热激活新装第三方插件失败——宿侧报 `ERR_MODULE_NOT_FOUND: Cannot find package 'dsh-plugin-whale-pet' imported from C:\Users\chenb\.dsh\profiles\hibuddy\lib/index.js`。对照实验定界：CLI 启动的 dsh web（冒烟 3080）复现完全相同错误 → dsh 0.2.1-rc.5 上游行为（模块解析根不含运行期新装包；重启进程预期恢复），双端一致、HiBuddy 扩展面无可修点。S6/dsh 升级时跟进验证「重启后激活」。
+
+### S5 验收登记（对应 implementation-plan A1–A7，2026-11-04 收官）
+
+- **A1** FR-01/02/06/08/09 逐条验收通过——FR-01 会话管理（S5-2）、FR-02 细节（S5-3）、FR-06 BYOK（S5-1/S5-4）、FR-08 留痕（S4 数据层 + 会话 JSONL 核验）、FR-09 断线恢复/密钥跳转/重开恢复（S5-4 补缺）；双端对等证据见上方 S5-6 清单表。
+- **A2** 未配置 Provider 阻断并跳转配置页、无效 key 明确失败原因（S5-1 验收）。
+- **A3** 异常注入：宿冻结 30s 恢复后 Run 续跑、页面重开状态恢复（S5-7 recovery.spec 2 项）。
+- **A4** Run 时间线回看 + Markdown 导出完整（S5-7 run-timeline.spec）。
+- **A5** 桌面通知：审批等待/任务完成且窗口失焦提醒（S5-5 dev E2E 验收）。
+- **A6** 双端对等清单 FR-01～06 逐项通过（S5-6 表）；dsh 能力面终验：第三方插件安装/启停/卸载全链路走查通过（本轮补验，上游热激活缺口已登记）。
+- **A7** Playwright（Web 7/7）与 Electron driver（桌面 1/1）E2E 全绿；本记录即 S5 验收登记 → **P0 完成**。
+
+### S5 UX 评审（双端交互走查汇总，2026-11-04）
+
+**P0 交互验证结论**：双端关键路径交互闭环——会话管理（归档/删除/置顶 aria 完整）、任务生命周期（打断/120s 停顿提示/重试/Run 摘要）、审批卡（工具名/参数全文/影响范围/批准/拒绝/免再询）、生成式 UI（preparing 骨架 → 流式渲染 → 画布驻留/版本回看）、断线反馈（toast + 「重新连接中…」）、桌面通知（失焦审批等待/完成提醒，含通知抑制）；E2E 全程 console/page 零错误。
+
+**UX 观察与 P1 建议**（均为体验优化，不阻塞 P0）：
+1. **插件热激活失败的开关语义**：组件 activate 失败（dsh 上游缺口，见上节）后行内开关仍为开启态、状态文本「未运行」——失败后开关回弹或显示错误态会更直观（dsh 上游组件，P1 随升级跟进）。
+2. **添加插件对话框按钮可及性**：主按钮「安装」与镜像下拉「安装源」仅一字之差，屏幕阅读器/自动化选择器场景有歧义（视觉无碍）。
+3. **Run 时间线入口发现性**：入口在右栏 start-door 引导胶囊，会话进行中打开需先点「打开右侧边栏」——P1 可考虑在 turn tail 上加时间线直达入口。

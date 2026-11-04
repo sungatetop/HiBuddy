@@ -151,13 +151,13 @@ date: 2026-11-04
 7. E2E：Playwright（Web）扩展到 P0 全流程（含审批交互、异常注入）+ Electron driver（桌面）。
 
 **验收标准**：
-- [ ] A1 FR-01/02/06/08/09 逐条验收清单（对照 PRD §5 规则项）全部通过，清单存 progress-report。
-- [ ] A2 未配置 Provider 发起任务被阻断并跳转配置页；配置无效 key 得到明确失败原因。
-- [ ] A3 异常注入：断网 30 秒恢复后进行中 Run 进度继续展示；页面关闭重开后状态恢复。
-- [ ] A4 单 Run 时间线可回看且导出 Markdown 文件内容完整。
-- [ ] A5 桌面通知：审批等待与任务完成且窗口失焦时收到系统通知。
-- [ ] A6 双端对等清单（FR-01～06）逐项通过；dsh 能力面终验通过（含第三方插件在桌面端安装/启停）。
-- [ ] A7 Playwright（Web 全流程）与 Electron driver（桌面）E2E 全绿；progress-report 有 S5 验收记录 → **P0 完成**。
+- [x] A1 FR-01/02/06/08/09 逐条验收清单（对照 PRD §5 规则项）全部通过，清单存 progress-report。（验收记录 2026-11-04：S5-2 会话管理 / S5-3 FR-02 细节 / S5-1+S5-4 BYOK / FR-08 S4 数据层 / S5-4 FR-09 补缺；证据索引见 progress-report S5 验收登记 A1）
+- [x] A2 未配置 Provider 发起任务被阻断并跳转配置页；配置无效 key 得到明确失败原因。（S5-1 验收）
+- [x] A3 异常注入：断网 30 秒恢复后进行中 Run 进度继续展示；页面关闭重开后状态恢复。（S5-7 recovery.spec 2 项：宿冻结 30s 恢复续跑 + mid-run reload 时间线重建）
+- [x] A4 单 Run 时间线可回看且导出 Markdown 文件内容完整。（S5-7 run-timeline.spec：摘要/工具行/导出文件名与内容断言）
+- [x] A5 桌面通知：审批等待与任务完成且窗口失焦时收到系统通知。（S5-5 dev E2E 验收，commit 6bd9fe8）
+- [x] A6 双端对等清单（FR-01～06）逐项通过；dsh 能力面终验通过（含第三方插件在桌面端安装/启停）。（S5-6 对等清单表 + 2026-11-04 补验 dsh-plugin-whale-pet@0.2.9 安装/启停/卸载全链路；登记 dsh 上游热激活缺口 ERR_MODULE_NOT_FOUND——对照实验定界为 0.2.1-rc.5 上游行为，双端一致，见 progress-report S5）
+- [x] A7 Playwright（Web 全流程）与 Electron driver（桌面）E2E 全绿；progress-report 有 S5 验收记录 → **P0 完成**。（S5-7 commit 48769f6：Web 7/7（2.1m）+ 桌面 1/1（20.7s）；S5 验收登记 2026-11-04）
 
 ## 3. 横切纪律（全阶段通用）
 
