@@ -36,21 +36,33 @@ foreach ($dir in $profileDirs) {
     Write-Host "linked: $target -> $($dir.FullName)"
   }
 
-  # pnpm links workspace deps as RELATIVE symlinks (..\..\..\packages\x). Inside the
+  # pnpm links workspace deps as RELATIVE symlinks (..\..\..\packages\x) and so does
+  # the plugin manager for registry deps (..\..\..\.pnpm\<pkg>@ver\...). Inside the
   # junction view ($DSH_HOME\profiles\<name>) those relatives resolve against the dsh
-  # home and break plugin imports at boot. Rewrite each workspace link to an absolute
-  # symlink so both views resolve; node_modules is gitignored, so this stays machine-local.
+  # home and break imports at boot (S6-3: a UI-installed third-party plugin, e.g.
+  # dsh-plugin-whale-pet, hit ERR_MODULE_NOT_FOUND on every restart — the plugin
+  # manager's top-level node_modules link was NOT covered by the scoped-only fix).
+  # Rewrite every relative symlink under node_modules (top level and @scope/ dirs)
+  # to an absolute one so both views resolve; node_modules is gitignored, so this
+  # stays machine-local. Run this after installing or removing plugins via the UI.
   $scopedDir = Join-Path $dir.FullName 'node_modules'
-  $scopeNames = Get-ChildItem $scopedDir -Directory -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -like '@*' }
-  foreach ($scope in $scopeNames) {
-    foreach ($link in Get-ChildItem $scope.FullName -ErrorAction SilentlyContinue) {
+  $linkDirs = @($scopedDir) + (
+    Get-ChildItem $scopedDir -Directory -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -like '@*' } | ForEach-Object { $_.FullName }
+  )
+  foreach ($linkDir in $linkDirs) {
+    foreach ($link in Get-ChildItem $linkDir -ErrorAction SilentlyContinue) {
       $item = Get-Item $link.FullName -Force
       if ($item.LinkType -ne 'SymbolicLink') { continue }
-      $resolvedTarget = [System.IO.Path]::GetFullPath((Join-Path $scope.FullName $item.Target))
-      if ($resolvedTarget.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase) -and $item.Target -notmatch '^[A-Za-z]:[\\/]') {
+      # .Target can arrive as a string[] (Windows PowerShell 5.1); take the first.
+      $targetSpec = @($item.Target)[0]
+      if ($targetSpec -match '^[A-Za-z]:[\\/]') { continue }
+      $resolvedTarget = [System.IO.Path]::GetFullPath((Join-Path $linkDir $targetSpec))
+      if ($resolvedTarget.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
         $item.Delete()
-        New-Item -ItemType SymbolicLink -Path $item.FullName -Target $resolvedTarget | Out-Null
+        # Junction, not SymbolicLink: junctions need no elevation, which the
+        # sandboxed shell does not have, and the target is a directory anyway.
+        New-Item -ItemType Junction -Path $item.FullName -Target $resolvedTarget | Out-Null
         Write-Host "absolutized: $($item.FullName) -> $resolvedTarget"
       }
     }
