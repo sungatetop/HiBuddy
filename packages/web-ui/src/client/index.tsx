@@ -47,6 +47,11 @@
  * rebuild from durable history after a page reload. Approval decisions
  * pressed on HiBuddy cards are recorded into a page-lifetime mirror and
  * joined into the timeline by callId.
+ *
+ * S5-4 (FR-09): quota notice takeover — the `shell.quota-notice` chain entry
+ * replaces the official generic Toast with an actionable card (notice copy +
+ * one-click jump to the provider configuration), covering the QUOTA /
+ * ACCOUNT_QUOTA codes that fire a frame-wide notice.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
@@ -77,6 +82,8 @@ import { registerGenuiSurfaces } from './genui/surfaces.ts'
 import { setSharedStateOpener } from './genui/shared-state-open.ts'
 import { GenuiSharedStateTab } from './genui/shared-state-tab.tsx'
 import { GenuiTurnTail } from './genui/turn-tail.tsx'
+import { en as quotaEn, zh as quotaZh, type QuotaLocaleKey } from './quota-notice-locales.ts'
+import { HibuddyQuotaNotice } from './quota-notice.tsx'
 import { en as runEn, zh as runZh, type RunLocaleKey } from './run-timeline/locales.ts'
 import { GenuiRunTimelineTab } from './run-timeline/tab.tsx'
 import type { VerifyProviderOutcome } from '../verify-provider.ts'
@@ -96,6 +103,9 @@ const BYOK_NS = 'hibuddy-byok'
 /** Locale namespace of the Run-timeline tab. */
 const RUN_NS = 'hibuddy-run'
 
+/** Locale namespace of the quota notice card. */
+const QUOTA_NS = 'hibuddy-quota'
+
 /** Adapter-family settings namespaces whose provider cards carry the check. */
 const PROVIDER_SETTINGS_NS = ['llm-deepseek', 'llm-pi-ai'] as const
 
@@ -109,6 +119,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'hibuddy-byok': ByokLocaleKey
     /** HiBuddy Run-timeline tab copy. */
     'hibuddy-run': RunLocaleKey
+    /** HiBuddy quota notice card copy. */
+    'hibuddy-quota': QuotaLocaleKey
   }
 }
 
@@ -166,6 +178,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   ctx.effect(() => locale.register(GENUI_NS, { zh: genuiZh, en: genuiEn }), 'hibuddy-web-ui: generative-UI dictionaries')
   ctx.effect(() => locale.register(BYOK_NS, { zh: byokZh, en: byokEn }), 'hibuddy-web-ui: BYOK dictionaries')
   ctx.effect(() => locale.register(RUN_NS, { zh: runZh, en: runEn }), 'hibuddy-web-ui: run-timeline dictionaries')
+  ctx.effect(() => locale.register(QUOTA_NS, { zh: quotaZh, en: quotaEn }), 'hibuddy-web-ui: quota-notice dictionaries')
   // BYOK (S5-1, FR-06): the host-side probe seam folded into the wire result —
   // carrier failures fold into RemoteResult's error branch, so only assembly
   // faults reject; both map onto the card's outcome union.
@@ -277,6 +290,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
     locale: RUN_NS,
     inject: () => ({ getEventSource }),
   }, GenuiRunTimelineTab))
+  // Quota notice takeover (S5-4, FR-09): claims every frame-wide quota notice
+  // (the host only constructs owners for QUOTA / ACCOUNT_QUOTA) and renders
+  // the actionable card instead of the generic Toast.
+  ctx.slots.inject('shell.quota-notice', () => ctx.slots.register({
+    name: 'shell.quota-notice',
+    locale: QUOTA_NS,
+    select: (owner) => owner,
+  }, HibuddyQuotaNotice))
   // Opener seam: flow cards call openGenuiCanvas(id) — the command uses the
   // captured sidebar face (handlers run outside the injection scope).
   setCanvasOpener((canvasId) => {
