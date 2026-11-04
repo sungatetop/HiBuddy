@@ -32,6 +32,13 @@ describe('runMarkdown', () => {
     const md = runMarkdown(run, 'session-x', t, en['status.completed'])
     expect(md).toContain('# HiBuddy Run record — Turn 9')
     expect(md).toContain('`session-x`')
+    // FR-02 summary section: goal / result / tool stats / duration.
+    expect(md).toContain('## Summary')
+    expect(md).toContain('- Goal: 列一下目录')
+    expect(md).toContain('- Result: 目录里有 a.txt')
+    expect(md).toContain('- Tool calls: 1 (1 ✓ / 0 ✗)')
+    expect(md).toContain('- Duration: 600ms')
+    expect(md.indexOf('## Summary')).toBeLessThan(md.indexOf('## Timeline'))
     expect(md).toContain('### Step 1')
     expect(md).toContain('**Tool call** `bash` — ✓')
     expect(md).toContain('Duration: 100ms')

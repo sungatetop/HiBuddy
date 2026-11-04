@@ -14,12 +14,12 @@
  * page-lifetime decisions mirror. The export button renders the selected run
  * as one Markdown document and hands it to the browser download seam.
  */
-import { useMemo, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import type { SessionEventSource, SessionEventWindow } from '@deepseek-ai/dsh-api-session-controller/client'
 import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { useApprovalDecisions } from './decisions.ts'
-import { deriveRunTimelines, type RunStatus, type RunTimelineItem } from './derive.ts'
+import { deriveRunTimelines, runStallMs, STALL_THRESHOLD_MS, summarizeRun, type RunStatus, type RunTimelineItem } from './derive.ts'
 import { downloadRunMarkdown, type RunExportText } from './markdown.ts'
 
 /** Full props of the tab body: sidebar seat + locale + the event-source seam. */
@@ -51,7 +51,7 @@ function navTurn(params: unknown): number | undefined {
 }
 
 const styles = {
-  root: { display: 'grid', gridTemplateRows: 'auto auto 1fr', gap: 10, padding: 12, minHeight: 0 } satisfies CSSProperties,
+  root: { display: 'flex', flexDirection: 'column', gap: 10, padding: 12, minHeight: 0 } satisfies CSSProperties,
   head: { display: 'flex', alignItems: 'center', gap: 8 },
   title: { fontSize: 14, fontWeight: 600, lineHeight: 1.5, flex: 1, minWidth: 0 },
   runBar: { display: 'flex', flexWrap: 'wrap', gap: 6 } satisfies CSSProperties,
@@ -72,7 +72,7 @@ const styles = {
     borderColor: 'var(--dsw-specific-input-active, var(--dsw-specific-input-major))',
     background: 'var(--dsw-specific-input-minor, transparent)',
   } satisfies CSSProperties,
-  body: { minHeight: 0, overflow: 'auto', display: 'grid', gap: 8, alignContent: 'start' } satisfies CSSProperties,
+  body: { minHeight: 0, overflow: 'auto', display: 'grid', gap: 8, alignContent: 'start', flex: 1 } satisfies CSSProperties,
   empty: { margin: 'auto', fontSize: 13, lineHeight: 1.7, color: 'var(--dsw-alias-label-tertiary)', textAlign: 'center' as const },
   meta: { fontSize: 12, lineHeight: 1.6, color: 'var(--dsw-alias-label-tertiary)', margin: 0 } satisfies CSSProperties,
   failNote: { fontSize: 12, lineHeight: 1.6, color: 'var(--dsw-alias-state-danger-primary)', margin: 0 } satisfies CSSProperties,
@@ -121,6 +121,26 @@ const styles = {
     color: 'var(--dsw-alias-label-secondary)',
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
+  } satisfies CSSProperties,
+  summaryCard: {
+    display: 'grid',
+    gap: 4,
+    padding: '8px 10px',
+    border: '1px solid var(--dsw-specific-input-major)',
+    borderRadius: 8,
+    fontSize: 12,
+  } satisfies CSSProperties,
+  summaryRow: { display: 'flex', gap: 8, alignItems: 'baseline' } satisfies CSSProperties,
+  summaryLabel: { color: 'var(--dsw-alias-label-tertiary)', flexShrink: 0 } satisfies CSSProperties,
+  summaryValue: { color: 'var(--dsw-alias-label-secondary)', wordBreak: 'break-word', minWidth: 0 } satisfies CSSProperties,
+  stalled: {
+    margin: 0,
+    padding: '8px 10px',
+    borderRadius: 8,
+    border: '1px solid var(--dsw-alias-state-warn-primary)',
+    color: 'var(--dsw-alias-state-warn-primary)',
+    fontSize: 12,
+    lineHeight: 1.6,
   } satisfies CSSProperties,
 } satisfies Record<string, CSSProperties>
 
@@ -246,6 +266,18 @@ export function GenuiRunTimelineTab(props: GenuiRunTimelineTabProps): ReactNode 
   const activeTurn = requested ?? pinnedTurn
   const active = runs.find((run) => run.turn === activeTurn) ?? runs[runs.length - 1]
   const statusText = statusTextOf(active?.status, t)
+  // FR-02: summary fields and the stall reading need a wall-clock "now" that
+  // advances while the selected run is still open; tick once a second, only
+  // while running, so finished views stay static.
+  const [now, setNow] = useState(() => Date.now())
+  const running = active?.status.kind === 'running'
+  useEffect(() => {
+    if (!running) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [running])
+  const stallMs = active === undefined ? 0 : runStallMs(active, now)
+  const summary = active === undefined ? undefined : summarizeRun(active, now)
 
   if (active === undefined) {
     return <p style={styles.empty}>{t('empty')}</p>
@@ -276,6 +308,33 @@ export function GenuiRunTimelineTab(props: GenuiRunTimelineTabProps): ReactNode 
           </button>
         ))}
       </div>
+      {summary !== undefined && (
+        <div style={styles.summaryCard} data-hibuddy-run-summary="">
+          <div style={styles.summaryRow}>
+            <span style={styles.summaryLabel}>{t('summary.goal')}</span>
+            <span style={styles.summaryValue}>{summary.goal === '' ? t('noPrompt') : summary.goal}</span>
+          </div>
+          <div style={styles.summaryRow}>
+            <span style={styles.summaryLabel}>{t('summary.result')}</span>
+            <span style={styles.summaryValue}>{summary.result === '' ? t('summary.noResult') : summary.result}</span>
+          </div>
+          <div style={styles.summaryRow}>
+            <span style={styles.summaryLabel}>{t('summary.tools')}</span>
+            <span style={styles.summaryValue}>
+              {summary.tools.total} ({summary.tools.ok} ✓ / {summary.tools.error} ✗)
+            </span>
+          </div>
+          <div style={styles.summaryRow}>
+            <span style={styles.summaryLabel}>{t('duration')}</span>
+            <span style={styles.summaryValue}>{duration(summary.durationMs)}</span>
+          </div>
+        </div>
+      )}
+      {running && stallMs > STALL_THRESHOLD_MS && (
+        <p style={styles.stalled} data-hibuddy-run-stalled="">
+          {interpolate(t('stalled'), { n: String(Math.round(stallMs / 1000)) })}
+        </p>
+      )}
       <div style={styles.body}>
         <p style={styles.meta}>
           {t('prompt')}: {active.prompt === '' ? t('noPrompt') : active.prompt}

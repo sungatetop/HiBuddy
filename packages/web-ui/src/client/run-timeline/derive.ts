@@ -70,6 +70,65 @@ export interface RunTimeline {
 /** Upper bound for joined summaries the UI shows inline. */
 export const SUMMARY_LIMIT = 1200
 
+/** One-line result bound for the run summary (FR-02): the full text stays in the timeline. */
+export const RUN_RESULT_LIMIT = 200
+
+/** No-event bound after which a running run reads as possibly stuck (PRD FR-02 rule 5). */
+export const STALL_THRESHOLD_MS = 120_000
+
+/** Tool-call counts of one run, by observed status. */
+export interface RunToolStats {
+  total: number
+  ok: number
+  error: number
+  running: number
+}
+
+/** Run 摘要 (PRD FR-02: goal, result, tool-call statistics, duration). */
+export interface RunSummary {
+  /** First human prompt of the turn — the run's goal. */
+  readonly goal: string
+  /** Final assistant output, clamped to one display line ('' while none yet). */
+  readonly result: string
+  readonly tools: RunToolStats
+  /** Wall-clock duration so far: `endedAt - startedAt`, else `now - startedAt`. */
+  readonly durationMs: number
+}
+
+/** Build the run summary from the derived timeline (pure; `now` injectable for tests). */
+export function summarizeRun(run: RunTimeline, now = Date.now()): RunSummary {
+  let result = ''
+  for (const item of run.items) {
+    if (item.kind === 'output' && item.text !== '') result = item.text
+  }
+  const tools = { total: 0, ok: 0, error: 0, running: 0 }
+  for (const item of run.items) {
+    if (item.kind !== 'tool') continue
+    tools.total += 1
+    tools[item.status] += 1
+  }
+  return {
+    goal: run.prompt,
+    result: clamp(result, RUN_RESULT_LIMIT),
+    tools,
+    durationMs: Math.max(0, (run.endedAt ?? now) - run.startedAt),
+  }
+}
+
+/**
+ * Milliseconds since the run's last observed event (prompt/step/tool/output
+ * rows all carry an event time). Non-running runs report 0 — the stalled
+ * reading only applies while a run is still open (the UI gates on status).
+ */
+export function runStallMs(run: RunTimeline, now = Date.now()): number {
+  if (run.status.kind !== 'running') return 0
+  let last = run.startedAt
+  for (const item of run.items) {
+    if (item.at > last) last = item.at
+  }
+  return Math.max(0, now - last)
+}
+
 /** Text of a content-block list: joined `text` blocks, defensively read. */
 function textOf(blocks: unknown): string {
   if (!Array.isArray(blocks)) return ''

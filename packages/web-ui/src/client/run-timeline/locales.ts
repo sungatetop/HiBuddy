@@ -30,6 +30,12 @@ export type RunLocaleKey =
   | 'approval.waived'
   | 'interrupted'
   | 'noPrompt'
+  | 'summary'
+  | 'summary.goal'
+  | 'summary.result'
+  | 'summary.tools'
+  | 'summary.noResult'
+  | 'stalled'
   | 'export.title'
   | 'export.session'
   | 'export.startedAt'
@@ -47,6 +53,10 @@ export type RunLocaleKey =
   | 'export.approval'
   | 'export.interrupted'
   | 'export.noPrompt'
+  | 'export.summary'
+  | 'export.goal'
+  | 'export.runResult'
+  | 'export.tools'
 
 export const zh: Record<RunLocaleKey, string> = {
   empty: '当前会话暂无运行记录',
@@ -79,6 +89,12 @@ export const zh: Record<RunLocaleKey, string> = {
   'approval.waived': '本会话免再询',
   interrupted: '已中断',
   noPrompt: '（无提示词）',
+  summary: '摘要',
+  'summary.goal': '目标',
+  'summary.result': '结果',
+  'summary.tools': '工具调用统计',
+  'summary.noResult': '（运行中，暂无产出）',
+  stalled: '已 {n} 秒没有新事件，Run 仍在运行——可能卡住；可在会话输入框打断。',
   'export.title': 'HiBuddy Run 记录',
   'export.session': '会话',
   'export.startedAt': '开始',
@@ -96,6 +112,10 @@ export const zh: Record<RunLocaleKey, string> = {
   'export.approval': '审批',
   'export.interrupted': '已中断',
   'export.noPrompt': '（无提示词）',
+  'export.summary': '摘要',
+  'export.goal': '目标',
+  'export.runResult': '结果',
+  'export.tools': '工具调用统计',
 }
 
 export const en: Record<RunLocaleKey, string> = {
@@ -127,8 +147,14 @@ export const en: Record<RunLocaleKey, string> = {
   'approval.approved': 'Approved',
   'approval.rejected': 'Rejected',
   'approval.waived': 'Session waiver',
-  interrupted: 'interrupted',
+  interrupted: 'Interrupted',
   noPrompt: '(no prompt)',
+  summary: 'Summary',
+  'summary.goal': 'Goal',
+  'summary.result': 'Result',
+  'summary.tools': 'Tool calls',
+  'summary.noResult': '(running, no output yet)',
+  stalled: 'No new events for {n}s — the run is still running and may be stuck; you can interrupt it from the composer.',
   'export.title': 'HiBuddy Run record',
   'export.session': 'Session',
   'export.startedAt': 'Started',
@@ -146,4 +172,8 @@ export const en: Record<RunLocaleKey, string> = {
   'export.approval': 'Approval',
   'export.interrupted': 'interrupted',
   'export.noPrompt': '(no prompt)',
+  'export.summary': 'Summary',
+  'export.goal': 'Goal',
+  'export.runResult': 'Result',
+  'export.tools': 'Tool calls',
 }

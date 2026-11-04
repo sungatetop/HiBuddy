@@ -26,6 +26,26 @@
 # load .env into the process env before launching). If a non-DeepSeek smoke
 # provider is needed again, restore the override rows above following the
 # S0–S4 pattern.
+
+# ---------------------------------------------------------------------------
+# Provider retry budget (S5-3, PRD FR-02 rule 6): a failed model request is
+# retried automatically ONCE, then the turn fails with the reason on display.
+# The dsh retry machinery is already fully mounted: dsh-base bundles the
+# executor as the `llm-retry` row (@deepseek-ai/dsh-llm-retry, dsh 0.2.1-rc.5
+# dsh-base cordis.patch.yml L99-100) — no new mount is needed — and each
+# provider adapter owns its policy via the RetryPolicySchema embedded in its
+# config (@deepseek-ai/dsh-llm/retry-policy: NormalRetryPolicyConfig defaults
+# to maxRetries: 5). This override restates the official row verbatim and adds
+# only the retry budget. Overridden official row (dsh 0.2.1-rc.5, dsh-base
+# cordis.patch.yml L525-526): mounted active with NO config keys.
+# Upgrade discipline (ADR-005): re-check the official row when bumping dsh.
+- id: llm-deepseek
+  name: "@deepseek-ai/dsh-llm-deepseek-api-key"
+  config:
+    retryPolicy:
+      mode: normal
+      maxRetries: 1
+
 - id: ui-settings-general
   name: "@deepseek-ai/dsh-client-ui-settings-general"
   config:

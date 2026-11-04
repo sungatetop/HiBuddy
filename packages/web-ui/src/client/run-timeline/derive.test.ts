@@ -5,7 +5,14 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { SessionEventLikeEntry } from '@deepseek-ai/dsh-api-session-controller/client'
-import { deriveRunTimelines, SUMMARY_LIMIT } from './derive.ts'
+import {
+  deriveRunTimelines,
+  runStallMs,
+  RUN_RESULT_LIMIT,
+  STALL_THRESHOLD_MS,
+  SUMMARY_LIMIT,
+  summarizeRun,
+} from './derive.ts'
 import type { ApprovalDecisionRecord } from './decisions.ts'
 
 let seq = 0
@@ -126,5 +133,52 @@ describe('deriveRunTimelines', () => {
     expect(runs[0].prompt.length).toBe(401) // 400 chars + ellipsis
     expect(runs[0].prompt.endsWith('…')).toBe(true)
     expect(SUMMARY_LIMIT).toBe(1_200)
+  })
+})
+
+describe('summarizeRun / runStallMs (FR-02)', () => {
+  it('summarizes goal, final result, tool stats, and ended duration', () => {
+    seq = 0
+    const [run] = deriveRunTimelines([
+      ev('turn/start', { turn: 12 }, 1_000),
+      ev('user/message', HUMAN, 1_100),
+      ev('tool/call', { turn: 12, step: 1, callId: 'c12', name: 'bash', arguments: '"ls"' }, 1_200),
+      ev('tool/result', { message: { toolCallId: 'c12', isError: false, content: [{ type: 'text', text: 'a.txt' }] } }, 1_400),
+      ev('tool/call', { turn: 12, step: 2, callId: 'c13', name: 'bash', arguments: '"rm"' }, 1_500),
+      ev('tool/result', { message: { toolCallId: 'c13', isError: true, content: [] } }, 1_600),
+      ev('assistant/message', { turn: 12, step: 2, message: { content: [{ type: 'text', text: '完成' }] } }, 1_700),
+      ev('turn/end', { turn: 12, reason: { kind: 'completed' } }, 1_800),
+    ])
+    const summary = summarizeRun(run, 99_000)
+    expect(summary.goal).toBe('画一个登录页')
+    expect(summary.result).toBe('完成')
+    expect(summary.tools).toEqual({ total: 2, ok: 1, error: 1, running: 0 })
+    expect(summary.durationMs).toBe(800) // endedAt - startedAt, unaffected by `now`
+  })
+
+  it('keeps the last non-empty output clamped to one line and uses now while running', () => {
+    seq = 0
+    const [run] = deriveRunTimelines([
+      ev('turn/start', { turn: 13 }, 1_000),
+      ev('assistant/message', { turn: 13, step: 1, message: { content: [{ type: 'text', text: '初稿' }] } }, 1_100),
+      ev('assistant/message', { turn: 13, step: 2, message: { content: [{ type: 'text', text: '字'.repeat(300) }] } }, 1_200),
+    ])
+    const summary = summarizeRun(run, 5_000)
+    expect(summary.result.length).toBe(RUN_RESULT_LIMIT + 1) // 200 chars + ellipsis
+    expect(summary.result.endsWith('…')).toBe(true)
+    expect(summary.durationMs).toBe(4_000) // now - startedAt while still open
+  })
+
+  it('measures stall from the last event while running and reports 0 once finished', () => {
+    seq = 0
+    const [finished, open] = deriveRunTimelines([
+      ev('turn/start', { turn: 14 }, 1_000),
+      ev('turn/end', { turn: 14, reason: { kind: 'completed' } }, 2_000),
+      ev('turn/start', { turn: 15 }, 3_000),
+      ev('user/message', HUMAN, 3_500),
+    ])
+    expect(STALL_THRESHOLD_MS).toBe(120_000)
+    expect(runStallMs(finished, 5_000)).toBe(0)
+    expect(runStallMs(open, 5_000)).toBe(1_500) // now - last event (user/message at 3_500)
   })
 })

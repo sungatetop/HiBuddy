@@ -5,6 +5,7 @@
  * included (SR-03: 用户显式导出除外); results stay summarized.
  */
 import type { RunTimeline } from './derive.ts'
+import { summarizeRun } from './derive.ts'
 
 /** Locale resolver shape the exporter needs (the tab's `t`). */
 export type RunExportText = (key: RunExportKey) => string
@@ -28,6 +29,10 @@ export type RunExportKey =
   | 'export.approval'
   | 'export.interrupted'
   | 'export.noPrompt'
+  | 'export.summary'
+  | 'export.goal'
+  | 'export.runResult'
+  | 'export.tools'
 
 /** Wall-clock stamp for the file name: `20261104-210504`. */
 function fileStamp(at: number): string {
@@ -69,6 +74,16 @@ export function runMarkdown(run: RunTimeline, sessionId: string, t: RunExportTex
   )
   lines.push(`- ${t('export.prompt')}: ${run.prompt === '' ? t('export.noPrompt') : run.prompt}`)
   if (run.status.kind === 'error') lines.push(`- ${t('export.error')}: ${run.status.message}`)
+  lines.push('')
+  // Run 摘要 (FR-02): goal / result / tool-call statistics / duration, shared
+  // with the tab's summary block via the same pure projection.
+  const summary = summarizeRun(run)
+  lines.push(`## ${t('export.summary')}`)
+  lines.push('')
+  lines.push(`- ${t('export.goal')}: ${summary.goal === '' ? t('export.noPrompt') : summary.goal}`)
+  lines.push(`- ${t('export.runResult')}: ${summary.result === '' ? '—' : summary.result}`)
+  lines.push(`- ${t('export.tools')}: ${summary.tools.total} (${summary.tools.ok} ✓ / ${summary.tools.error} ✗)`)
+  lines.push(`- ${t('export.duration')}: ${duration(summary.durationMs)}`)
   lines.push('')
   lines.push(`## ${t('export.timeline')}`)
   lines.push('')
