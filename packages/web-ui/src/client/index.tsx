@@ -20,8 +20,15 @@
  * two the body under the same id (`sidebar.right.pane.tab` keyed slot). The
  * opener seam lets flow-scoped cards reveal the tab with `{ canvasId }`
  * navigation params.
+ *
+ * S4-5: interaction send-back (ADR-007 §3.4). Installs the conversation-send
+ * seam — the explicit session-binding prompt channel (what
+ * ConversationController.send resolves to internally) — so surface components
+ * (form submit) can push one structured text message into the session as a
+ * queued turn.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { PendingApproval } from '@deepseek-ai/dsh-client-ui-approval/client'
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
@@ -34,13 +41,14 @@ import { HibuddyApprovalCard } from './approval-card.tsx'
 import { en, zh, type ApprovalLocaleKey } from './locales.ts'
 import { setCanvasOpener } from './genui/canvas-open.ts'
 import { GenuiCanvasTab } from './genui/canvas-tab.tsx'
+import { setConversationSender } from './genui/conversation-send.ts'
 import { en as genuiEn, zh as genuiZh, type GenuiLocaleKey } from './genui/locales.ts'
 import { RenderUiCard } from './genui/render-ui-card.tsx'
 import { registerGenuiSurfaces } from './genui/surfaces.ts'
 import { GenuiTurnTail } from './genui/turn-tail.tsx'
 
-/** Required services: Slot registry, copy, and the right-Sidebar faces (canvas). */
-export const inject = ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs']
+/** Required services: Slot registry, copy, the right-Sidebar faces (canvas), and sessions (send-back). */
+export const inject = ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'sessions']
 
 /** Locale namespace of the enhanced card. */
 const NS = 'hibuddy-approval'
@@ -77,6 +85,10 @@ export function apply(ctx: ClientContext): void {
   // outside the plugin's injection scope, so they use the captured references.
   const locale = ctx.locale
   const sidebarRight = ctx.sidebarRight
+  // Both the host-side dsh-session plugin and the client session controller
+  // augment Context.sessions with different faces; in this package's typecheck
+  // the host-side declaration wins the merge, so cast to the client face.
+  const sessions = ctx.sessions as unknown as ISessions
   ctx.effect(() => locale.register(NS, { zh, en }), 'hibuddy-web-ui: approval dictionaries')
   ctx.effect(() => locale.register(GENUI_NS, { zh: genuiZh, en: genuiEn }), 'hibuddy-web-ui: generative-UI dictionaries')
   ctx.slots.inject('conversation.composer', () => ctx.slots.register({
@@ -120,5 +132,16 @@ export function apply(ctx: ClientContext): void {
   // captured sidebar face (handlers run outside the injection scope).
   setCanvasOpener((canvasId) => {
     sidebarRight.openTab('hibuddy-genui-canvas', { params: { canvasId } })
+  })
+  // Send-back seam (S4-5): surface events become one queued-turn text message.
+  // The attribute path (`scope(id).conversation`) demands the caller run inside
+  // a cordis injection scope — React event callbacks do not. `binding.session`
+  // is exactly what ConversationController.send resolves internally
+  // (scopedSession → binding.session.prompt([…], 'queue')), addressed explicitly.
+  setConversationSender(async (sessionId, text) => {
+    const binding = sessions.binding(sessionId as never)
+    if (binding === undefined) throw new Error(`hibuddy-web-ui: session "${sessionId}" has no binding`)
+    const result = await binding.session.prompt([{ type: 'text', text }], 'queue')
+    if (!result.ok) throw new Error(`hibuddy-web-ui: send-back rejected: ${result.error.code}: ${result.error.message}`)
   })
 }

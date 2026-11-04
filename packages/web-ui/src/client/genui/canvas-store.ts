@@ -25,10 +25,25 @@ export interface GenuiCanvasVersion {
   readonly instruction: RenderUiInstruction
 }
 
-/** One canvas instance: the instruction `id` and its ascending versions. */
+/** One user interaction with a canvas surface, retained with the instance (ADR-007 §3.4). */
+export interface GenuiCanvasInteraction {
+  /** Monotonic record order (shared with versions). */
+  readonly seq: number
+  /** Wall-clock epoch ms when the interaction happened. */
+  readonly at: number
+  /** Component key that produced the event (e.g. `form`). */
+  readonly component: string
+  /** Interaction kind (e.g. `submit`). */
+  readonly interaction: string
+  /** JSON payload of the interaction. */
+  readonly payload: unknown
+}
+
+/** One canvas instance: the instruction `id`, its ascending versions, and its interaction history. */
 export interface GenuiCanvasInstance {
   readonly id: string
   readonly versions: ReadonlyArray<GenuiCanvasVersion>
+  readonly interactions: ReadonlyArray<GenuiCanvasInteraction>
 }
 
 interface CanvasStoreState {
@@ -61,14 +76,31 @@ export function recordCanvasVersion(instruction: RenderUiInstruction, callId: st
   let instances: ReadonlyArray<GenuiCanvasInstance>
   if (existing === undefined) {
     fresh = true
-    instances = [...state.instances, { id: instruction.id, versions: [version] }]
+    instances = [...state.instances, { id: instruction.id, versions: [version], interactions: [] }]
   } else {
     instances = state.instances
       .filter((instance) => instance.id !== instruction.id)
-      .concat({ id: instruction.id, versions: [...existing.versions, version] })
+      .concat({ id: instruction.id, versions: [...existing.versions, version], interactions: existing.interactions })
   }
   commit({ instances, calls: new Set(state.calls).add(callId) })
   return fresh
+}
+
+/**
+ * Record one user interaction with a canvas surface (ADR-007 §3.4 interaction
+ * history). Unknown instance ids are ignored (inline surfaces have no canvas
+ * history); a recorded interaction also bumps the instance to the newest slot.
+ */
+export function recordCanvasInteraction(instructionId: string, event: { component: string, interaction: string, payload: unknown }): void {
+  const existing = state.instances.find((instance) => instance.id === instructionId)
+  if (existing === undefined) return
+  const record: GenuiCanvasInteraction = { seq: seq++, at: Date.now(), ...event }
+  commit({
+    instances: state.instances
+      .filter((instance) => instance.id !== instructionId)
+      .concat({ ...existing, interactions: [...existing.interactions, record] }),
+    calls: state.calls,
+  })
 }
 
 /** Subscribe to canvas changes; the listener runs on every commit. */

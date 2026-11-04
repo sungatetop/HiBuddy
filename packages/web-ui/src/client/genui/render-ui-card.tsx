@@ -112,7 +112,7 @@ class SurfaceBoundary extends Component<{ surface: UiSurfaceProps; children: Rea
 }
 
 /** Settled body: registry surface when possible, static fallback otherwise. */
-export function SurfaceBody({ instruction, t }: { instruction: RenderUiInstruction; t: Translate }): ReactNode {
+export function SurfaceBody({ instruction, t, sessionId }: { instruction: RenderUiInstruction; t: Translate; sessionId?: string }): ReactNode {
   const component = instruction.component
   if (!instructionReady(instruction) || component === undefined) {
     return <FallbackSurface instruction={instruction} t={t} degraded={false} />
@@ -120,8 +120,8 @@ export function SurfaceBody({ instruction, t }: { instruction: RenderUiInstructi
   const Surface = uiSurfaceOf(component)
   if (Surface === undefined) return <FallbackSurface instruction={instruction} t={t} degraded={false} />
   return (
-    <SurfaceBoundary surface={{ instruction, t }}>
-      <Surface instruction={instruction} t={t} />
+    <SurfaceBoundary surface={{ instruction, t, sessionId }}>
+      <Surface instruction={instruction} t={t} sessionId={sessionId} />
     </SurfaceBoundary>
   )
 }
@@ -136,7 +136,7 @@ export function SurfaceBody({ instruction, t }: { instruction: RenderUiInstructi
  * in the right-sidebar canvas tab, keyed by the instruction id; the turn-tail
  * recorder feeds that tab's version history.
  */
-export function GenuiSurfaceCard({ block, t }: { block: StartedToolCall | ToolResultNode; t: Translate }): ReactNode {
+export function GenuiSurfaceCard({ block, t, sessionId }: { block: StartedToolCall | ToolResultNode; t: Translate; sessionId?: string }): ReactNode {
   const instruction = readInstruction(block.args)
   const component = instruction.component
   const title = instruction.title || component || t('preparing')
@@ -160,7 +160,7 @@ export function GenuiSurfaceCard({ block, t }: { block: StartedToolCall | ToolRe
               <Button variant="outline" onClick={() => openGenuiCanvas(canvasId)}>{t('canvasOpen')}</Button>
             </div>
           )
-        : <SurfaceBody instruction={instruction} t={t} />}
+        : <SurfaceBody instruction={instruction} t={t} sessionId={sessionId} />}
     </div>
   )
 }
@@ -171,10 +171,10 @@ export function GenuiSurfaceCard({ block, t }: { block: StartedToolCall | ToolRe
  * as the stream grows, re-rendering this component).
  */
 export function RenderUiCard(props: RenderUiCardProps): ReactNode {
-  const { block, t } = props
+  const { block, t, sessionId } = props
   // The phase discriminant owns the union; TS cannot correlate the two props,
   // so the settled branch asserts the runtime-guaranteed narrow.
-  if (props.phase !== 'preparing') return <GenuiSurfaceCard block={block as StartedToolCall | ToolResultNode} t={t} />
+  if (props.phase !== 'preparing') return <GenuiSurfaceCard block={block as StartedToolCall | ToolResultNode} t={t} sessionId={sessionId} />
   const instruction = readInstruction(block.args)
   const component = instruction.component
   const title = instruction.title || component || t('preparing')

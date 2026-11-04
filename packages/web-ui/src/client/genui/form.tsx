@@ -6,12 +6,16 @@
  * data:  {} (unused)
  *
  * S4-3 scope: render + validation + local confirmation of collected values.
- * S4-5 wires the submission into the conversation as a structured upstream
- * message (A4 交互回传). All values are plain controlled React state — model
- * text never becomes markup (SR-02).
+ * S4-5: the submission goes back into the conversation as one structured text
+ * message (ADR-007 §3.4 envelope) — a queued turn the model reads next round —
+ * and canvas-target surfaces also log the interaction into the canvas history.
+ * All values are plain controlled React state — model text never becomes
+ * markup (SR-02).
  */
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { formatGenuiInteraction, sendGenuiText } from './conversation-send.ts'
+import { recordCanvasInteraction } from './canvas-store.ts'
 import { asArray, asRecord, asString, optionalString } from './guards.ts'
 import type { UiSurfaceProps } from './registry.ts'
 
@@ -100,13 +104,14 @@ function validValues(fields: ReadonlyArray<FieldSpec>, values: FormValues): bool
   })
 }
 
-/** The registered `form` surface (submission wiring lands in S4-5). */
+/** The registered `form` surface: submission is sent back into the session (S4-5). */
 export function FormSurface(props: UiSurfaceProps): ReactNode {
-  const { instruction, t } = props
+  const { instruction, t, sessionId } = props
   const { fields, submitLabel, description } = parseForm(props)
   const [values, setValues] = useState<FormValues>({})
   const [requiredNote, setRequiredNote] = useState(false)
   const [submitted, setSubmitted] = useState<FormValues | undefined>(undefined)
+  const [sendFailed, setSendFailed] = useState(false)
   const set = (id: string, value: string | boolean): void => {
     setRequiredNote(false)
     setValues((previous) => ({ ...previous, [id]: value }))
@@ -116,7 +121,14 @@ export function FormSurface(props: UiSurfaceProps): ReactNode {
       setRequiredNote(true)
       return
     }
-    setSubmitted({ ...values })
+    const payload: FormValues = { ...values }
+    setSubmitted(payload)
+    // ADR-007 §3.4: one structured text message as a queued turn; the model
+    // reads it next round. Canvas-target surfaces also log the interaction.
+    setSendFailed(!sendGenuiText(sessionId, formatGenuiInteraction(instruction, { component: 'form', interaction: 'submit', payload })))
+    if (instruction.target === 'canvas' && instruction.id !== undefined) {
+      recordCanvasInteraction(instruction.id, { component: 'form', interaction: 'submit', payload })
+    }
   }
   return (
     <form
@@ -186,7 +198,9 @@ export function FormSurface(props: UiSurfaceProps): ReactNode {
       </div>
       {submitted !== undefined && (
         <div style={{ display: 'grid', gap: 4 }}>
-          <div style={styles.filled}>{t('formFilled')}</div>
+          {sendFailed
+            ? <div style={styles.note}>{t('formSendFailed')}</div>
+            : <div style={styles.filled}>{t('formSent')}</div>}
           <pre style={styles.raw}>{JSON.stringify(submitted, null, 2)}</pre>
         </div>
       )}

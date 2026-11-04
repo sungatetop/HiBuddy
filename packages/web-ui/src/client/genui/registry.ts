@@ -21,6 +21,8 @@ export interface UiSurfaceProps {
   instruction: RenderUiInstruction
   /** Namespace translate for the surface's own copy. */
   t: SurfaceTranslate
+  /** Current session id (session standard props), enabling the send-back seam. */
+  sessionId?: string
 }
 
 /** A registry surface component. */

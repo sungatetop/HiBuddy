@@ -27,7 +27,7 @@ function navCanvasId(params: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 const styles = {
-  root: { display: 'grid', gridTemplateRows: 'auto auto 1fr', gap: 10, padding: 12, minHeight: 0 } satisfies CSSProperties,
+  root: { display: 'grid', gridTemplateRows: 'auto auto auto 1fr', gap: 10, padding: 12, minHeight: 0 } satisfies CSSProperties,
   head: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
   badge: {
     flex: 'none',
@@ -62,6 +62,24 @@ const styles = {
   } satisfies CSSProperties,
   body: { minHeight: 0, overflow: 'auto' } satisfies CSSProperties,
   empty: { margin: 'auto', fontSize: 13, lineHeight: 1.7, color: 'var(--dsw-alias-label-tertiary)', maxWidth: 320, textAlign: 'center' as const },
+  interactions: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 11,
+    lineHeight: 1.5,
+    color: 'var(--dsw-alias-label-tertiary)',
+  } satisfies CSSProperties,
+  interaction: {
+    padding: '1px 8px',
+    border: '1px solid var(--dsw-specific-input-major)',
+    borderRadius: 999,
+    maxWidth: 260,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  } satisfies CSSProperties,
 }
 
 /** `{ label }` interpolation for the two version-bar copy keys. */
@@ -74,7 +92,7 @@ function interpolate(template: string, values: Record<string, string>): string {
  * store, rendering the same registry surfaces as the flow cards.
  */
 export function GenuiCanvasTab(props: GenuiCanvasTabProps): ReactNode {
-  const { useTabInfo, t } = props
+  const { useTabInfo, t, sessionId } = props
   const instances = useCanvasInstances()
   const info = useTabInfo()
   const navigation = info.tab.navigation
@@ -127,9 +145,29 @@ export function GenuiCanvasTab(props: GenuiCanvasTabProps): ReactNode {
         {browsed && <button type="button" style={styles.versionButton} onClick={() => setVersionIndex(undefined)}>{t('canvasLatest')}</button>}
         <span>{interpolate(t('canvasTurn'), { n: String(version.turn + 1) })}</span>
       </div>
+      {active.interactions.length > 0 && (
+        <div style={styles.interactions} data-hibuddy-genui-canvas-interactions="">
+          <span>{t('canvasInteractions')}</span>
+          {active.interactions.map((item) => (
+            <span key={item.seq} style={styles.interaction}>
+              {`${new Date(item.at).toLocaleTimeString()} · ${item.component}/${item.interaction} · ${interactionSummary(item.payload)}`}
+            </span>
+          ))}
+        </div>
+      )}
       <div style={styles.body}>
-        <SurfaceBody instruction={instruction} t={t} />
+        <SurfaceBody instruction={instruction} t={t} sessionId={sessionId} />
       </div>
     </div>
   )
+}
+
+/** One-line payload digest for the interaction history chips. */
+function interactionSummary(payload: unknown): string {
+  try {
+    const text = JSON.stringify(payload) ?? ''
+    return text.length > 48 ? `${text.slice(0, 48)}…` : text
+  } catch {
+    return '(…)'
+  }
 }

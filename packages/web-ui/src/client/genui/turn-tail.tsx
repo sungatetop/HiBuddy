@@ -52,7 +52,7 @@ function settledRenderUiCalls(snapshot: ChatSnapshot, turn: number): ToolResultN
  * semantics; already-open tabs just re-reveal).
  */
 export function GenuiTurnTail(props: GenuiTurnTailProps): ReactNode {
-  const { turn, useChat, t } = props
+  const { turn, useChat, t, sessionId } = props
   const calls = useChat((snapshot) => settledRenderUiCalls(snapshot, turn.turn))
   useEffect(() => {
     if (calls === undefined) return
@@ -67,7 +67,7 @@ export function GenuiTurnTail(props: GenuiTurnTailProps): ReactNode {
   return (
     <div data-hibuddy-genui-tail="" style={{ display: 'grid', gap: 10 }}>
       {calls.map((call) => (
-        <GenuiSurfaceCard key={call.callId} block={call} t={t} />
+        <GenuiSurfaceCard key={call.callId} block={call} t={t} sessionId={sessionId} />
       ))}
     </div>
   )
