@@ -10,18 +10,22 @@
  * S4-6 (FR-05): registers the `shared_state` tool — the agent half of the
  * run-level shared task state; the browser panel edits the same keys and its
  * edits arrive back as `[shared-state update]` turns the model relays here.
+ *
+ * S5-1 (FR-06): mounts the `hibuddy` Typert remote service — the host-side
+ * provider connectivity probe behind the Models-page connection-check card.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import { renderUiTool } from './render-ui-tool.ts'
 import { createSharedStateTool } from './shared-state-tool.ts'
 import { SharedStateStore } from './shared-state.ts'
+import { HibuddyVerifyService } from './verify-provider.ts'
 
 /** Cordis function-plugin name. */
 export const name = 'hibuddy-web-ui'
 
 /** Required host services. */
-export const inject = ['tools']
+export const inject = ['tools', 'llm']
 
 /** Register the generative-UI instruction tool and the shared-state tool. */
 export function apply(ctx: Context): void {
@@ -33,4 +37,8 @@ export function apply(ctx: Context): void {
   ctx.on('session/disposed', (session) => {
     sharedState.dropSession(session.id)
   })
+  // Typert remote service: registers under the `hibuddy` key and binds the
+  // same wire namespace into the gateway (constructor does both); the `llm`
+  // face is captured here — remote callbacks run outside this scope.
+  new HibuddyVerifyService(ctx, ctx.llm)
 }

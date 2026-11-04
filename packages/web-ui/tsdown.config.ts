@@ -3,6 +3,15 @@ import { defineConfig } from 'tsdown'
 const dshExternal = [/^@deepseek-ai\//]
 
 /**
+ * Client face externals. The dsh client-modules module table exposes only the
+ * platform seed words — no @deepseek-ai package is resolvable from a plugin
+ * client bundle, so every @deepseek-ai import must stay type-only, with one
+ * exception: `dsh-typert-protocol/remote-info` is import-free (no cordis) and
+ * small, so the client face bundles it to mount the `hibuddy` namespace.
+ */
+const clientDshExternal = [/^@deepseek-ai\/(?!dsh-typert-protocol\/remote-info)/]
+
+/**
  * Two build faces, matching the dsh client-plugin layout:
  * - node face (lib/index.js): host-side Loader row.
  * - browser face (lib/client.js): served via the client-modules registry,
@@ -29,7 +38,7 @@ export default defineConfig([
     outDir: 'lib',
     format: 'cjs',
     platform: 'browser',
-    deps: { neverBundle: [...dshExternal, 'react', 'react/jsx-runtime'] },
+    deps: { neverBundle: [...clientDshExternal, 'react', 'react/jsx-runtime'] },
     dts: false,
     sourcemap: false,
     outputOptions: {

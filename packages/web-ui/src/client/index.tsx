@@ -31,8 +31,16 @@
  * body lists the run-level shared task state with source/time provenance;
  * the user's edit lands optimistically and is relayed to the agent as one
  * `[shared-state update]` queued-turn message (the send-back seam).
+ *
+ * S5-1 (FR-06): BYOK extension cards on the Models settings page — the
+ * `settings.models.footer` recommendation card and the per-provider
+ * connection-check card (`settings.models.provider-card`, keyed by adapter
+ * family settings namespace). The check runs host-side through the `hibuddy`
+ * Typert remote namespace (`verifyProvider`): one minimal completion, no key
+ * material ever reaches the client.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { PendingApproval } from '@deepseek-ai/dsh-client-ui-approval/client'
@@ -40,9 +48,15 @@ import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
+import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import { HibuddyApprovalCard } from './approval-card.tsx'
+import { en as byokEn, zh as byokZh, type ByokLocaleKey } from './byok/locales.ts'
+import { RecommendCard } from './byok/recommend-card.tsx'
+import { VerifyProviderCard } from './byok/verify-card.tsx'
+import { HIBUDDY_REMOTE } from './byok/verify-remote.ts'
 import { en, zh, type ApprovalLocaleKey } from './locales.ts'
 import { setCanvasOpener } from './genui/canvas-open.ts'
 import { GenuiCanvasTab } from './genui/canvas-tab.tsx'
@@ -53,9 +67,10 @@ import { registerGenuiSurfaces } from './genui/surfaces.ts'
 import { setSharedStateOpener } from './genui/shared-state-open.ts'
 import { GenuiSharedStateTab } from './genui/shared-state-tab.tsx'
 import { GenuiTurnTail } from './genui/turn-tail.tsx'
+import type { VerifyProviderOutcome } from '../verify-provider.ts'
 
-/** Required services: Slot registry, copy, the right-Sidebar faces (canvas), and sessions (send-back). */
-export const inject = ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'sessions']
+/** Required services: Slot registry, copy, the right-Sidebar faces (canvas), sessions (send-back), and the typed Remote mount. */
+export const inject = ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'sessions', 'remote']
 
 /** Locale namespace of the enhanced card. */
 const NS = 'hibuddy-approval'
@@ -63,12 +78,29 @@ const NS = 'hibuddy-approval'
 /** Locale namespace of the generative-UI card. */
 const GENUI_NS = 'hibuddy-genui'
 
+/** Locale namespace of the BYOK Models-page cards. */
+const BYOK_NS = 'hibuddy-byok'
+
+/** Adapter-family settings namespaces whose provider cards carry the check. */
+const PROVIDER_SETTINGS_NS = ['llm-deepseek', 'llm-pi-ai'] as const
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** HiBuddy enhanced approval card copy. */
     'hibuddy-approval': ApprovalLocaleKey
     /** HiBuddy generative-UI toolview copy. */
     'hibuddy-genui': GenuiLocaleKey
+    /** HiBuddy BYOK Models-page cards copy. */
+    'hibuddy-byok': ByokLocaleKey
+  }
+}
+
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface TypertRemoteNamespaceMap {
+    /** HiBuddy host-side extension RPCs (Models-page provider probe). */
+    hibuddy: {
+      verifyProvider: (provider: string) => Promise<RemoteResult<VerifyProviderOutcome>>
+    }
   }
 }
 
@@ -83,21 +115,67 @@ declare module '@deepseek-ai/dsh-client-ui-sidebar-right/client' {
 
 /**
  * Install the copy dictionaries, the approval takeover, and the generative-UI
- * toolview.
+ * toolview. Mounting the `hibuddy` remote contribution first keeps the
+ * namespace visible before any card can call it (dsh only exposes client
+ * Remote namespaces mounted through explicit contributions).
  * @param ctx - Client root context.
  */
-export function apply(ctx: ClientContext): void {
+export async function apply(ctx: ClientContext): Promise<void> {
   registerGenuiSurfaces()
   // One-shot service capture (cordis discipline): callbacks registered here run
   // outside the plugin's injection scope, so they use the captured references.
   const locale = ctx.locale
   const sidebarRight = ctx.sidebarRight
+  const remote = ctx.remote
+  // S5-1: mount the hand-written `hibuddy` namespace contribution — the same
+  // mechanism the official api-remotes client uses for its generated ones.
+  await remote.$mount(HIBUDDY_REMOTE)
+  // The mounter cannot declare its own namespace in `inject` (cordis would
+  // wait forever for a service only this fiber creates), and `ctx.remote
+  // .hibuddy` resolves through that same fiber-inject table. Resolve the just-
+  // mounted namespace service from the reflect store directly instead.
+  const hibuddy = ctx.reflect.get('remote.hibuddy', false) as {
+    verifyProvider(route: string): Promise<RemoteResult<VerifyProviderOutcome>>
+  }
   // Both the host-side dsh-session plugin and the client session controller
   // augment Context.sessions with different faces; in this package's typecheck
   // the host-side declaration wins the merge, so cast to the client face.
   const sessions = ctx.sessions as unknown as ISessions
   ctx.effect(() => locale.register(NS, { zh, en }), 'hibuddy-web-ui: approval dictionaries')
   ctx.effect(() => locale.register(GENUI_NS, { zh: genuiZh, en: genuiEn }), 'hibuddy-web-ui: generative-UI dictionaries')
+  ctx.effect(() => locale.register(BYOK_NS, { zh: byokZh, en: byokEn }), 'hibuddy-web-ui: BYOK dictionaries')
+  // BYOK (S5-1, FR-06): the host-side probe seam folded into the wire result —
+  // carrier failures fold into RemoteResult's error branch, so only assembly
+  // faults reject; both map onto the card's outcome union.
+  const verifyProvider = async (route: string): Promise<VerifyProviderOutcome> => {
+    try {
+      const response = await hibuddy.verifyProvider(route)
+      if (response.ok) return response.value
+      // Carrier failure (offline, transport fault): outcome-shaped, surfaced in
+      // the card as an unknown-reason probe failure.
+      return { ok: false, reason: 'unknown', detail: response.error.message }
+    } catch (error) {
+      // Assembly faults reject; the card renders them as unreachable.
+      return { ok: false, reason: 'network', detail: error instanceof Error ? error.message : String(error) }
+    }
+  }
+  // Footer recommendation card (list seat) after the provider rows.
+  ctx.slots.inject('settings.models.footer', () => ctx.slots.register({
+    name: 'settings.models.footer',
+    id: 'hibuddy-recommend',
+    locale: BYOK_NS,
+  }, RecommendCard))
+  // Connection-check card inside every provider card of each adapter family
+  // (keyed seat, key = settingsNs): one registration covers shipped, added,
+  // and hand-declared rows of that family.
+  for (const settingsNs of PROVIDER_SETTINGS_NS) {
+    ctx.slots.inject('settings.models.provider-card', () => ctx.slots.register({
+      name: 'settings.models.provider-card',
+      key: settingsNs,
+      locale: BYOK_NS,
+      inject: () => ({ verifyProvider }),
+    }, VerifyProviderCard))
+  }
   ctx.slots.inject('conversation.composer', () => ctx.slots.register({
     name: 'conversation.composer',
     // Below the official ui-approval takeover (priority 1) so this entry
