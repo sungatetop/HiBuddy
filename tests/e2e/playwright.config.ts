@@ -22,6 +22,9 @@ if (baseURL === undefined || baseURL === '') {
 
 export default defineConfig({
   testDir: 'spec',
+  // The desktop suite (Electron driver) manages its own lifecycle and target:
+  // run it through playwright.desktop.config.ts (`pnpm --filter @hibuddy/e2e test:desktop`).
+  testIgnore: '**/desktop.spec.ts',
   timeout: 300_000,
   expect: { timeout: 30_000 },
   fullyParallel: false,

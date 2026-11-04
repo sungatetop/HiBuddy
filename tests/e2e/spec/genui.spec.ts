@@ -12,45 +12,11 @@
  *
  * One serial test: the steps share one session.
  */
-import { expect, test, type ConsoleMessage, type Page } from '@playwright/test'
-
-/** The live smoke URL including its ?token= query (baseURL drops queries). */
-const TARGET = process.env.HIBUDDY_E2E_URL ?? ''
-
-/** Console errors and page errors collected from the page under test. */
-function watchErrors(page: Page): { errors: string[], detach: () => void } {
-  const errors: string[] = []
-  const onConsole = (message: ConsoleMessage): void => {
-    if (message.type() === 'error') errors.push(`console: ${message.text()}`)
-  }
-  const onPageError = (error: Error): void => {
-    errors.push(`pageerror: ${error.message}`)
-  }
-  page.on('console', onConsole)
-  page.on('pageerror', onPageError)
-  return { errors, detach: () => { page.off('console', onConsole); page.off('pageerror', onPageError) } }
-}
-
-/** Type one message into the composer and send it with Enter. */
-async function send(page: Page, text: string): Promise<void> {
-  const composer = page.locator('[contenteditable="true"]').first()
-  await expect(composer).toBeVisible()
-  await composer.click()
-  // Playwright fill is the only reliable clear+type for the Lexical composer.
-  await composer.fill(text)
-  await composer.press('Enter')
-  await expect(composer).toHaveText('', { timeout: 15_000 })
-}
-
-/** Wait until at least `count` turns have fully completed on this page. */
-async function awaitTurns(page: Page, count: number): Promise<void> {
-  // One tail button per finished turn ("已完成，用时 N 秒"); text-based
-  // matching is ambiguous here (each tail nests 4 text-bearing elements).
-  await expect(page.getByRole('button', { name: /已完成，用时/ })).toHaveCount(count, { timeout: 240_000 })
-}
+import { expect, test } from '@playwright/test'
+import { awaitTurns, newSession, send, skipWithoutTarget, TARGET, watchErrors } from './helpers.ts'
 
 test('generative UI basic flow: canvas form, send-back, shared state', async ({ page }) => {
-  test.skip(TARGET === '', 'HIBUDDY_E2E_URL is not set')
+  skipWithoutTarget(test)
   const { errors, detach } = watchErrors(page)
   test.setTimeout(600_000)
 
@@ -58,7 +24,7 @@ test('generative UI basic flow: canvas form, send-back, shared state', async ({ 
   await expect(page).toHaveTitle(/HiBuddy/)
 
   // Fresh session so the flow starts from an empty conversation.
-  await page.getByRole('button', { name: '新建会话' }).first().click()
+  await newSession(page)
 
   // --- A2/A3: canvas form render (the model names component+fields). -------
   // The props are spelled as a literal JSON snippet: MiniMax-M2.7 sometimes
