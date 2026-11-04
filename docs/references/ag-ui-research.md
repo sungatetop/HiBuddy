@@ -3,7 +3,7 @@ title: AG-UI 协议与生成式 UI 生态调研
 summary: 调研 AG-UI（Agent-User Interaction Protocol）的协议定位、事件模型、SDK 生态与应用它的热点开源项目（CopilotKit、OpenBot、openui 等），并为 HiBuddy 筛选参考项目 clone 至 thirdparty/；后补入运行时选型两仓（deepseek-harness、pi-mono）
 keywords: [AG-UI, Generative UI, CopilotKit, Agent, 事件流协议, thirdparty]
 status: accepted
-date: 2026-11-03
+date: 2026-11-04
 ---
 
 # AG-UI 协议与生成式 UI 生态调研
@@ -60,6 +60,17 @@ date: 2026-11-03
 | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) → `thirdparty/deepseek-harness` | — | **HiBuddy 底座**（总体路线见 [ADR-003](../decisions/ADR-003-dsh-based-customization.md)；底座本体经 npm 依赖引入，此仓作源码对照）：Cordis 插件容器 + SessionEvent 日志 + approval/sandbox/subagent 子系统 + React Web Client；sparse 克隆（packages/apps/docs） | dsh 扩展面（插件/patch/brand slots/client 模块）实证、Web UI 分层与重连语义、Workspace/审批参考 |
 | [earendil-works/pi](https://github.com/earendil-works/pi) → `thirdparty/pi-mono` | 110k+ | 极简 agent 内核（`@earendil-works/pi-agent-core`，AgentEvent 11 种）+ pi-ai 统一多 Provider API；sparse 克隆（packages） | 不再作为独立运行时接入（ADR-003）——其 pi-ai 已被 dsh 吸收为 LLM 适配层（packages/llm/llm-pi-ai）；保留作自写 LLM 适配器时的对照 |
 | [MindLab-Research/dsh-generative-ui](https://github.com/MindLab-Research/dsh-generative-ui) → `thirdparty/dsh-generative-ui` | — | **dsh 的 ui4a 生成式 UI 插件**（2026-11-03 补克隆，服务 ADR-007）：模型直接写 React TSX（`````ui4a/tsx```` 围栏 / canvas 文件），浏览器内 esm.sh wasm 编译，同源渲染（无 iframe，卡片能力=会话能力 shim） | "harness 直接写前端代码"路线的第一手机制对照（双层教学 prompt+skill、内嵌围栏认领 DOM 观察、sidebarRight 画布、$dsh 能力闭集导入）；其无渲染隔离的设计与 HiBuddy SR-02 冲突，ADR-007 否决该路线时引用 |
+| [CopilotKit/OpenMuse](https://github.com/CopilotKit/OpenMuse) → `thirdparty/OpenMuse` | 890+（发布周） | **AG-UI 应用侧完整参考实现**（2026-11-04 补克隆）：CopilotKit 官方个人 Agent（MIT，alpha）——Expo/React Native 三端 + Hono/CopilotKit runtime 服务端，AG-UI 事件流贯穿聊天/浏览器/终端/任务，人工审批节点 + SQL lease 崩溃恢复 | P1 AG-UI 桥（ADR-003 §3.1）的应用侧对照：AG-UI 在真实产品中的事件映射、human-in-the-loop 审批流、任务持久化与前端重入、RN 端消费姿势；sparse 克隆（apps/server、apps/mobile、apps/worker、packages、docs） |
+
+## 3.1 OpenMuse 的 AG-UI 实战用法（2026-11-04 源码核查）
+
+对 `thirdparty/OpenMuse` 的源码结论（P1 AG-UI 桥第一手对照）：
+
+1. **转换层不自研**：服务端靠 CopilotKit runtime v2 + `@ag-ui/client`（HttpAgent）完成 LLM 流→AG-UI 事件；业务侧只写 `AbstractAgent` 子类（`run(RunAgentInput): Observable<BaseEvent>`）与 RxJS `map/mergeMap` 事件后处理管道（`apps/server/src/engine/conversation.ts`、`engine/tanstack-agent.ts`）。
+2. **外部端点零成本接入**：`AGENT_BACKEND=agui` 直接把任意外部 AG-UI POST 端点当 agent（`HttpAgent({url})`）——HiBuddy 桥若做成标准 AG-UI 端点，可被 CopilotKit 生态直接消费。
+3. **结构化状态不走 AG-UI**：任务/计划/审批/进度等 durable 状态实际走 REST 轮询（3s）+ thread 历史回放；AG-UI 只承载聊天流。STATE_SNAPSHOT/DELTA 由内置伪工具（`AGUISendStateSnapshot/Delta`）支撑但前端未消费——印证 HiBuddy「P0 全走 dsh 原生协议、P1 桥只做增量」的降级判断（ADR-003 §3.1）。
+4. **HITL 不用 interrupt 语义**：持久任务审批 = 工具返回 waiting_* + checkpoint 落库 + 独立 decide 端点（hash 防篡改）+ lease 防并发；对话内选择 = 带前缀 user 消息（`[OpenMuse choice] {json}`）服务端解析改写——与 HiBuddy send-back seam（`[shared-state update]`）同构。
+5. **前端纯 headless 消费**：RN/Expo 只用 `CopilotKitProvider + useAgent + useRenderTool`（工具名→卡片组件声明式映射），不依赖 CopilotKit UI 组件；结果卡片状态驱动（REST 数据），工具卡片仅 loading 占位。
 
 ## 4. 备选未 clone 项目
 
@@ -82,7 +93,7 @@ date: 2026-11-03
 - 只读参考：禁止修改第三方仓库内容；本项目不对其编译/打包/发布。
 - 浅克隆维护：需要更新时 `git pull --depth 1`；不引用其 git 历史。深仓可 sparse+blob:none 引入（deepseek-harness、pi-mono 即此方式）。
 - 各仓库 LICENSE（均 MIT）随仓库保留，引用其代码片段时注意许可证义务。
-- 克隆状态（2026-11-03）：9 个参考仓全部就位（ag-ui、CopilotKit、OpenBot、OpenIntelligentUI、openui、genui-sdk、deepseek-harness、pi-mono、dsh-generative-ui）。openui 首次克隆损坏（.git 仅剩中断的临时 pack、0 对象），2026-11-03 删除重克隆修复；dsh-generative-ui 为 ADR-007 选型追补。
+- 克隆状态（2026-11-03）：9 个参考仓全部就位（ag-ui、CopilotKit、OpenBot、OpenIntelligentUI、openui、genui-sdk、deepseek-harness、pi-mono、dsh-generative-ui）。openui 首次克隆损坏（.git 仅剩中断的临时 pack、0 对象），2026-11-03 删除重克隆修复；dsh-generative-ui 为 ADR-007 选型追补。2026-11-04 追补克隆 OpenMuse（AG-UI 应用侧完整实现，sparse：apps/server、apps/mobile、apps/worker、packages、docs）。
 
 ## 7. 主要来源
 
