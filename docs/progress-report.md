@@ -1,9 +1,9 @@
 ---
 title: HiBuddy 进度与验收报告
-summary: 各阶段的验收记录与缺口清单：S0 骨架与冒烟链路（2026-11-01）、S1 基础设施复用与编译打包（2026-11-02）、S2 品牌与人设基线（2026-11-03）、S3 审批分级与留痕（2026-11-03）、S3b AG-UI 桥 MVP（2026-11-03）、S4 生成式 UI 与工作台定制（2026-11-04）、S5 P0 收尾与双端交付（2026-11-04）、S6 生态接入与上游跟进（2026-11-04）均通过——P0 交付；每阶段含缺口清单
+summary: 各阶段的验收记录与缺口清单：S0 骨架与冒烟链路（2026-11-01）、S1 基础设施复用与编译打包（2026-11-02）、S2 品牌与人设基线（2026-11-03）、S3 审批分级与留痕（2026-11-03）、S3b AG-UI 桥 MVP（2026-11-03）、S4 生成式 UI 与工作台定制（2026-11-04）、S5 P0 收尾与双端交付（2026-11-04）、S6 生态接入与上游跟进（2026-11-04）均通过——P0 交付；S7-A 原型真机验证（2026-11-05：三机制两过一缺口）；每阶段含缺口清单
 keywords: [进度报告, 验收记录, 缺口清单, HiBuddy]
 status: accepted
-date: 2026-11-04
+date: 2026-11-05
 ---
 
 # HiBuddy 进度与验收报告
@@ -257,3 +257,27 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 - **A3** 桥改造评估结论：零改动（CORS/鉴权为 dsh fence 安全设计，消费侧同源反代接入）；回归 93 单测 + Web E2E 7/7 全绿；桥协议 strict 客户端不变量两处修复 + 4 项契约测试。
 - **A4** 上游缺口结论：重启**不**恢复（S5 假设证伪）；根因 = junction 部署 × pnpm 相对 symlink（HiBuddy 特有，非上游缺陷）；HiBuddy 侧修复落地（89b59ed）+ 用户口径 + issue 材料要点。
 - **A5** 本记录即 S6 验收登记；implementation-plan S6 节已勾选。
+
+## S7 常驻层与生态收尾（进行中）
+
+### 原型真机验证：dsh-superagent-prototype 装配 hibuddy profile（S7-A，2026-11-05）
+
+**目的与方法**：常驻层设计（S7-B）前，把 dsh 上游 super-agent 原型真机装入 hibuddy profile，验证「Router 常驻 / 事件触发分派 / SQLite 持久化恢复」三机制的可装配性与行为。原型 npm 包 `dsh-superagent@0.1.0` 未发布 npm：robocopy 复制 thirdparty 仓库到临时构建目录（排除 .git/node_modules，thirdparty 只读不动）→ pnpm install + build（lib/ 产出）→ npm pack 产出 tgz → profile 以 `file:` 依赖装入（dependencies + bundles 数组插行 + profile 层 cordis.patch.yml 配 `stateDir`，插件拒绝无 stateDir 启动）。
+
+**Windows 适配（本地构建调整，非上游变更）**：原型两处路径校验为 POSIX-only（`/^\//`，deployment.ts 的 absolute() helper 与 policy.ts 的 executor.directory），拒绝 Windows 盘符路径——临时构建副本放宽为 `(?:[A-Za-z]:[\\/]|\/)` 后重建重装。S7-B 设计若采纳此形态，需在上游反馈或正式 fork 中处理。
+
+**激活成功**：dsh web 启动无激活警告；侧边栏出现 Superagent 入口，面板六 tab（概览/来源/触发/评估/执行/设置）全部工作。部署自检报告 2 条系统问题（符合预期——无 GitHub 配置）：「部署检查未通过，dsh-superagent 暂不接单（GitHub 来源没有设置监听的仓库）」「没有人能发送工单（各来源上的名单都为空）」；执行器等待部署检查。
+
+**三机制行为证据**：
+1. **Router 常驻 ✓**：面板激活 + 自检轮询运转 + github-watch 组件激活 + orchestrator.sqlite WAL 持续活动（140KB 帧活动）。
+2. **SQLite 持久化恢复 ✓（强证据）**：设置 tab 将「接收仓库里的新 Issue」开关 OFF→ON → 显式保存 → SQLite 主文件 4096→118784 字节（WAL checkpoint 归零，写入确实落盘）→ **强杀进程全重启 + 新 token** → 开关仍为 ON。该配置默认 OFF 且启动过程无重算来源，恢复只能来自 orchestrator.sqlite；重启后面板「系统问题 2 条」亦一致恢复。
+3. **事件触发分派 ✗（缺口登记）**：端到端分派需 GitHub 来源配置 = 监听仓库 + 智能体的 gh CLI 认证 + push 权限（`gh auth login` 操作员凭据步骤），本机无 gh CLI，无法真机触发 Issue/@提及 → 评估 → 工单分派链路。旁证：触发管线 UI 就绪（触发 tab 线程过滤器/状态芯片、概览页 到达/被过滤/已评估 计数器）。**缺口**：gh 操作员配置后补验；S7-B 常驻层若沿用 Source 形态，事件分派验收同此口径。
+
+**工程发现（S7-B 设计输入）**：
+- 部署配置闸：stateDir 必配，缺失拒启——常驻组件的持久化目录是部署级硬约束，好形态。
+- 面板设置为显式「保存 / 放弃修改」模式（按 block 保存，SettingsSave），非自动保存。
+- proper-lockfile 强杀进程后无残留锁文件（stale 检测有效），干净重启无「Lock file is already being held」。
+- 面板状态重启后由 SQLite 重读（含系统问题、来源实例状态），自检数据在 WAL 活动。
+- dsh CLI 无 `web` 子命令——默认启动即 web 服务（`http://127.0.0.1:3080/?token=...`）。
+
+**S7-A-A2 还原（profile 回归原状）**：profile package.json（dependencies + bundles 两处）与 cordis.patch.yml S7-A 配置块移除；pnpm-lock.yaml git 还原；`pnpm install --no-frozen-lockfile` 剪除 73 包、`profile/hibuddy/node_modules/dsh-superagent` 链接移除；删除临时构建目录与 `C:\Users\chenb\.dsh\state\superagent` 状态目录。工作树唯一残留 diff 为用户有意改动（cordis.patch.yml reasoningEffort: low），不入提交。
