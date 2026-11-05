@@ -3,7 +3,7 @@ title: HiBuddy P0 实施计划
 summary: P0 的分阶段执行计划（S1–S7）：S1 先把 dsh 基础设施三端（CLI/Web/桌面）全部复用跑通、验证 dsh 原生能力面完整性（插件安装/启停/分层配置）并建立编译打包链路，S2 起再按 PRD 需求做深度定制（品牌人设→核心工具/审批→生成式 UI→收尾双端交付）；S6 为 P0 后续（AG-UI 桥 CopilotKit 生态真机接入 + dsh 上游热激活缺口收口）；S7 为定位修订后的常驻/主动层（ADR-010：先验 dsh-superagent-prototype 原型，再自研 @hibuddy/resident）；每阶段含可判定的验收标准
 keywords: [实施计划, 里程碑, 验收标准, P0, 分阶段交付, 基础设施复用, 插件生态, AG-UI, 常驻智能体, HiBuddy]
 status: accepted
-date: 2026-11-04
+date: 2026-11-05
 ---
 
 # HiBuddy P0 实施计划
@@ -184,14 +184,27 @@ date: 2026-11-04
 
 **任务**（S7-B 详细任务与验收标准在 S7-A 结论登记后补全；先验证后定验收）：
 1. **S7-A 原型验证**：安装 `dsh-superagent-prototype` 到 hibuddy profile（遵守 ADR-005 版本纪律，核对 peer 依赖与 patch 层序）；真机验证 Router 常驻、Worker 并行、事件触发（GitHub 轮询可用最小配置）、SQLite 持久化与崩溃恢复；结论（机制可用性 / 与 0.2.1-rc.5 的兼容偏差 / 对 S7-B 的机制借鉴清单）登记 progress-report。
-2. **S7-B 设计**：`@hibuddy/resident` 模块设计（事件源框架、工作项/调度/持久化、通知面、与 coworker 审批分级咬合、常驻面板信息架构）落 docs/module-design/，安全口径（免打扰窗、Worker 权限授予——不采纳原型的 danger-full-access）随设计定稿。
-3. **S7-B 实施**：首批事件源 = 定时/周期任务（含 Monitor 式周期监控：条件+间隔+去重指纹+退避）；通知先落库再触达（桌面端系统级通知升级）；常驻面板（Web 端先行）。
-4. 回归：能力面完整性回归（横切纪律 1）+ 既有 vitest/E2E 全绿 + 常驻链路新增契约测试。
+2. **S7-B 设计**：`@hibuddy/resident` 模块设计（事件源框架、工作项/调度/持久化、通知面、与 coworker 审批分级咬合、常驻面板信息架构）落 docs/module-design/，安全口径（免打扰窗、Worker 权限授予——不采纳原型的 danger-full-access）随设计定稿。（已落档 2026-11-05：[resident-design](module-design/resident-design.md) draft——核心架构 = 用户要点"worker 会话即普通 dsh 会话，其上加一层常驻编排"：不设常驻 router LLM 会话（D1），编排层确定性管理 worker 会话生命周期；首批事件源 scheduler（定时/周期）+ monitor（条件/间隔/去重指纹/退避）；两级过滤 + 观察模式默认；SQLite stateDir 部署闸 + 启动重对账；worker 沿用 standard preset 沙箱 + coworker 分级（不采纳 danger-full-access），待批状态提升为编排层唯一审批增量；S6-2 自动 resume 观察项落为审批面板安全约束与负向验收用例；面板四 tab Web 先行）
+3. **S7-B 实施**（设计评审定稿后逐任务推进，每任务全绿一笔提交）：
+   - B1 @hibuddy/resident 包骨架：bundle 后端半（cordis 插件）+ client 半注册、stateDir 必配拒启闸。
+   - B2 持久化层：SQLite（WAL）schema（sources/triggers/tickets/ticket_runs/worker_sessions/notifications/settings）+ 启动重对账（missed at 补一次、周期跳过、working 续跑/标记中断）+ proper-lockfile 防双实例。
+   - B3 scheduler 事件源 + 调度器：一次性 at / 周期 interval、周期任务 = 持续 Ticket + 执行轮次、next-run-at 调度、Ticket 状态机（pending/working/awaiting_approval/completed/failed/stopped）。
+   - B4 worker 会话编排：每票 `resident-worker-<ticketId>` 走原生 create/resume（composeAgent 三要素：preset mount、agentDefaultModel、meta.agentPreset）、每票工作目录 `<工作区>/resident-work/<ticket-short>/`、worker slots 并发闸（默认 2，用户交互唤醒不占 slot）。
+   - B5 monitor 事件源 + 两级过滤：条件（自然语言）+检查目标+间隔+去重指纹+退避降级、gate（确定性）→ assessment（LLM 研判，观察模式默认，observe→auto 面板切换）。
+   - B6 通知面：先落库再触达、幂等键、免打扰窗（通知静默、待批不挂起）、系统问题通知。
+   - B7 审批咬合：监听 approval/asked 将 Ticket 置 awaiting_approval（decided 后回 working）、coworker answerer 对 worker 会话覆盖的真机验证、S6-2 负向用例（无人工来源 resolved 不放行）。
+   - B8 常驻面板：四 tab（概览/工作项/定时与监控/通知）+ 设置（免打扰窗/并发/观察模式/stateDir 只读）、显式保存模式。
+   - B9 E2E 验收：定时任务创建→到期→worker 执行→通知闭环；重启恢复对账；免打扰窗；审批卡与待批提升；观察模式 would-act 记录。
+4. 回归：能力面完整性回归（横切纪律 1）+ 既有 vitest/E2E 全绿 + 常驻链路新增契约测试（调度/过滤/Ticket 状态机/通知幂等）。
 
 **验收标准**（S7-A 部分先行登记）：
 - [x] A1 S7-A：原型在 hibuddy profile 真机运行，Router 常驻 + 事件触发分派 + 持久化恢复三机制至少各一项行为证据入 progress-report。（2026-11-05：Router 常驻 ✓ + SQLite 持久化恢复 ✓（设置写入→全重启→恢复的强证据）；事件触发分派 = 缺口登记——端到端需 gh CLI 操作员凭据配置，管线就绪旁证（触发 tab / 计数器 / github-watch 激活）入报告，gh 配置后补验）
 - [x] A2 S7-A：与 0.2.1-rc.5 的兼容结论（含已知偏差清单）登记；卸载原型后 profile 回归原状（能力面完整性抽查通过）。（兼容：engines.dsh ^0.2.1-alpha.2 兼容 rc.5，激活装配/面板/持久化全工作；已知偏差 = POSIX-only 路径校验拒 Windows 盘符路径（本地构建放宽两处，非上游变更）；卸载还原后重启装配零警告 + Superagent 入口消失 + 侧边栏正常）
-- [ ] A3 S7-B：任务与验收标准依 S7-A 结论登记本节（占位）。
+- [x] A3 S7-B 设计定稿：[resident-design](module-design/resident-design.md) 状态 draft → accepted 并登记 docs/README；本节任务与验收标准已依 S7-A 结论登记。（2026-11-05：设计文档落档并经评审通过转 accepted（含用户 worker 设计要点原话与 D1–D5 关键决策）；S7-B 任务 B1–B9 与验收 A3–A7 已登记本节）
+- [ ] A4 S7-B 实施 B1–B3：resident 包装配生效（--dump-config 层序含 @hibuddy/resident）、stateDir 拒启闸行为验证、scheduler 定时任务端到端（创建→到期→Ticket 迁移→worker 会话启动）、重启恢复对账证据入 progress-report。
+- [ ] A5 S7-B 实施 B4–B5：worker 会话经 composeAgent 三要素启动并完成真实任务；并发 slots 上限生效（第 3 票排队）；monitor 观察模式下命中仅记录 would-act 不执行，切 auto 后才行动。
+- [ ] A6 S7-B 实施 B6–B7：通知先落库再触达（重启后通知仍在）+ 幂等去重；worker 会话越权写入触发审批卡且 Ticket 置 awaiting_approval（decided 后回 working）；S6-2 负向用例通过（无人工来源 resolved 不放行）。
+- [ ] A7 S7-B 实施 B8–B9 + 回归：常驻面板四 tab 可用（含显式保存）；E2E 全场景通过（含免打扰窗）；能力面完整性回归 + 既有 vitest/E2E 全绿 + 新增契约测试覆盖调度/过滤/Ticket 状态机/通知幂等。
 
 ## 3. 横切纪律（全阶段通用）
 

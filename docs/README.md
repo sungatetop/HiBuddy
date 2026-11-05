@@ -25,6 +25,12 @@
 | [ADR-003-dsh-based-customization.md](decisions/ADR-003-dsh-based-customization.md) | 总体路线：放弃"自建 server + AgentRuntime SPI 适配器"，以 dsh 为底座深度定制（插件/patch/brand slots/client 模块官方路径实证）；定制优先级纪律与 fork 触发条件；取代 ADR-002 的适配器定位、取消 ADR-001（AG-UI 统一协议降级为 P1 可选桥） |
 | ~~[ADR-002-agent-runtime-selection.md](decisions/ADR-002-agent-runtime-selection.md)~~ | （superseded）Agent 运行时选型对比与事件映射——dsh/pi 对比数据、AG-UI 事件映射表与 thirdparty sparse 引入方式仍有参考价值 |
 
+## 模块设计（docs/module-design/）
+
+| 文档 | 摘要 |
+|---|---|
+| [resident-design.md](module-design/resident-design.md) | @hibuddy/resident 常驻层模块设计（S7-B，accepted 2026-11-05）：worker 会话即普通 dsh 会话，其上加确定性常驻编排层（事件源 scheduler/monitor → 两级过滤+观察模式 → Ticket 状态机+worker slots → 通知先落库再触达 → SQLite stateDir 部署闸+启动重对账）；worker 沿用 standard preset 沙箱 + coworker 审批分级（不采纳 danger-full-access）；常驻面板四 tab Web 先行；含用户 worker 设计要点原话与 S6-2 自动 resume 安全约束 |
+
 ## 参考资料（docs/references/）
 
 | 文档 | 摘要 |
