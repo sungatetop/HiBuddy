@@ -67,6 +67,15 @@ export async function reconcile(
     if (isTerminal(ticket.state)) continue
 
     if (ticket.state === 'working') {
+      // The previous round was physically interrupted by the shutdown: close
+      // its run up front — a resumed round (resumeWorker) starts a fresh run.
+      store.transaction(() => {
+        const runs = store.listRuns(ticket.id)
+        const openRun = [...runs].reverse().find((run) => run.finishedAt == null)
+        if (openRun && openRun.id !== undefined) {
+          store.finishRun(openRun.id, now, 'interrupted', 'host restarted while working')
+        }
+      })
       let resumed = false
       try {
         resumed = (await hooks.resumeWorker?.(ticket)) === true
@@ -76,14 +85,7 @@ export async function reconcile(
       if (resumed) {
         summary.resumed += 1
       } else {
-        store.transaction(() => {
-          store.upsertTicket({ ...ticket, interrupted: true })
-          const runs = store.listRuns(ticket.id)
-          const openRun = [...runs].reverse().find((run) => run.finishedAt == null)
-          if (openRun && openRun.id !== undefined) {
-            store.finishRun(openRun.id, now, 'interrupted', 'host restarted while working')
-          }
-        })
+        store.upsertTicket({ ...ticket, interrupted: true })
         summary.interrupted += 1
       }
       continue

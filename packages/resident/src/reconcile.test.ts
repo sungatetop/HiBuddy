@@ -69,6 +69,20 @@ describe('reconcile', () => {
     expect(store.getTicket('throwing')!.interrupted).toBe(true)
   })
 
+  it('closes the interrupted open run even when the resume hook succeeds', async () => {
+    store.upsertTicket(ticket({ id: 'resumable', state: 'working' }))
+    store.startRun('resumable', '2026-11-05T10:00:00.000Z')
+
+    const summary = await reconcile(store, NOW, { resumeWorker: () => true })
+
+    expect(summary.resumed).toBe(1)
+    // the physically interrupted round is closed up front; the resumed round
+    // (started by the hook) opens its own fresh run afterwards
+    const runs = store.listRuns('resumable')
+    expect(runs[0]!.finishedAt).toBe(NOW)
+    expect(runs[0]!.outcome).toBe('interrupted')
+  })
+
   it('keeps awaiting_approval tickets and re-arms their unread notifications', async () => {
     store.upsertTicket(ticket({ id: 't2', state: 'awaiting_approval' }))
     store.addNotification({

@@ -29,3 +29,6 @@ profile/*/.plugin-manager/
 # Playwright transient output
 tests/e2e/test-results/
 tests/e2e/playwright-report/
+
+# Resident worker scratch directories (worker-session working dirs, runtime data)
+resident-work/

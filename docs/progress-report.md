@@ -281,3 +281,26 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 - dsh CLI 无 `web` 子命令——默认启动即 web 服务（`http://127.0.0.1:3080/?token=...`）。
 
 **S7-A-A2 还原（profile 回归原状）**：profile package.json（dependencies + bundles 两处）与 cordis.patch.yml S7-A 配置块移除；pnpm-lock.yaml git 还原；`pnpm install --no-frozen-lockfile` 剪除 73 包、`profile/hibuddy/node_modules/dsh-superagent` 链接移除；删除临时构建目录与 `C:\Users\chenb\.dsh\state\superagent` 状态目录。工作树唯一残留 diff 为用户有意改动（cordis.patch.yml reasoningEffort: low），不入提交。
+
+### S7-B 验收登记：B1–B4 持久化/调度/worker 编排（对应 implementation-plan A4，2026-11-05）
+
+**交付**（各任务一笔提交）：B1 包骨架 + stateDir 拒启闸（4dec2bd）；B2 SQLite(WAL) 编排存储 + proper-lockfile 单实例锁 + 启动重对账（b36391d）；B3 调度器 + Ticket 状态机（940023d）；B4 worker 会话编排（本提交）。包内 vitest 67 例全绿（B1 lock 3 + B2 store 24 + B3 调度/状态机 24 + B4 worker 16）；全仓 typecheck/build 绿；`dsh --profile hibuddy --dump-config` 层序含 `@hibuddy/resident`（config stateDir 必配）。
+
+**B4 实现要点**：
+- worker = 普通 dsh 会话：每票确定性 id `resident-worker-<ticketId>`（brandString），经 `ctx.agents.create/resume` 原生 create/resume；composeAgent 三要素照 web session-controller 模式（`presets.mount(agentCtx, id)` setup 内 + `agentDefaultModel.currentSelection()` 展开进 agentOptions + `meta.agentPreset`），与 @hibuddy/ag-ui-bridge 已真机验证的 openHandle 同构。
+- 工作目录 `<工作区>/resident-work/<ticket-short>/`（dsh 沙箱 workspace-write 根内，派工时 mkdir）；worker slots 默认 2（settings `workerSlots` 可调），canDispatch 先于任何状态变更，拒绝的票留 pending 下个 tick 重试。
+- 轮次生命周期：startRun → open（registry 活实例复用 → resume → create）→ followup(目标+轮次注记) → whenIdle+子代理排空 → sessions.flush → summarizeRound（headless 口径：末条 turn/end reason=completed 且无 agent/error）→ finalize（一次性→completed、周期→pending 保留预置 next_run_at、blocked 留 working 置 awaiting_approval 由 B7 接管、其余→failed 不自动重试 §13.1）。派工失败（open 抛错）→ ticket failed + run outcome failed。
+- 恢复钩子：reconcile `resumeWorker` 落地——先关被中断的开放 run（interrupted）再续跑，recovery note 注入提示（先检查工作目录与既有进度避免重复外部动作）；成功后票回 pending/completed，周期票 next_run_at 过期时经 nextOccurrence 重算。
+- 轮次结束**不 dispose** 会话句柄（dispose 会把 session 从 store 移除）；空闲实例留 registry 由 `agents.get` 复用。
+
+**端到端真机证据（A4 口径，MiniMax-M3.1-Flash）**：
+1. **一次性补偿触发**：注入过期票 tkt-e2e-oneshot（next_run_at 早于 now 数小时）→ 宿启动首 tick 触发，Trigger 落库 `late:true` → pending→working → worker 会话 `resident-worker-tkt-e2e-oneshot` 创建并真实执行 → 工作目录落盘 `D:\GenUI\resident-work\tkt-e2e-oneshot\hello-resident.txt`（内容与目标一致）→ run outcome `ok`（detail 前缀 "late compensation"）→ 票 completed，summary 为模型最终回复全文；会话 JSONL 持久化于 `~/.dsh/sessions/--D-GenUI-resident-work-tkt-e2e-oneshot--/`。
+2. **周期 on-time 闭环**：tkt-e2e-loop（interval 10min）到期准点触发（`late:false, periodic:true`）→ 完成后回 pending，next_run_at = 预置下一轮（准点 +10min，非重算），summary/run/worker_sessions 三表同步。
+3. **重启恢复对账**：下一轮 working 后 2.9s 强杀宿 → 重启 → 对账：旧 run（id 3）关闭 outcome `interrupted`，票恢复续跑（run 4 started 于宿 ready 后 1s 内）→ detail 前缀 "recovery resume after host restart"，模型明确报告「检查了工作目录与上一轮产物、避免重复外部动作」后增量完成 → 回 pending。
+4. **会话真续用**：恢复轮模型引用了上一轮写入的文件内容与时间戳（同会话上下文），证实 resume 复用了持久化会话而非新会话。
+
+**真机暴露并修复的缺口**：原 reconcile 在 resume 钩子成功路径上跳过开放 run 的关闭，遗留孤儿 run（finished_at 永空）。修复：working 票对账时**先**无条件关闭开放 run（interrupted）**再**调钩子；补回归测试 1 例（resumed 路径旧 run 必须关闭）。修复后包内 67 例全绿。
+
+**验收后清理**：E2E 测试票置 stopped、宿进程停毕无残留；`resident-work/` 入 .gitignore（运行期产物）。
+
+**缺口与后续**：①B4 阶段 worker 轮次结束保持会话句柄存活（不 dispose），长周期多票下内存占用待观察（个人场景可接受）；②`turn/end blocked`（审批挂起）的恢复与 awaiting_approval 提升是 B7 审批咬合的范围；③E2E 用直接 SQLite 注票（面板建票入口在 B8）——与 B3 真机口径一致。
