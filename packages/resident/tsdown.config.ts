@@ -1,6 +1,6 @@
 import { defineConfig } from 'tsdown'
 
-const dshExternal = [/^@deepseek-ai\//]
+const dshExternal = [/^@deepseek-ai\//, /^proper-lockfile$/]
 
 /**
  * Two build faces, matching the dsh client-plugin layout (same shape as

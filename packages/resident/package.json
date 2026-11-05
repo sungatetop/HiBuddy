@@ -32,12 +32,17 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
+  "dependencies": {
+    "proper-lockfile": "^4.1.2"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.0",
     "@deepseek-ai/dsh-home-paths": "0.2.1-rc.5",
+    "@types/node": "^24.0.0",
+    "@types/proper-lockfile": "^4.1.4",
     "vitest": "^5.0.5"
   }
 }
