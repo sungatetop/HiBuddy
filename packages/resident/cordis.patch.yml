@@ -1,0 +1,8 @@
+# HiBuddy resident bundle layer: mounts the host-side resident orchestrator.
+# src/index.ts enforces the stateDir deployment gate (resident-design.md D3):
+# no configured persistence directory -> the plugin refuses to start. The
+# deployment-level config row (config.stateDir) lives in the profile patch.
+# The browser half (resident panel, B8) ships via the ./client export.
+- insert:
+    - id: hibuddy-resident
+      name: '@hibuddy/resident'

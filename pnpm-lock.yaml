@@ -130,6 +130,18 @@ importers:
         specifier: ^5.0.5
         version: 5.0.5(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))
 
+  packages/resident:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: ^4.0.0
+        version: 4.0.5(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.6)
+      '@deepseek-ai/dsh-home-paths':
+        specifier: 0.2.1-rc.5
+        version: 0.2.1-rc.5(@deepseek-ai/cordis@4.0.5)
+      vitest:
+        specifier: ^5.0.5
+        version: 5.0.5(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))
+
   packages/web-ui:
     devDependencies:
       '@deepseek-ai/cordis':
@@ -210,6 +222,9 @@ importers:
       '@hibuddy/coworker':
         specifier: workspace:*
         version: link:../../packages/coworker
+      '@hibuddy/resident':
+        specifier: workspace:*
+        version: link:../../packages/resident
       '@hibuddy/web-ui':
         specifier: workspace:*
         version: link:../../packages/web-ui

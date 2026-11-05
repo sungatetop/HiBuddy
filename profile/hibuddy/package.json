@@ -7,6 +7,7 @@
     "@hibuddy/ag-ui-bridge": "workspace:*",
     "@hibuddy/brand": "workspace:*",
     "@hibuddy/coworker": "workspace:*",
+    "@hibuddy/resident": "workspace:*",
     "@hibuddy/web-ui": "workspace:*"
   },
   "dsh": {
@@ -16,6 +17,7 @@
         "@deepseek-ai/dsh-web-app",
         "@hibuddy/brand",
         "@hibuddy/coworker",
+        "@hibuddy/resident",
         "@hibuddy/web-ui",
         "@hibuddy/ag-ui-bridge"
       ]

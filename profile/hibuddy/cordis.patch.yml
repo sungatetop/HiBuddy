@@ -311,3 +311,19 @@
     provider: deepseek-official
     model: deepseek-flash
     reasoningEffort: high
+
+# ---------------------------------------------------------------------------
+# Resident layer persistence root (S7-B1, resident-design.md §8 / decision D3):
+# the deployment-level config for the @hibuddy/resident orchestrator. The
+# stateDir gate is enforced plugin-side: if this row (or the key) is absent the
+# plugin refuses to start. `${DSH_HOME}` is resolved by the plugin against the
+# harness home (honours $DSH_HOME, defaults to ~/.dsh), so the profile stays
+# machine-portable. The SQLite DB itself lands in B2 (orchestrator.sqlite).
+# Row semantics (observed via --dump-config): a later same-id row's `config`
+# replaces the config object wholesale when declared; a row without a config
+# key leaves the lower layer's config intact — hence `name` and `config` are
+# both restated here.
+- id: hibuddy-resident
+  name: "@hibuddy/resident"
+  config:
+    stateDir: "${DSH_HOME}/state/resident"
