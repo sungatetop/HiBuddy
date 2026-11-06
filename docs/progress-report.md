@@ -3,7 +3,7 @@ title: HiBuddy 进度与验收报告
 summary: 各阶段的验收记录与缺口清单：S0 骨架与冒烟链路（2026-11-01）、S1 基础设施复用与编译打包（2026-11-02）、S2 品牌与人设基线（2026-11-03）、S3 审批分级与留痕（2026-11-03）、S3b AG-UI 桥 MVP（2026-11-03）、S4 生成式 UI 与工作台定制（2026-11-04）、S5 P0 收尾与双端交付（2026-11-04）、S6 生态接入与上游跟进（2026-11-04）均通过——P0 交付；S7-A 原型真机验证（2026-11-05：三机制两过一缺口）；每阶段含缺口清单
 keywords: [进度报告, 验收记录, 缺口清单, HiBuddy]
 status: accepted
-date: 2026-11-05
+date: 2026-11-06
 ---
 
 # HiBuddy 进度与验收报告
@@ -304,3 +304,24 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 **验收后清理**：E2E 测试票置 stopped、宿进程停毕无残留；`resident-work/` 入 .gitignore（运行期产物）。
 
 **缺口与后续**：①B4 阶段 worker 轮次结束保持会话句柄存活（不 dispose），长周期多票下内存占用待观察（个人场景可接受）；②`turn/end blocked`（审批挂起）的恢复与 awaiting_approval 提升是 B7 审批咬合的范围；③E2E 用直接 SQLite 注票（面板建票入口在 B8）——与 B3 真机口径一致。
+
+### S7-B 验收登记：B5 monitor 事件源 + 两级过滤与观察模式（对应 implementation-plan A5 收口，2026-11-06）
+
+**交付**（本提交）：`sources.ts`（SourceKind registry，后续事件源零改动接入）+ `monitor.ts`（monitor 事件源：条件/间隔/指纹/退避降级）+ `session-check.ts`（检查/研判会话，composeAgent 三要素）+ `filter.ts`（gate→assessment→observe/auto）+ index.ts 接线。包内 vitest 90 例全绿（新增 monitor 16 + filter 8）；全仓 typecheck/build 绿；dump-config 装配回归正常。
+
+**B5 实现要点**：
+- monitor 实例配置 = `{target, condition, intervalMs, name?, goal?}`（`source_instances.config`）；游标 = 指纹/lastCheckAt/failureCount（`source_instances.cursor`）；轮询 `next_run_at` 索引与 scheduler 同纪律，检查在途不重入，面板可动态启停。
+- **指纹宿侧确定性计算**（真机教训，见下）：检查目标（本地路径 fs 读 / http(s) fetch）由宿读取原文并 sha256 前 16 位作指纹；检查会话只做条件研判（内容节选入 prompt，无需工具）。快照不变不发 Trigger（幂等）。
+- 退避：连续失败按 interval×2^(n−1) 倍增、封顶 30min；连续 3 次失败标记 `degraded` 并出一次性 system 通知记录（FR-10 规则 3；触达面属 B6）；成功即清零自恢复，面板只展示状态。
+- 两级过滤（设计 §6）：gate（确定性）= 来源启停 + 同源开放票去重（pending/working/awaiting_approval 存在即 skip）+ payload 校验；assessment（LLM）仅 inferred 候选（monitor 命中），输入 = 条件 + 检查依据 + 相关票上下文（近 5 条同源票）；研判 act=false 则 skip（不记录）。**观察模式默认**：act=true 仅落 would-act 通知（幂等键 `monitor:<id>:would-act:<指纹>`，同指纹去重）不执行；`settings.observeMode=false`（B8 面板切换）后命中建票 mandate=inferred、origin=`monitor:<id>`、next_run_at=立即到期（照走 scheduler slots 闸）。研判/检查复用同一常驻短会话 `resident-monitor-<sourceId>`（确定性 id 跨重启 resume）。
+
+**端到端真机证据（A5 剩余口径）**：
+1. **观察模式**：注入 monitor 实例（目标 = 工作区文件，间隔 20s）→ 写入告警内容 → 命中 Trigger 落库（指纹 = 内容哈希）→ **仅落 would-act 通知**（type=report，幂等键含新指纹）→ monitor 相关票数 0（未执行）。
+2. **切 auto 后行动**：SQLite 置 `observeMode=false` + 换新告警内容 → 命中建票 tkt_1b6e936f（origin=`monitor:mon-e2e-1`）→ scheduler 派工 → worker 会话真实执行 → completed + 简报入 summary + worker_sessions 落行；模型研判还正确区分了「先前命中已记录」与「新告警需处理」（会话上下文复用生效）。
+3. **slots 并发闸（第 3 票排队）**：并发注入 3 张多步票 → 每 2s 采样 SQLite：连续 6 个采样 **working=2 / pending=1**，maxWorking=2——第 3 票排队后执行。
+
+**真机暴露并修复的设计缺口**：第一版指纹取自模型自由文本摘要（fingerprintInput），两次检查对同一快照给出不同摘要 → 指纹不同 → **重复触发**。修复：指纹改为宿侧对目标原文的确定性哈希（session-check `readTarget`：路径 fs 读、URL fetch 10s 超时），模型只输出 `{conditionMet, rationale}`；同内容永不重复触发（实测验证）。附带收益：检查会话不再需要读文件，单轮纯研判更快更省。
+
+**验收后清理**：monitor 实例置 disabled、测试文件与临时脚本删除、宿进程停毕无残留。
+
+**观察与后续**：①monitor/worker 会话的模型路由取 `agentDefaultModel.currentSelection()`，本机实测解析到 deepseek-official/deepseek-flash（DEEPSEEK_API_KEY 在用户环境时），与 profile `agent-default-model→minimax-cn` 的 patch 优先级关系待与 B7/B8 一并核对（不影响功能，路由有效）；②同指纹重复命中的去重靠通知幂等键与研判会话记忆双保险，B8 面板展示 would-act 记录列表时再评估是否需要专门的观察记录视图；③URL 目标已支持（fetch），网页类目标的大文本节选截断策略（6000 字符）留观察。

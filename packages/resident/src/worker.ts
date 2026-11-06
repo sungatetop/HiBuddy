@@ -72,15 +72,15 @@ interface RoundContext {
 }
 
 /** Filesystem-safe short form of a ticket id for session/dir naming. */
-function shortId(id: string): string {
+export function shortId(id: string): string {
   return id.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 32)
 }
 
-function truncate(text: string): string {
-  return text.length > REPORT_MAX_CHARS ? `${text.slice(0, REPORT_MAX_CHARS)}…` : text
+export function truncate(text: string, max = REPORT_MAX_CHARS): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text
 }
 
-function errorMessage(error: unknown): string {
+export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 

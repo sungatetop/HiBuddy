@@ -18,15 +18,23 @@
  * bridge-verified composeAgent composition, drives the goal turn to
  * quiescence, and persists the outcome; the same orchestrator resumes tickets
  * that were working at shutdown.
+ * B5: the monitor event source (SourceKind registry) + two-stage filtering —
+ * lightweight check sessions emit triggers; the filter's gate (deterministic)
+ * and assessment (LLM, observe mode by default) decide whether a hit becomes
+ * a would-act record or an inferred-mandate ticket.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { FilterPipeline } from './filter.ts'
+import { MonitorSource } from './monitor.ts'
 import { acquireStateLock, type StateLock } from './lock.ts'
 import { reconcile, type ReconcileHooks } from './reconcile.ts'
 import { Scheduler } from './scheduler.ts'
+import { SessionChecker } from './session-check.ts'
+import { SourceRegistry, type TriggerEmitter } from './sources.ts'
 import { resolveStateDir, type ResidentConfig } from './state-dir.ts'
 import { Store } from './store.ts'
-import { WorkerOrchestrator, type WorkerDeps } from './worker.ts'
+import { errorMessage, WorkerOrchestrator, type WorkerDeps } from './worker.ts'
 
 /** Cordis function-plugin name. */
 export const name = 'hibuddy-resident'
@@ -53,6 +61,9 @@ let lock: StateLock | undefined
 
 /** Timer-driven event source over the ticket schedule index; stopped on dispose. */
 let scheduler: Scheduler | undefined
+
+/** Source-kind registry (B5: monitor) + filter pipeline; stopped on dispose. */
+let sources: SourceRegistry | undefined
 
 /** Open store accessor for later layers (scheduler, panel API). */
 export function currentStore(): Store | undefined {
@@ -104,7 +115,29 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
     fired.deferredNoSlot,
   )
 
+  // B5: poll-based event sources over the SourceKind registry (§4). Monitor
+  // checks run through a real session (SessionChecker); every emitted trigger
+  // is persisted first, then handed to the two-stage filter (§6) — observe
+  // mode is the default, so hits only record would-act verdicts until the
+  // panel switches `observeMode` off.
+  const checker = new SessionChecker(deps)
+  const pipeline = new FilterPipeline(store, {
+    assessor: checker,
+    observeMode: () => store!.getSetting<boolean>('observeMode') ?? true,
+  })
+  const emit: TriggerEmitter = (trigger) => {
+    store!.saveTrigger(trigger)
+    void pipeline.handle(trigger)
+  }
+  const registry = new SourceRegistry()
+  registry.register(new MonitorSource(store, checker))
+  const started = registry.startAll(store, emit)
+  sources = registry
+  logger.info('event sources started (armed instances: %d)', started)
+
   return () => {
+    sources?.stopAll()
+    sources = undefined
     scheduler?.stop()
     scheduler = undefined
     store?.close()
