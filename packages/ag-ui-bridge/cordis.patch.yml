@@ -1,8 +1,11 @@
 # HiBuddy AG-UI bridge bundle layer: mounts the host-side plugin.
-# src/index.ts registers POST /agui (AG-UI 1.0 HTTP+SSE transport, ADR-009 §3):
-# dsh SessionEvent -> AG-UI event mapping, approval interrupt/resume loop,
-# dsh-native trust fence (connection.requestRejection) for auth. The bridge
-# only adds a route — dsh's native Web UI channels are untouched.
+# src/index.ts registers the per-session AG-UI HTTP+SSE route (AG-UI 1.0
+# transport, ADR-009 §3): dsh SessionEvent -> AG-UI event mapping, approval
+# interrupt/resume loop, dsh-native trust fence (connection.requestRejection)
+# for auth. ADR-011 D10 moved the product semantics to the butler: the profile
+# patch mounts this row with `config.path: /agui/debug`, so /agui carries only
+# the butler agent (see @hibuddy/resident agui.ts). The bridge only adds a
+# route — dsh's native Web UI channels are untouched.
 - insert:
-    - id: hibuddy-ag-ui-bridge
+    - id: hibbuddy-ag-ui-bridge
       name: '@hibuddy/ag-ui-bridge'

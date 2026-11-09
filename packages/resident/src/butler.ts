@@ -24,8 +24,9 @@ import type { AgentDefaultModelConfig } from '@deepseek-ai/dsh-agent-default-mod
 import type { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { Message, Ticket } from './domain.ts'
-import type { MessageService } from './messages.ts'
+import type { ApprovalBrokerFace, PendingApproval } from './approvals.ts'
+import type { Message, ResidentSettings, Ticket } from './domain.ts'
+import { parseQuietWindow, type MessageService } from './messages.ts'
 import { transitionTicket } from './state-machine.ts'
 import type { Store } from './store.ts'
 import { shortId } from './worker.ts'
@@ -92,6 +93,21 @@ export interface ResidentButler {
   getSession(sessionId: string): SessionInfo | undefined
   listSessions(): SessionInfo[]
   cancelSession(sessionId: string): { ok: boolean; error?: string }
+  /** Pending worker approvals routed into this conversation (ADR-011 D9). */
+  pendingApprovals(): PendingApproval[]
+  /** Butler decision on one pending approval (dangerous ones need a user reply first). */
+  resolveApproval(id: string, approved: boolean): { ok: boolean; error?: string }
+  /** Chat transcript for the UI: user text + butler outbound (events/receipts hidden). */
+  messages(limit?: number): Message[]
+  unreadCount(): number
+  /** Observe outbound rows (butler messages + approval cards) as they are recorded. */
+  onOutbound(listener: (message: Message) => void): () => void
+  /** Resolves once the current turn (if any) finished and the inbound queue is empty. */
+  whenIdle(): Promise<void>
+  /** Current panel-editable settings (design §8, explicit save). */
+  settings(): ResidentSettings
+  /** Persists a settings patch and returns the resulting snapshot. */
+  saveSettings(patch: ResidentSettings): ResidentSettings
   /** Live status for the chat UI ("处理中"). */
   status(): { sessionId: string; state: string; pendingInbound: number }
 }
@@ -124,17 +140,20 @@ export class ButlerRuntime implements ResidentButler {
   readonly sessionId = BUTLER_SESSION_ID
   private readonly deps: ButlerDeps
   private readonly store: Store
-  private readonly messages: MessageService
+  private readonly ledger: MessageService
+  private readonly approvals: ApprovalBrokerFace | undefined
   private agent: Agent | undefined
   private pumping = false
   private stopped = false
   private workspaceRoot: string | undefined
   private restartTimer: ReturnType<typeof setTimeout> | undefined
+  private idleWaiters: Array<() => void> = []
 
-  constructor(deps: ButlerDeps, store: Store, messages: MessageService) {
+  constructor(deps: ButlerDeps, store: Store, messages: MessageService, approvals?: ApprovalBrokerFace) {
     this.deps = deps
     this.store = store
-    this.messages = messages
+    this.ledger = messages
+    this.approvals = approvals
   }
 
   /** Opens (or resumes) the butler session; safe to call once per process. */
@@ -181,7 +200,7 @@ export class ButlerRuntime implements ResidentButler {
 
   /** Records the user's chat message and lets the pump pick it up. */
   postUserMessage(text: string): void {
-    this.messages.postInbound({ kind: 'text', text })
+    this.ledger.postInbound({ kind: 'text', text })
     this.wake()
   }
 
@@ -192,14 +211,14 @@ export class ButlerRuntime implements ResidentButler {
     refs?: Message['refs']
     idempotencyKey?: string
   }): void {
-    this.messages.postInbound(input)
+    this.ledger.postInbound(input)
     this.wake()
   }
 
   /** Serializes turns: at most one butler turn is in flight at any time. */
   wake(): void {
     if (this.stopped || this.pumping || this.agent === undefined) return
-    if (this.messages.pendingInbound(1).length === 0) return
+    if (this.ledger.pendingInbound(1).length === 0) return
     void this.pump()
   }
 
@@ -211,6 +230,69 @@ export class ButlerRuntime implements ResidentButler {
     }
   }
 
+  /**
+   * The user-facing transcript: user text and every outbound row. Event
+   * envelopes and worker receipts are internal inputs and stay invisible.
+   */
+  messages(limit = 200): Message[] {
+    return this.ledger
+      .list({ oldestFirst: true, limit: 400 })
+      .filter((message) => message.direction === 'out' || message.kind === 'text')
+      .slice(-limit)
+  }
+
+  unreadCount(): number {
+    return this.ledger.unreadCount()
+  }
+
+  onOutbound(listener: (message: Message) => void): () => void {
+    return this.ledger.onOutbound(listener)
+  }
+
+  whenIdle(): Promise<void> {
+    if (!this.pumping && this.store.countPendingInbound() === 0) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      this.idleWaiters.push(resolve)
+    })
+  }
+
+  settings(): ResidentSettings {
+    const workerSlots = this.store.getSetting<number>('workerSlots')
+    const observeMode = this.store.getSetting<boolean>('observeMode')
+    const approvalDelegation = this.store.getSetting<boolean>('approvalDelegation')
+    const quietExceptions = this.store.getSetting<unknown>('quietExceptions')
+    return {
+      quietHours: parseQuietWindow(this.store.getSetting<unknown>('quietHours')) ?? null,
+      quietExceptions: Array.isArray(quietExceptions)
+        ? quietExceptions.filter((id): id is string => typeof id === 'string')
+        : [],
+      workerSlots: typeof workerSlots === 'number' ? workerSlots : 2,
+      observeMode: observeMode !== false,
+      approvalDelegation: approvalDelegation !== false,
+    }
+  }
+
+  saveSettings(patch: ResidentSettings): ResidentSettings {
+    if (patch.quietHours !== undefined) {
+      this.store.setSetting('quietHours', patch.quietHours === null ? null : parseQuietWindow(patch.quietHours) ?? null)
+    }
+    if (patch.quietExceptions !== undefined) {
+      this.store.setSetting(
+        'quietExceptions',
+        patch.quietExceptions.filter((id) => typeof id === 'string' && id !== ''),
+      )
+    }
+    if (patch.workerSlots !== undefined) {
+      const slots = Math.max(0, Math.min(8, Math.trunc(patch.workerSlots)))
+      this.store.setSetting('workerSlots', slots)
+    }
+    if (patch.observeMode !== undefined) this.store.setSetting('observeMode', patch.observeMode === true)
+    if (patch.approvalDelegation !== undefined) {
+      this.store.setSetting('approvalDelegation', patch.approvalDelegation === true)
+    }
+    return this.settings()
+  }
+
   // ── delegation surface (butler tools) ─────────────────────────────────────
 
   sendMessage(input: {
@@ -220,7 +302,7 @@ export class ButlerRuntime implements ResidentButler {
   }): { id: string; recorded: boolean } {
     // Butler messages are events, not deduplicable content: the same sentence
     // said twice must produce two bubbles, so the key is per call.
-    const outcome = this.messages.postOutbound({
+    const outcome = this.ledger.postOutbound({
       kind: input.kind,
       text: input.text,
       idempotencyKey: `butler:${randomUUID()}`,
@@ -291,6 +373,15 @@ export class ButlerRuntime implements ResidentButler {
     return { ok: true }
   }
 
+  pendingApprovals(): PendingApproval[] {
+    return this.approvals?.pendingApprovals() ?? []
+  }
+
+  resolveApproval(id: string, approved: boolean): { ok: boolean; error?: string } {
+    if (this.approvals === undefined) return { ok: false, error: 'approval broker is not installed' }
+    return this.approvals.resolveApproval(id, approved, 'butler')
+  }
+
   // ── turn pump ─────────────────────────────────────────────────────────────
 
   private async pump(): Promise<void> {
@@ -305,12 +396,12 @@ export class ButlerRuntime implements ResidentButler {
       // New rows that arrive mid-turn are handled by the next iteration.
       // Bounded by the queue draining; the loop exits as soon as it is empty.
       for (let guard = 0; guard < 50; guard++) {
-        const batch = this.messages.pendingInbound(BATCH_LIMIT)
+        const batch = this.ledger.pendingInbound(BATCH_LIMIT)
         if (batch.length === 0) break
         const agent = this.agent
         if (agent === undefined) break
         await this.runTurn(agent, renderInbound(batch))
-        this.messages.consume(batch.map((message) => message.id))
+        this.ledger.consume(batch.map((message) => message.id))
       }
     } catch (error) {
       // A failed turn must not replay forever: the batch stays unconsumed (so
@@ -329,7 +420,16 @@ export class ButlerRuntime implements ResidentButler {
           lastActiveAt: new Date().toISOString(),
         })
       }
+      this.settleIdle()
     }
+  }
+
+  /** Resolves queued `whenIdle` calls once no turn is running and nothing is queued. */
+  private settleIdle(): void {
+    if (this.pumping || this.store.countPendingInbound() > 0) return
+    const waiters = this.idleWaiters
+    this.idleWaiters = []
+    for (const waiter of waiters) waiter()
   }
 
   private async runTurn(agent: Agent, prompt: string): Promise<void> {

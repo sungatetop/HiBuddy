@@ -276,7 +276,10 @@ export class WorkerOrchestrator implements TicketDispatcher {
       this.store.upsertTicket({ ...ticket, sessionId, updatedAt: new Date().toISOString() })
 
       const priorRounds = Math.max(0, this.store.listRuns(ticket.id).length - 1)
-      return { ticketId: ticket.id, runId, agent, sessionId, prompt: buildPrompt(ticket, priorRounds, info) }
+      const prompt =
+        `${buildPrompt(ticket, priorRounds, info)}\n\n` +
+        `你的工作目录是 ${cwd}（任务中的相对路径以它为基准；“工作目录”即指此处）。`
+      return { ticketId: ticket.id, runId, agent, sessionId, prompt }
     } catch (error) {
       this.store.finishRun(runId, new Date().toISOString(), 'failed', `worker session open failed: ${errorMessage(error)}`)
       if (info.recovery) throw error

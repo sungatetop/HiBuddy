@@ -43,8 +43,14 @@ export const name = 'hibuddy-ag-ui-bridge'
  */
 export const inject = ['agents', 'agentDefaultModel', 'agentPresets']
 
-/** Route path for the AG-UI HTTP+SSE endpoint. */
+/** Route path for the AG-UI HTTP+SSE endpoint (debug per-session bridge). */
 export const AGUI_PATH = '/agui'
+
+/** Plugin config: the per-session bridge is a debug surface and may move off `/agui`. */
+export interface BridgeConfig {
+  /** Route path (default {@link AGUI_PATH}; the product `/agui` belongs to the butler). */
+  path?: string
+}
 
 /** Structural webServer surface used here (avoids a runtime dep on the host package). */
 interface WebServerLike {
@@ -162,8 +168,9 @@ function pumpSessionEvent(record: SessionRecord, event: SessionEvent, threadId: 
 }
 
 /** Wire the AG-UI endpoint for every composition that provides the web carrier. */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config?: BridgeConfig): void {
   const sessions = new BridgeSessions(ctx.agents, ctx.agentDefaultModel, ctx.agentPresets)
+  const path = config?.path ?? AGUI_PATH
 
   // One global feed subscription: events of bridge-owned sessions are mapped
   // onto the session's open SSE run; every other session is ignored.
@@ -198,7 +205,7 @@ export function apply(ctx: Context): void {
     const connection = Reflect.get(scope, 'connection') as FenceConnection
     scope.effect(() => webServer.register({
       kind: 'exact',
-      path: AGUI_PATH,
+      path,
       handler: async (req, res) => {
         const rejection = connection.requestRejection(req)
         if (rejection !== undefined) {
@@ -295,7 +302,7 @@ export function apply(ctx: Context): void {
           }
         }
       },
-    }), `hibuddy-ag-ui-bridge: ${AGUI_PATH}`)
+    }), `hibuddy-ag-ui-bridge: ${path}`)
   })
 }
 

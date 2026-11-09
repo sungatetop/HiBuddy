@@ -360,3 +360,20 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 
 **后续（下一步任务）**：①`resolve_approval` 与 `approval/asked`→审批卡消息接线（B8′ 剩余）；②消息面 HTTP/Typert 读取与发送端点（对话 UI 数据面）；③微信式对话界面（B9′）；④AG-UI 管家层（B10′）；⑤`approvalDelegation` 设置与 S6-2 负向用例。
 
+### S7-B 收官：B8′ 审批代管 + B9′ 微信式界面 + B10′ AG-UI 管家层（ADR-011，2026-11-09）
+
+**交付**：
+- **B8′ 审批接线**：`ApprovalBroker` 以 `prepend: true` 抢占 `approval/request`（先于 coworker 分级与原生交互卡），只接管 `resident-worker-*` 会话；每次审批写一条出站审批卡（`kind=approval`，含编号/工具/理由）+ 一条入站审批事件唤醒管家；Ticket 置 `awaiting_approval`、worker 会话同步标记。管家经 `resolve_approval` 代管；高危理由（`danger-full-access`/sandbox 升级）标记 `requiresUser`，必须存在晚于审批卡的用户文本回复才允许管家落槌。设置 `approvalDelegation=false` 时全部审批升级为用户确认（关闭代管）。30 分钟未决 fail-closed 为 rejected。
+- **B9′ 微信式对话界面**（client 半）：`sidebar.panellist` 注册「管家」入口 + keyed `main` 全屏页；气泡流（用户右绿、管家左白）、时间分组、处理中状态条、审批卡黄底、底部输入框/发送；右上「任务」抽屉——工作项（委派会话目标/状态/简报、待审批列表）与设置（免打扰时段、并行上限、观察模式、审批代管开关，「保存/放弃修改」显式提交）。数据面只有 `/resident/api/messages|sessions|settings`，不接触 dsh 会话渲染，思考不可见为结构性保证。
+- **B10′ AG-UI 管家层**：`/agui` 改由 resident 注册并只承载管家——末条用户消息入站，管家/审批出站消息流式映射为 `TEXT_MESSAGE_START/CONTENT/END`，泵空闲后 `RUN_FINISHED`；单用户单线程、并发 run 返回 409；worker 拓扑不出网。逐会话桥降为调试面，profile patch 将其 `config.path` 移到 `/agui/debug`。
+- **工程修复**：client 半未导出 `inject = ['slots']`，cordis 读取 `ctx.slots` 抛 "without inject"，导致整帧 web boot 失败（`1 entry did not activate`）；补齐后正常。profile patch 覆盖行的 id 必须与 bundle 行逐字符一致（`hibuddy-*` 与 `hibbuddy-ag-ui-bridge` 两种命名并存于既有 bundle，写错即 "entry not found / name mismatch" 且静默跳过）。
+
+**真机证据（2026-11-09）**：
+1. `pnpm exec dsh --profile hibuddy --no-open` 启动零激活警告；`--dump-config` 中 `hibuddy-resident.stateDir` 与 `hibbuddy-ag-ui-bridge.path=/agui/debug` 均生效。
+2. `/agui`：POST 一条用户消息 → `RUN_STARTED` → 管家出站 `TEXT_MESSAGE_START/CONTENT/END`（真实回复全文）→ `RUN_FINISHED`，SSE 全链路通过。
+3. 界面：侧边栏「管家」进入对话页；「任务」抽屉工作项/设置双标签、代管开关与保存按钮齐全；输入「请用一句话回复：界面验收通过」→ 6 秒内出现左侧白色管家气泡「收到，界面验收通过。」、处理中状态消失；用户气泡右对齐微信绿。
+4. 设置 API：GET/POST `/resident/api/settings` 往返一致（workerSlots 3→2、approvalDelegation false→true 已恢复）。
+5. 回归：全仓 `pnpm -r typecheck`、`pnpm -r build` 全绿；`pnpm -r test` 中 resident 120 例、ag-ui-bridge 35 例及其余包全绿；`tests/e2e` 因未设 `HIBUDDY_E2E_URL` 按设计跳过。
+
+**已知边界**：①审批的 Promise 无法跨进程存活，重启后由对账把 `awaiting_approval` 票按恢复口径续跑、worker 重新发起审批（旧审批卡保留为历史消息）；②「定时与监控」实例的创建/编辑入口仍走插件配置与 API，对话抽屉暂只读工作项与设置；③AG-UI 的 `resume` 语义不消费——审批在管家对话内完成（ADR-011 §4.5）。
+

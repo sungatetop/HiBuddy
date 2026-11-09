@@ -114,6 +114,8 @@ export class MessageService {
   private readonly store: Store
   private readonly now: () => Date
   private readonly onInbound?: () => void
+  /** Outbound observers (the AG-UI butler stream); notified after each record. */
+  private readonly outboundListeners = new Set<(message: Message) => void>()
 
   constructor(store: Store, options: MessageServiceOptions = {}) {
     this.store = store
@@ -191,7 +193,20 @@ export class MessageService {
       this.store.markMessageDelivered(message.id)
       message.delivered = true
     }
+    for (const listener of this.outboundListeners) listener(message)
     return { recorded: true, delivered: !quiet, message }
+  }
+
+  /**
+   * Observe every recorded outbound row (butler messages and approval cards).
+   * Consumers run synchronously after the row is durable; a listener must not
+   * throw into the write path.
+   * @param listener - called with the recorded message.
+   * @returns unsubscribe.
+   */
+  onOutbound(listener: (message: Message) => void): () => void {
+    this.outboundListeners.add(listener)
+    return () => this.outboundListeners.delete(listener)
   }
 
   /** Convenience: butler output. */

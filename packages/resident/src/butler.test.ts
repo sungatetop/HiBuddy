@@ -193,3 +193,36 @@ describe('sendMessage', () => {
     expect(service.list({ direction: 'out' })).toHaveLength(2)
   })
 })
+
+describe('settings', () => {
+  it('returns the panel defaults and round-trips an explicit patch', () => {
+    const deps = fakeDeps()
+    const { runtime } = makeRuntime(deps)
+
+    expect(runtime.settings()).toMatchObject({ workerSlots: 2, observeMode: true, approvalDelegation: true })
+
+    const saved = runtime.saveSettings({
+      quietHours: { start: '22:30', end: '07:00' },
+      workerSlots: 4,
+      observeMode: false,
+      approvalDelegation: false,
+    })
+    expect(saved.quietHours).toEqual({ start: '22:30', end: '07:00' })
+    expect(saved.workerSlots).toBe(4)
+    expect(saved.observeMode).toBe(false)
+    expect(saved.approvalDelegation).toBe(false)
+    expect(runtime.settings()).toEqual(saved)
+  })
+
+  it('rejects malformed quiet windows and clamps the worker slots', () => {
+    const deps = fakeDeps()
+    const { runtime } = makeRuntime(deps)
+
+    const saved = runtime.saveSettings({
+      quietHours: { start: '99:00', end: '07:00' },
+      workerSlots: 99,
+    })
+    expect(saved.quietHours).toBeNull()
+    expect(saved.workerSlots).toBe(8)
+  })
+})

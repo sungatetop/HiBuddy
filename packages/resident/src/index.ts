@@ -29,6 +29,9 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { registerResidentAgui } from './agui.ts'
+import { registerResidentApi } from './api.ts'
+import { ApprovalBroker } from './approvals.ts'
 import { ButlerRuntime } from './butler.ts'
 import { FilterPipeline } from './filter.ts'
 import { MonitorSource } from './monitor.ts'
@@ -159,9 +162,19 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
   // with the small hibbuddy-butler preset (whose tools plugin resolves the
   // `resident` service provided here), consumes the inbound queue one turn at
   // a time, and answers only through send_message_to_user.
-  butler = new ButlerRuntime(deps, store, notifier)
+  // ADR-011 D9: worker approvals are routed into the butler conversation.
+  const approvals = new ApprovalBroker(store, notifier)
+  const removeApprovalAnswerer = approvals.install(ctx)
+
+  butler = new ButlerRuntime(deps, store, notifier, approvals)
   setResidentService(butler)
   await butler.start()
+  // Chat data routes for the WeChat-style client panel (same trust fence as
+  // dsh's own routes; headless compositions never register them).
+  registerResidentApi(ctx, () => butler)
+  // ADR-011 D10: /agui carries the butler agent only — worker sessions never
+  // cross that boundary (the per-session bridge is the debug surface).
+  registerResidentAgui(ctx, () => butler)
   logger.info(
     'butler started (session: %s, pending inbound: %d)',
     butler.sessionId,
@@ -172,6 +185,7 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
     butler?.stop()
     butler = undefined
     clearResidentService()
+    removeApprovalAnswerer()
     sources?.stopAll()
     sources = undefined
     scheduler?.stop()

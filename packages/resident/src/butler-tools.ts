@@ -233,7 +233,47 @@ export function createButlerTools() {
     },
   })
 
-  return [sendMessageToUser, createSession, sendToSession, getSession, listSessions, cancelSession]
+  const resolveApproval = defineTool({
+    name: 'resolve_approval',
+    description:
+      'Decide a pending worker approval. Safe/low-risk actions may be decided directly (delegation). ' +
+      'Dangerous escalations (danger-full-access, sandbox escalation) REQUIRE the user first: ' +
+      'ask with send_message_to_user kind=question and wait for the reply — otherwise this call fails.',
+    parameters: {
+      requestId: { type: 'string', required: true, description: 'Approval id from the 【审批请求】 event.' },
+      decision: {
+        type: 'string',
+        enum: ['approved', 'rejected'],
+        required: true,
+        description: 'approved = allow this one call; rejected = deny it.',
+      },
+      reason: { type: 'string', description: 'Short reason recorded in the audit trail (optional).' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          ok: { type: 'boolean', required: true, description: 'Whether the decision was accepted.' },
+          error: { type: 'string', description: 'Reason when ok=false.' },
+        },
+      },
+      render: (_args, value) => text(value.ok ? '审批决定已提交。' : `决定未生效：${value.error ?? '未知原因'}`),
+    },
+    async execute(args) {
+      return requireService().resolveApproval(args.requestId, args.decision === 'approved')
+    },
+  })
+
+  return [
+    sendMessageToUser,
+    createSession,
+    sendToSession,
+    getSession,
+    listSessions,
+    cancelSession,
+    resolveApproval,
+  ]
 }
 
 /** Registers the butler tools in the calling agent scope. */

@@ -310,7 +310,7 @@
   config:
     provider: deepseek-official
     model: deepseek-flash
-    reasoningEffort: high
+    reasoningEffort: low
 
 # ---------------------------------------------------------------------------
 # Resident layer persistence root (S7-B1, resident-design.md §8 / decision D3):
@@ -327,3 +327,14 @@
   name: "@hibuddy/resident"
   config:
     stateDir: "${DSH_HOME}/state/resident"
+
+# ---------------------------------------------------------------------------
+# AG-UI layer position (ADR-011 D10 / §4.5): the product endpoint /agui carries
+# the resident butler only (registered by @hibuddy/resident). The per-session
+# bridge is demoted to a debug surface and moves to /agui/debug, so both routes
+# can coexist without a duplicate path registration. Row semantics as above:
+# name and config are restated on a same-id override.
+- id: hibbuddy-ag-ui-bridge
+  name: "@hibuddy/ag-ui-bridge"
+  config:
+    path: "/agui/debug"
