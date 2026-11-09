@@ -15,6 +15,7 @@
 
 | ADR | 摘要 |
 |---|---|
+| [ADR-011-butler-conversation-layer.md](decisions/ADR-011-butler-conversation-layer.md) | 常驻智能体形态修订：管家会话（常驻 Agent Loop、hibbuddy-butler 小工具面）直接面向用户——只经 send_message_to_user 出站、经 create_session 指派 worker（会话即 worker）；微信式对话界面只渲染 in/out 消息；审批分级代管或升级确认；事件源确定性 + 管家决策；Ticket 退化为委派账本；AG-UI 应用于管家层；取代 resident-design D1 |
 | [ADR-010-resident-proactive-agent.md](decisions/ADR-010-resident-proactive-agent.md) | 产品定位修订——个人常驻智能体：常驻运行/事件驱动/主动执行/人管目标与验收（对标 dsh Super-agent 与 OpenMuse）；实现路线混合式——S7-A 先装 dsh-superagent-prototype 真机验证 dsh 常驻机制，S7-B 自研 @hibuddy/resident 面向个人场景（首批事件源=定时/周期任务）；S6 收尾不受影响，AG-UI 桥与常驻层正交 |
 | [ADR-007-generative-ui-format.md](decisions/ADR-007-generative-ui-format.md) | 生成式 UI 产出格式定案「组件指令」：模型经自定义 render_ui 工具输出 UI 指令 JSON，@hibuddy/web-ui 预置信任组件注册表渲染（内嵌=tool.call.toolview keyed slot、画布=sidebarRight tab 跨轮驻留版本递增），交互经 conversation.send 结构化回传；否决 ui4a harness 直接写前端代码路线（同源渲染无隔离，违反 SR-02 与验收 A5），iframe 生成代码列为 P1 演进候选 |
 | [ADR-009-s3-rescope-agui-bridge.md](decisions/ADR-009-s3-rescope-agui-bridge.md) | S3 范围缩减与 AG-UI 桥立项：实证 dsh 已自带完整工具面（preset-standard 14+ 官方工具）与审批机制（沙箱模式×执行期升级+approval/request waterfall）后，S3 不再自研工具与审批主干，缩减为「审批 answerer 增量」（L1 免再询记忆/审批卡参数全文/L2 默认关闭）；AG-UI 桥提前为 S3b 专项——插件内 ctx.webServer 注册 /agui SSE 端点（方案 A，dsh-sdk 外挂方案因缺审批应答否决），MVP 验收=CopilotKit 接入闭环 |
@@ -29,7 +30,7 @@
 
 | 文档 | 摘要 |
 |---|---|
-| [resident-design.md](module-design/resident-design.md) | @hibuddy/resident 常驻层模块设计（S7-B，accepted 2026-11-05）：worker 会话即普通 dsh 会话，其上加确定性常驻编排层（事件源 scheduler/monitor → 两级过滤+观察模式 → Ticket 状态机+worker slots → 通知先落库再触达 → SQLite stateDir 部署闸+启动重对账）；worker 沿用 standard preset 沙箱 + coworker 审批分级（不采纳 danger-full-access）；常驻面板四 tab Web 先行；含用户 worker 设计要点原话与 S6-2 自动 resume 安全约束 |
+| [resident-design.md](module-design/resident-design.md) | @hibuddy/resident 常驻层模块设计（S7-B，accepted 2026-11-05，2026-11-09 依 ADR-011 修订）：管家会话直接面向用户（常驻 Agent Loop、hibbuddy-butler 小工具面、send_message_to_user 出站、create_session 指派 worker）→ 事件源 scheduler/monitor 确定性产出事件信封 → 两级过滤/观察模式 → 委派账本 + worker slots → 消息账本（in/out）+ 微信式对话界面 → SQLite stateDir 部署闸 + 启动重对账；worker 沿用 standard preset 沙箱 + coworker 审批分级（不采纳 danger-full-access），管家分级代管审批；含用户设计要点原话与 S6-2 自动 resume 安全约束 |
 
 ## 参考资料（docs/references/）
 

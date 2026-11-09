@@ -347,3 +347,16 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 
 **观察与后续**：①触达渠道首批只有常驻面板（未读计数 + 通知 tab），桌面通知/IM 属后续渠道扩展，`delivered` 语义已按「已触达任一渠道」预留；②免打扰窗与例外的面板编辑入口在 B8；③`result` 通知默认用内容指纹去重——周期任务连续两轮产出完全相同的简报时只留一条，若面板需要逐轮留痕，B8 再评估改为带轮次号的显式键。
 
+### S7-B 形态修订：B6′ 消息账本 + B7′ 管家会话 + B8′ 委派工具（ADR-011，2026-11-09）
+
+**交付**（两笔提交：`f007dde` 消息账本、本提交管家运行时）：
+- **B6′**：`messages` 表（direction/kind/title/text/refs/idempotency/read/delivered/consumed_at）取代 notifications；`MessageService` 统一写入（先落库、幂等键、免打扰窗、补投、入站队列游标）；SQLite schema v1→v2 自动迁移（原通知行映射为 out 消息，旧表删除）；worker/filter/monitor 的系统问题与结果改为 **inbound**（回执/事件），出站只保留管家消息。
+- **B7′**：`ButlerRuntime`——`resident-butler` 常驻会话（composeAgent 三要素 + `hibbuddy-butler` preset），入站单轮串行 + 队列 + 一批多条的周转（renderInbound 带【用户】【事件】【任务回执】【审批请求】标签），配置 `butler_state` 持久化，重启 resume；inbound 写入即唤醒泵。
+- **B8′（首批）**：`hibbuddy-butler` preset（persona + agent-instructions + time-context + butler-tools + compaction，**无 shell/fs/web/subagent**）；工具面 `send_message_to_user` / `create_session` / `send_to_session` / `get_session` / `list_sessions` / `cancel_session`；`create_session` 写委派账本（pending、立即到期）由调度器在 ≤1 tick 内派工；工具在 preset 作用域注册（worker/普通会话不可见），通过模块级 service-ref 懒取管家服务（避免 preset 先于宿主 apply 激活时的注入顺序死锁）。
+
+**真机证据**：`dsh --profile hibuddy` 启动后 `butler_state = {session_id: resident-butler, state: idle}`，装配零激活警告；`--dump-config` 含 `hibbuddy-butler-preset` 与 `@hibbuddy/resident/butler-tools` 行。包内 vitest 113 例全绿（新增 butler 8、messages 14，消息/账本/队列语义改造后过滤/监控/对账用例同步更新）。
+
+**已暴露并修复的装配缺口**：butler-tools 最初声明 `inject: ['tools','resident']` 依赖宿主 apply 期 `ctx.provide` 的服务，preset 注册时先行激活 → 插件 apply 抛错、butler 未启动（真机表现为 `butler_state` 空）；改为模块级 service-ref + 惰性解析后恢复。
+
+**后续（下一步任务）**：①`resolve_approval` 与 `approval/asked`→审批卡消息接线（B8′ 剩余）；②消息面 HTTP/Typert 读取与发送端点（对话 UI 数据面）；③微信式对话界面（B9′）；④AG-UI 管家层（B10′）；⑤`approvalDelegation` 设置与 S6-2 负向用例。
+
