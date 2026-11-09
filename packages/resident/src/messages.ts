@@ -102,6 +102,8 @@ export function contentKey(
 export interface MessageServiceOptions {
   /** Injectable clock for determinism in tests. */
   now?: () => Date
+  /** Called after a new inbound row lands — the butler pump's wake signal. */
+  onInbound?: () => void
 }
 
 /**
@@ -111,10 +113,12 @@ export interface MessageServiceOptions {
 export class MessageService {
   private readonly store: Store
   private readonly now: () => Date
+  private readonly onInbound?: () => void
 
   constructor(store: Store, options: MessageServiceOptions = {}) {
     this.store = store
     this.now = options.now ?? (() => new Date())
+    this.onInbound = options.onInbound
   }
 
   /** Configured do-not-disturb window, when valid. */
@@ -177,7 +181,10 @@ export class MessageService {
     }
     if (!recorded) return { recorded: false, delivered: false }
 
-    if (input.direction === 'in') return { recorded: true, delivered: true, message }
+    if (input.direction === 'in') {
+      this.onInbound?.()
+      return { recorded: true, delivered: true, message }
+    }
 
     const quiet = this.silenced(message.refs, now)
     if (!quiet) {

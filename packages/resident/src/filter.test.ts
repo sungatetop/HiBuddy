@@ -129,7 +129,7 @@ describe('filter: assessment and observe mode', () => {
 
     expect(await pipeline.handle(hitTrigger())).toBe('observed')
 
-    const reports = store.listMessages().filter((m) => m.kind === 'report')
+    const reports = store.listMessages().filter((m) => m.kind === 'event')
     expect(reports).toHaveLength(1)
     expect(reports[0]!.idempotencyKey).toBe(`monitor:m1:would-act:${fingerprintOf('A')}`)
     expect(reports[0]!.text).toContain('值得处理')
@@ -137,7 +137,7 @@ describe('filter: assessment and observe mode', () => {
 
     // same fingerprint re-hit → deduped by the idempotency key
     expect(await pipeline.handle(hitTrigger())).toBe('observed')
-    expect(store.listMessages().filter((m) => m.kind === 'report')).toHaveLength(1)
+    expect(store.listMessages().filter((m) => m.kind === 'event')).toHaveLength(1)
   })
 
   it('acts in auto mode: inferred ticket, due immediately', async () => {

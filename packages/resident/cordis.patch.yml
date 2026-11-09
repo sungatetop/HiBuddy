@@ -1,8 +1,55 @@
-# HiBuddy resident bundle layer: mounts the host-side resident orchestrator.
-# src/index.ts enforces the stateDir deployment gate (resident-design.md D3):
-# no configured persistence directory -> the plugin refuses to start. The
-# deployment-level config row (config.stateDir) lives in the profile patch.
-# The browser half (resident panel, B8) ships via the ./client export.
+# HiBuddy resident bundle layer: mounts the host-side resident orchestrator and
+# the butler agent preset (ADR-011). src/index.ts enforces the stateDir
+# deployment gate (resident-design.md D3): no configured persistence directory
+# -> the plugin refuses to start. The deployment-level config row
+# (config.stateDir) lives in the profile patch.
+# The browser half (WeChat-style conversation view, B9′) ships via the ./client
+# export.
 - insert:
     - id: hibuddy-resident
       name: '@hibuddy/resident'
+    # The butler session's preset: the SAME Agent Loop as workers, but with a
+    # deliberately small tool face — conversation, delegation, monitoring and
+    # approval decisions only. No shell, filesystem, web or subagent tools.
+    - id: hibbuddy-butler-preset
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: hibbuddy-butler
+        name: HiBuddy 管家
+        description: 常驻管家会话专用，不供手动选择。只含对话、委派、监控与审批工具，不含执行类工具。
+        order: 92
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: >-
+                你是 HiBuddy 管家，用户唯一直接对话的常驻智能体。你的职责是理解用户意图、管理任务、
+                指派执行会话、汇报结果，并在需要时请用户确认。你只能通过 send_message_to_user 与用户说话——
+                普通助手文本不会显示给用户。执行类工作不要自己做：用 create_session 指派 worker 会话，
+                用 send_to_session 追加指令，用 get_session / list_sessions 监控，用 cancel_session 叫停。
+                用户的思考与你的思考都不可见：在聊天里只表现为消息的往来。保持简洁、可靠、像一位称职的管家。
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: hibuddy-butler-tools
+            name: '@hibuddy/resident/butler-tools'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024

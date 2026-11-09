@@ -273,10 +273,10 @@ export class MonitorSource implements SourceKind {
       const delay = backoffDelayMs(config.intervalMs, failureCount, this.backoffCapMs)
       this.saveSource(instance, { ...cursor, lastCheckAt: nowIso, failureCount }, nowIso, delay, degraded)
       if (degraded && !instance.degraded) {
-        // One-shot system record through the message ledger (§9); the
+        // One-shot system event → inbound to the butler (ADR-011); the
         // idempotency key keeps it one-shot per degradation episode.
-        this.notifier.postOutbound({
-          kind: 'system',
+        this.notifier.postInbound({
+          kind: 'event',
           refs: { sourceId: instance.id },
           idempotencyKey: `monitor:${instance.id}:degraded`,
           title: `监控「${label}」连续检查失败，已标记降级`,

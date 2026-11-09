@@ -287,9 +287,9 @@ export class WorkerOrchestrator implements TicketDispatcher {
           summary: `worker 会话打开失败：${truncate(errorMessage(error))}`,
           sessionId,
         })
-        // System problem through the message ledger (design §9).
-        this.notifier.postOutbound({
-          kind: 'system',
+        // System problem → inbound event; the butler relays it (ADR-011).
+        this.notifier.postInbound({
+          kind: 'event',
           refs: { ticketId: ticket.id },
           title: `任务启动失败：${truncate(ticket.goal, TITLE_GOAL_MAX_CHARS)}`,
           text: `worker 会话打开失败：${truncate(errorMessage(error))}`,
@@ -379,10 +379,10 @@ export class WorkerOrchestrator implements TicketDispatcher {
         } else {
           transitionTicket(this.store, current, 'completed', { summary, sessionId: round.sessionId })
         }
-        // B6 result message — persist before deliver; the default content
-        // fingerprint key dedupes byte-identical periodic results (design §9).
-        this.notifier.postOutbound({
-          kind: 'report',
+        // Worker receipt → inbound to the butler, who decides what to tell the
+        // user (ADR-011: only the butler speaks to the user).
+        this.notifier.postInbound({
+          kind: 'receipt',
           refs: { ticketId: round.ticketId, sessionId: round.sessionId },
           title: `任务完成：${truncate(current.goal, TITLE_GOAL_MAX_CHARS)}`,
           text: summary !== '' ? summary : '本轮已完成，未产生摘要文本。',
@@ -423,9 +423,9 @@ export class WorkerOrchestrator implements TicketDispatcher {
         summary: truncate(detail),
         sessionId: round.sessionId,
       })
-      // System problem through the message ledger (design §9).
-      this.notifier.postOutbound({
-        kind: 'system',
+      // System problem → inbound event; the butler relays it (ADR-011).
+      this.notifier.postInbound({
+        kind: 'event',
         refs: { ticketId: round.ticketId, sessionId: round.sessionId },
         title: `任务失败：${truncate(current.goal, TITLE_GOAL_MAX_CHARS)}`,
         text: truncate(detail),

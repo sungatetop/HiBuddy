@@ -18,7 +18,7 @@ const dshExternal = [/^@deepseek-ai\//, /^proper-lockfile$/]
  */
 export default defineConfig([
   {
-    entry: ['src/index.ts'],
+    entry: { index: 'src/index.ts', 'butler-tools': 'src/butler-tools.ts' },
     outDir: 'lib',
     format: 'esm',
     platform: 'node',

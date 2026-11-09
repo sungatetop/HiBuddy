@@ -121,8 +121,8 @@ export class FilterPipeline {
     if (this.options.observeMode()) {
       // Observe mode: record the would-act verdict only (design §6). The
       // idempotency key dedupes re-hits of the same fingerprint.
-      this.notifier.postOutbound({
-        kind: 'report',
+      this.notifier.postInbound({
+        kind: 'event',
         refs: { sourceId: trigger.sourceId },
         idempotencyKey: `monitor:${trigger.sourceId}:would-act:${payload.fingerprint}`,
         title: '观察模式：监控命中，未执行行动',
@@ -130,7 +130,7 @@ export class FilterPipeline {
           `检查目标「${payload.target}」满足条件「${payload.condition}」。\n` +
           `检查依据：${payload.rationale}\n` +
           `研判：${assessment.reason}\n` +
-          '（观察模式下仅记录；切换为行动模式后，下次命中才会创建工作项。）',
+          '（观察模式：请判断是否需要告知用户；如需行动，征得用户同意后再 create_session。）',
       })
       return 'observed'
     }

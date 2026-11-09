@@ -29,11 +29,13 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { ButlerRuntime } from './butler.ts'
 import { FilterPipeline } from './filter.ts'
 import { MonitorSource } from './monitor.ts'
 import { acquireStateLock, type StateLock } from './lock.ts'
 import { MessageService } from './messages.ts'
 import { reconcile, type ReconcileHooks } from './reconcile.ts'
+import { clearResidentService, setResidentService } from './service-ref.ts'
 import { Scheduler } from './scheduler.ts'
 import { SessionChecker } from './session-check.ts'
 import { SourceRegistry, type TriggerEmitter } from './sources.ts'
@@ -70,6 +72,9 @@ let scheduler: Scheduler | undefined
 /** Source-kind registry (B5: monitor) + filter pipeline; stopped on dispose. */
 let sources: SourceRegistry | undefined
 
+/** The resident butler (ADR-011): the user-facing Agent Loop + tool service. */
+let butler: ButlerRuntime | undefined
+
 /** Open store accessor for later layers (scheduler, panel API). */
 export function currentStore(): Store | undefined {
   return store
@@ -91,7 +96,8 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
   store = Store.open(stateDir)
 
   // B6′: the single conversation-ledger write path shared by worker/filter/monitor.
-  const notifier = new MessageService(store)
+  // Every inbound row wakes the butler pump (ADR-011 D8).
+  const notifier = new MessageService(store, { onInbound: () => butler?.wake() })
 
   // B4: worker orchestration over ordinary dsh sessions. The inject list
   // guarantees the three core services exist; the reconciler uses the same
@@ -149,7 +155,23 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
   sources = registry
   logger.info('event sources started (armed instances: %d)', started)
 
+  // ADR-011: the butler is the only Agent Loop facing the user. It is mounted
+  // with the small hibbuddy-butler preset (whose tools plugin resolves the
+  // `resident` service provided here), consumes the inbound queue one turn at
+  // a time, and answers only through send_message_to_user.
+  butler = new ButlerRuntime(deps, store, notifier)
+  setResidentService(butler)
+  await butler.start()
+  logger.info(
+    'butler started (session: %s, pending inbound: %d)',
+    butler.sessionId,
+    store.countPendingInbound(),
+  )
+
   return () => {
+    butler?.stop()
+    butler = undefined
+    clearResidentService()
     sources?.stopAll()
     sources = undefined
     scheduler?.stop()
