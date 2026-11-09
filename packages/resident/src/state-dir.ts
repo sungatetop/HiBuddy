@@ -24,6 +24,11 @@ export const DSH_HOME_PLACEHOLDER = '${DSH_HOME}'
 export interface ResidentConfig {
   /** Durable-state root (SQLite DB, locks, per-ticket work dirs live under it). */
   stateDir?: string
+  /**
+   * Workspace the butler binds to (id, title, or canonical path). Omitted =
+   * the first registered dsh workspace (the user's most recent project).
+   */
+  workspace?: string
 }
 
 /** Failure of the stateDir gate, with a user-facing reason. */

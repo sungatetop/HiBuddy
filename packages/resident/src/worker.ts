@@ -30,7 +30,7 @@
  * `agents.get` on the next round or resumed from persistence after a restart.
  */
 
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -221,8 +221,19 @@ export class WorkerOrchestrator implements TicketDispatcher {
     }
   }
 
-  /** The dsh workspace root (sandbox write root), resolved once per process. */
-  private async resolveWorkspaceRoot(): Promise<string> {
+  /**
+   * The sandbox write root for a round: the ticket's delegated workspace when
+   * one was chosen, else the process-level workspace root (legacy tickets).
+   * The workspace must exist — a vanished workspace fails the round instead of
+   * silently recreating a tree somewhere unexpected.
+   */
+  private async resolveWorkspaceRoot(ticket: Ticket): Promise<string> {
+    if (ticket.workspace !== undefined && ticket.workspace !== null) {
+      if (!existsSync(ticket.workspace) || !statSync(ticket.workspace).isDirectory()) {
+        throw new Error(`workspace "${ticket.workspace}" no longer exists`)
+      }
+      return ticket.workspace
+    }
     if (this.workspaceRoot !== undefined) return this.workspaceRoot
     const fs = this.deps.ctx.get('fs')
     this.workspaceRoot = fs ? fs.processPath(await fs.resolve('.')) : process.cwd()
@@ -241,7 +252,8 @@ export class WorkerOrchestrator implements TicketDispatcher {
       info.recovery ? 'recovery resume after host restart' : info.late ? 'late compensation' : undefined,
     )
     try {
-      const cwd = join(await this.resolveWorkspaceRoot(), 'resident-work', shortId(ticket.id))
+      const root = await this.resolveWorkspaceRoot(ticket)
+      const cwd = join(root, 'resident-work', shortId(ticket.id))
       mkdirSync(cwd, { recursive: true })
 
       // composeAgent three elements (D2) — bridge-verified parity.

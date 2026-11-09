@@ -49,6 +49,8 @@ export interface Ticket {
   plan?: string
   /** Worker-produced summary of the latest run outcome. */
   summary?: string
+  /** Canonical workspace path the worker executes under (ADR-011 delegation). */
+  workspace?: string | null
   /** Current worker session id, when one exists. */
   sessionId?: string | null
   /** Set by startup reconciliation when a working ticket could not be resumed. */

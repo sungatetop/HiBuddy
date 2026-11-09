@@ -75,11 +75,48 @@ export function createButlerTools() {
     },
   })
 
+  const listWorkspaces = defineTool({
+    name: 'list_workspaces',
+    description:
+      'List the dsh workspaces this product knows about (id, title, path). ' +
+      'Use it before delegating when the user names a project/workspace, then pass the workspace to create_session.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          workspaces: {
+            type: 'json',
+            required: true,
+            description: 'Array of {id, title, path}.',
+          },
+        },
+      },
+      render: (_args, value) => {
+        const workspaces = (value as { workspaces?: Array<{ id: string; title: string; path: string }> }).workspaces ?? []
+        if (workspaces.length === 0) return text('当前没有注册工作区（create_session 将退回默认工作目录）。')
+        return text(
+          ['可用工作区：', ...workspaces.map((entry) => `- ${entry.title}：${entry.path}（id ${entry.id}）`)].join('\n'),
+        )
+      },
+    },
+    async execute() {
+      const workspaces: Array<Record<string, string>> = requireService().listWorkspaces().map((workspace) => ({
+        id: workspace.id,
+        title: workspace.title,
+        path: workspace.path,
+      }))
+      return { workspaces }
+    },
+  })
+
   const createSession = defineTool({
     name: 'create_session',
     description:
       'Delegate a goal to a NEW worker session (a real dsh session, not a subagent). ' +
       'Returns immediately with the deterministic session id; the scheduler starts it within a second. ' +
+      'Pass workspace (id/title/path) to make the worker execute inside that workspace; omitted = the butler\'s bound workspace. ' +
       'The worker executes autonomously — monitor it with get_session/list_sessions and steer it with send_to_session.',
     parameters: {
       goal: {
@@ -91,6 +128,12 @@ export function createButlerTools() {
         type: 'string',
         description: 'Short human-readable label for the task (optional).',
       },
+      workspace: {
+        type: 'string',
+        description:
+          'Target workspace (id, title, or canonical path) — the worker works under <workspace>/resident-work/. ' +
+          'Use list_workspaces to discover them; omit to use the butler\'s default workspace (optional).',
+      },
     },
     output: {
       schema: {
@@ -100,14 +143,21 @@ export function createButlerTools() {
           ticketId: { type: 'string', required: true, description: 'Delegation ledger id.' },
           sessionId: { type: 'string', required: true, description: 'Worker session id.' },
           state: { type: 'string', required: true, description: 'Always "pending" at creation.' },
+          workspace: { type: 'string', description: 'Workspace path the worker will execute under.' },
         },
       },
-      render: (args, value) => text(`已指派任务（会话 ${value.sessionId}）：${args.goal.slice(0, 80)}`),
+      render: (args, value) =>
+        text(
+          `已指派任务（会话 ${value.sessionId}${value.workspace !== undefined ? `，工作区 ${value.workspace}` : ''}）：` +
+            args.goal.slice(0, 80),
+        ),
     },
     async execute(args) {
-      return requireService().createSession(
-        args.title !== undefined ? { goal: args.goal, title: args.title } : { goal: args.goal },
-      )
+      return requireService().createSession({
+        goal: args.goal,
+        ...(args.title !== undefined ? { title: args.title } : {}),
+        ...(args.workspace !== undefined ? { workspace: args.workspace } : {}),
+      })
     },
   })
 
@@ -190,12 +240,26 @@ export function createButlerTools() {
           sessions: {
             type: 'json',
             required: true,
-            description: 'Array of {sessionId, ticketId, goal, state, lastReport?, summary?}.',
+            description: 'Array of {sessionId, ticketId, goal, state, workspace?, lastReport?, summary?}.',
           },
         },
       },
-      render: (value) =>
-        text(`共 ${(value as { sessions?: unknown[] }).sessions?.length ?? 0} 个已指派会话。`),
+      render: (_args, value) => {
+        const sessions = (value as {
+          sessions?: Array<{ sessionId: string; state: string; goal: string; workspace?: string }>
+        }).sessions ?? []
+        if (sessions.length === 0) return text('当前没有已指派会话。')
+        return text(
+          [
+            `共 ${sessions.length} 个已指派会话：`,
+            ...sessions.map(
+              (session) =>
+                `- ${session.sessionId}｜${session.state}｜${session.goal.slice(0, 60)}` +
+                `${session.workspace !== undefined ? `｜工作区 ${session.workspace}` : ''}`,
+            ),
+          ].join('\n'),
+        )
+      },
     },
     async execute() {
       const sessions: Array<Record<string, string>> = requireService().listSessions().map((session) => ({
@@ -203,6 +267,7 @@ export function createButlerTools() {
         ticketId: session.ticketId,
         goal: session.goal,
         state: session.state,
+        ...(session.workspace !== undefined ? { workspace: session.workspace } : {}),
         ...(session.lastReport !== undefined ? { lastReport: session.lastReport } : {}),
         ...(session.summary !== undefined ? { summary: session.summary } : {}),
       }))
@@ -267,6 +332,7 @@ export function createButlerTools() {
 
   return [
     sendMessageToUser,
+    listWorkspaces,
     createSession,
     sendToSession,
     getSession,

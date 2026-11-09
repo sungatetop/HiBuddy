@@ -327,6 +327,11 @@
   name: "@hibuddy/resident"
   config:
     stateDir: "${DSH_HOME}/state/resident"
+    # Butler workspace binding (ADR-011 delegation): id, title, or canonical
+    # path. Omitted = the first registered dsh workspace (most recent project).
+    # The butler session's cwd becomes this path, so it appears under that
+    # workspace; create_session may still target any other workspace per task.
+    # workspace: "HibuddyWorkspace"
 
 # ---------------------------------------------------------------------------
 # AG-UI layer position (ADR-011 D10 / §4.5): the product endpoint /agui carries

@@ -45,6 +45,7 @@ export interface SessionInfo {
   ticketId: string
   goal: string
   state: string
+  workspace?: string
   lastReport?: string
   summary?: string
 }

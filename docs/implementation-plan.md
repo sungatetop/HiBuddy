@@ -197,7 +197,7 @@ date: 2026-11-09
    - B9 E2E 验收：定时任务创建→到期→worker 执行→通知闭环；重启恢复对账；免打扰窗；审批卡与待批提升；观察模式 would-act 记录。
    - **B6′ 消息账本**（ADR-011，取代原 B6 通知面）：messages 表（direction/kind/引用/幂等/已读/触达）、由 notifications 迁移、免打扰窗、启动补投、客户端读取 API。
    - **B7′ 管家会话运行时**：`hibuddy-butler` preset（小工具面：send_message_to_user / create_session / send_to_session / get_session / list_sessions / cancel_session / resolve_approval / 记忆）、`resident-butler` 常驻会话、入站队列（用户消息/事件信封/回执/审批）、单轮串行与事件聚合、重启恢复（会话 resume + 未消化入站重投）。
-   - **B8′ 委派与审批接线**：create_session 走 `agents.create`（非 subagents）→ 委派账本；scheduler/monitor 产物改为事件信封投递管家；worker 回执入站；审批分级代管（L0/L1 与免再询 grant 命中可代答，L2/越权升级 question）+ S6-2 负向用例。
+   - **B8′ 委派与审批接线**：create_session 走 `agents.create`（非 subagents）→ 委派账本；**workspace 参数（id/标题/路径）写入 `tickets.workspace`，worker 在 `<workspace>/resident-work/<ticket-short>` 执行；list_workspaces 供管家查询**；scheduler/monitor 产物改为事件信封投递管家；worker 回执入站；审批分级代管（L0/L1 与免再询 grant 命中可代答，L2/越权升级 question）+ S6-2 负向用例。
    - **B9′ 微信式对话界面**（client 半）：气泡流（左管家/右用户）、时间分组、底部输入框、处理中状态条、内嵌审批卡、任务抽屉（工作项/定时监控/设置）、显式保存；"思考不可见"验收（无 assistant 文本/tool call）。
    - **B10′ AG-UI 管家层**：`/agui` 主体改为管家 agent（入站→队列，出站→TEXT_MESSAGE）；逐会话桥降为调试开关；E2E 与全仓回归。
 4. 回归：能力面完整性回归（横切纪律 1）+ 既有 vitest/E2E 全绿 + 常驻链路新增契约测试（调度/过滤/Ticket 状态机/通知幂等）。

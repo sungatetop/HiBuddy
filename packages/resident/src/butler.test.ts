@@ -29,7 +29,7 @@ function fakeAgent(options: { live?: boolean } = {}) {
   return { agent, followups }
 }
 
-function fakeDeps(options: { live?: boolean; events?: () => void } = {}): ButlerDeps & {
+function fakeDeps(options: { live?: boolean; events?: () => void; workspaces?: Array<{ id: string; path: string; title: string }> } = {}): ButlerDeps & {
   created: CreateAgentOptions[]
   liveAgent?: Agent
   liveFollowups: string[]
@@ -38,7 +38,10 @@ function fakeDeps(options: { live?: boolean; events?: () => void } = {}): Butler
   const live = options.live === true ? fakeAgent() : undefined
   const ctx = {
     on: () => () => {},
-    get: () => undefined,
+    get: (name: string) =>
+      name === 'workspaceRegistry'
+        ? { list: () => options.workspaces ?? [] }
+        : undefined,
   } as unknown as Context
   const agents = {
     get: (id: string) =>
@@ -177,6 +180,45 @@ describe('delegation surface', () => {
     const listed = runtime.listSessions()
     expect(listed).toHaveLength(1)
     expect(listed[0]!.sessionId).toBe(created.sessionId)
+  })
+})
+
+describe('workspaces', () => {
+  const workspaces = [
+    { id: 'w1', path: 'D:\\ProjectA', title: 'ProjectA' },
+    { id: 'w2', path: 'D:\\ProjectB', title: 'ProjectB' },
+  ]
+
+  it('binds the butler session to the first registered workspace', async () => {
+    const deps = fakeDeps({ workspaces })
+    const { runtime } = makeRuntime(deps)
+    await runtime.start()
+
+    expect(deps.created[0]!.meta?.cwd).toBe('D:\\ProjectA')
+  })
+
+  it('resolves a workspace by id, title, or path and persists it on the ticket', () => {
+    const deps = fakeDeps({ workspaces })
+    const { runtime } = makeRuntime(deps)
+
+    expect(runtime.listWorkspaces()).toHaveLength(2)
+    const byTitle = runtime.createSession({ goal: 'g1', workspace: 'ProjectB' })
+    expect(byTitle.workspace).toBe('D:\\ProjectB')
+    expect(store.getTicket(byTitle.ticketId)!.workspace).toBe('D:\\ProjectB')
+
+    const byId = runtime.createSession({ goal: 'g2', workspace: 'w1' })
+    expect(byId.workspace).toBe('D:\\ProjectA')
+
+    const byPath = runtime.createSession({ goal: 'g3', workspace: 'd:\\projectb' })
+    expect(byPath.workspace).toBe('D:\\ProjectB')
+  })
+
+  it('defaults to the first workspace and rejects an unknown one', () => {
+    const deps = fakeDeps({ workspaces })
+    const { runtime } = makeRuntime(deps)
+
+    expect(runtime.createSession({ goal: 'g' }).workspace).toBe('D:\\ProjectA')
+    expect(() => runtime.createSession({ goal: 'g', workspace: 'Nope' })).toThrow(/unknown workspace/)
   })
 })
 

@@ -17,6 +17,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
+import { normalize } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent, AgentRegistry } from '@deepseek-ai/dsh-agent'
@@ -29,7 +30,7 @@ import type { Message, ResidentSettings, Ticket } from './domain.ts'
 import { parseQuietWindow, type MessageService } from './messages.ts'
 import { transitionTicket } from './state-machine.ts'
 import type { Store } from './store.ts'
-import { shortId } from './worker.ts'
+import { errorMessage, shortId } from './worker.ts'
 
 /** Preset id declared by this bundle's patch (`hibuddy-butler`). */
 export const BUTLER_PRESET_ID = 'hibbuddy-butler'
@@ -54,8 +55,17 @@ export interface SessionInfo {
   ticketId: string
   goal: string
   state: string
+  /** Workspace the worker executes under (canonical path), when one was chosen. */
+  workspace?: string
   lastReport?: string
   summary?: string
+}
+
+/** One dsh workspace record the butler may delegate into. */
+export interface WorkspaceInfo {
+  id: string
+  path: string
+  title: string
 }
 
 /** What `create_session` returns. */
@@ -63,6 +73,8 @@ export interface CreatedSession {
   ticketId: string
   sessionId: string
   state: 'pending'
+  /** Canonical workspace path the worker will run under (absent when unbound). */
+  workspace?: string
 }
 
 /**
@@ -87,7 +99,9 @@ export interface ResidentButler {
     replyTo?: string
   }): { id: string; recorded: boolean }
   /** Delegates a goal to a new worker session (ticket + deterministic id). */
-  createSession(input: { goal: string; title?: string }): CreatedSession
+  createSession(input: { goal: string; title?: string; workspace?: string }): CreatedSession
+  /** Registered dsh workspaces the butler may delegate into. */
+  listWorkspaces(): WorkspaceInfo[]
   /** Adds an instruction to a live worker session. */
   sendToSession(sessionId: string, text: string): { ok: boolean; error?: string }
   getSession(sessionId: string): SessionInfo | undefined
@@ -146,14 +160,23 @@ export class ButlerRuntime implements ResidentButler {
   private pumping = false
   private stopped = false
   private workspaceRoot: string | undefined
+  private workspaceCache: WorkspaceInfo[] | undefined
+  private readonly preferredWorkspace: string | undefined
   private restartTimer: ReturnType<typeof setTimeout> | undefined
   private idleWaiters: Array<() => void> = []
 
-  constructor(deps: ButlerDeps, store: Store, messages: MessageService, approvals?: ApprovalBrokerFace) {
+  constructor(
+    deps: ButlerDeps,
+    store: Store,
+    messages: MessageService,
+    approvals?: ApprovalBrokerFace,
+    options: { workspace?: string } = {},
+  ) {
     this.deps = deps
     this.store = store
     this.ledger = messages
     this.approvals = approvals
+    this.preferredWorkspace = options.workspace
   }
 
   /** Opens (or resumes) the butler session; safe to call once per process. */
@@ -163,6 +186,9 @@ export class ButlerRuntime implements ResidentButler {
     if (live !== undefined) {
       this.agent = live
     } else {
+      // Bind before opening the session: the workspace plugin may still be
+      // initializing, and the session's cwd must be the workspace root.
+      await this.loadWorkspaces()
       const cwd = await this.resolveWorkspaceRoot()
       mkdirSync(cwd, { recursive: true })
       const selection = this.deps.defaultModel.currentSelection()
@@ -171,16 +197,28 @@ export class ButlerRuntime implements ResidentButler {
       const mount = async (agentCtx: Context): Promise<void> => {
         await this.deps.presets.mount(agentCtx, preset.id)
       }
-      this.agent = this.store.getButlerState()?.sessionId === this.sessionId
-        ? (await this.deps.agents.resume({ resumeSessionId: sessionId, agentOptions, setup: mount })).agent
-        : (
-            await this.deps.agents.create({
-              sessionId,
-              meta: { cwd, agentPreset: preset.id },
-              agentOptions,
-              setup: mount,
-            })
-          ).agent
+      const create = async (): Promise<Agent> =>
+        (
+          await this.deps.agents.create({
+            sessionId,
+            meta: { cwd, agentPreset: preset.id },
+            agentOptions,
+            setup: mount,
+          })
+        ).agent
+      if (this.store.getButlerState()?.sessionId === this.sessionId) {
+        try {
+          this.agent = (await this.deps.agents.resume({ resumeSessionId: sessionId, agentOptions, setup: mount })).agent
+        } catch (error) {
+          // A missing/corrupt persisted log must not take the resident layer
+          // down: the ledger (the user-facing transcript) is independent, so
+          // open a fresh butler session instead.
+          console.warn('[hibbuddy-resident] butler resume failed, creating a fresh session:', errorMessage(error))
+          this.agent = await create()
+        }
+      } else {
+        this.agent = await create()
+      }
     }
     this.store.upsertButlerState({
       sessionId: this.sessionId,
@@ -293,6 +331,62 @@ export class ButlerRuntime implements ResidentButler {
     return this.settings()
   }
 
+  // ── workspaces ────────────────────────────────────────────────────────────
+
+  /**
+   * Registered dsh workspaces (canonical path records). The resident layer
+   * uses the FIRST one as its default binding — new workspaces are prepended
+   * by the registry, so that is the user's most recent project.
+   */
+  listWorkspaces(): WorkspaceInfo[] {
+    return this.workspaceCache ?? this.readWorkspacesNow()
+  }
+
+  /** One synchronous registry read (empty when the service is absent). */
+  private readWorkspacesNow(): WorkspaceInfo[] {
+    const registry = this.deps.ctx.get('workspaceRegistry') as
+      | { list(): Array<{ id: string; path: string; title: string }> }
+      | undefined
+    if (registry === undefined) return []
+    this.workspaceCache = registry
+      .list()
+      .map((workspace) => ({ id: String(workspace.id), path: workspace.path, title: workspace.title }))
+    return this.workspaceCache
+  }
+
+  /**
+   * Load the workspace registry once, waiting briefly for its service: the
+   * workspace plugin is a web-layer row whose async init can still be pending
+   * when this plugin's apply runs.
+   */
+  private async loadWorkspaces(timeoutMs = 5000): Promise<WorkspaceInfo[]> {
+    if (this.workspaceCache !== undefined) return this.workspaceCache
+    const deadline = Date.now() + timeoutMs
+    for (;;) {
+      const immediate = this.readWorkspacesNow()
+      if (immediate.length > 0) return immediate
+      if (this.deps.ctx.get('workspaceRegistry') !== undefined) return immediate
+      if (Date.now() >= deadline) break
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    this.workspaceCache = []
+    return this.workspaceCache
+  }
+
+  /** Resolve a workspace by id, exact path, or title (undefined = default = first). */
+  resolveWorkspace(ref?: string): WorkspaceInfo | undefined {
+    const all = this.listWorkspaces()
+    if (ref === undefined || ref.trim() === '') return all[0]
+    const needle = ref.trim()
+    const target = normalize(needle).toLowerCase()
+    return (
+      all.find((workspace) => workspace.id === needle) ??
+      all.find((workspace) => workspace.title === needle) ??
+      all.find((workspace) => normalize(workspace.path).toLowerCase() === target) ??
+      all.find((workspace) => normalize(workspace.path).toLowerCase().startsWith(target))
+    )
+  }
+
   // ── delegation surface (butler tools) ─────────────────────────────────────
 
   sendMessage(input: {
@@ -311,7 +405,12 @@ export class ButlerRuntime implements ResidentButler {
     return { id: outcome.message?.id ?? '', recorded: outcome.recorded }
   }
 
-  createSession(input: { goal: string; title?: string }): CreatedSession {
+  createSession(input: { goal: string; title?: string; workspace?: string }): CreatedSession {
+    const workspace = this.resolveWorkspace(input.workspace)
+    if (input.workspace !== undefined && input.workspace.trim() !== '' && workspace === undefined) {
+      const known = this.listWorkspaces().map((entry) => `${entry.title}（${entry.path}）`).join('、')
+      throw new Error(`unknown workspace "${input.workspace}"；可用工作区：${known === '' ? '无' : known}`)
+    }
     const id = `tkt_${randomUUID()}`
     const now = new Date().toISOString()
     const ticket: Ticket = {
@@ -321,6 +420,7 @@ export class ButlerRuntime implements ResidentButler {
       origin: 'butler',
       state: 'pending',
       nextRunAt: now,
+      ...(workspace !== undefined ? { workspace: workspace.path } : {}),
       createdAt: now,
       updatedAt: now,
     }
@@ -329,6 +429,7 @@ export class ButlerRuntime implements ResidentButler {
       ticketId: id,
       sessionId: `resident-worker-${shortId(id)}`,
       state: 'pending',
+      ...(workspace !== undefined ? { workspace: workspace.path } : {}),
     }
   }
 
@@ -354,6 +455,7 @@ export class ButlerRuntime implements ResidentButler {
         ticketId: worker.ticketId,
         goal: ticket?.goal ?? '',
         state: ticket?.state ?? worker.state,
+        ...(ticket?.workspace !== undefined && ticket.workspace !== null ? { workspace: ticket.workspace } : {}),
         ...(worker.lastReport !== undefined ? { lastReport: worker.lastReport } : {}),
         ...(ticket?.summary !== undefined ? { summary: ticket.summary } : {}),
       }
@@ -446,8 +548,27 @@ export class ButlerRuntime implements ResidentButler {
     await this.deps.ctx.get('sessions')?.flush(agent.session)
   }
 
+  /**
+   * The butler's own working directory = its bound workspace root. Binding to
+   * a canonical workspace path is what makes the butler session appear under
+   * that workspace (dsh validates membership by header cwd). Falls back to the
+   * process filesystem root when no workspace record exists.
+   */
   private async resolveWorkspaceRoot(): Promise<string> {
     if (this.workspaceRoot !== undefined) return this.workspaceRoot
+    const preferred = this.resolveWorkspace(this.preferredWorkspace)
+    if (preferred !== undefined) {
+      this.workspaceRoot = preferred.path
+      return preferred.path
+    }
+    if (this.preferredWorkspace !== undefined) {
+      console.warn(`[hibbuddy-resident] configured workspace "${this.preferredWorkspace}" not found; using the first registered workspace`)
+      const first = this.resolveWorkspace()
+      if (first !== undefined) {
+        this.workspaceRoot = first.path
+        return first.path
+      }
+    }
     const fs = this.deps.ctx.get('fs')
     this.workspaceRoot = fs ? fs.processPath(await fs.resolve('.')) : process.cwd()
     return this.workspaceRoot

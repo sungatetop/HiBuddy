@@ -377,3 +377,17 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 
 **已知边界**：①审批的 Promise 无法跨进程存活，重启后由对账把 `awaiting_approval` 票按恢复口径续跑、worker 重新发起审批（旧审批卡保留为历史消息）；②「定时与监控」实例的创建/编辑入口仍走插件配置与 API，对话抽屉暂只读工作项与设置；③AG-UI 的 `resume` 语义不消费——审批在管家对话内完成（ADR-011 §4.5）。
 
+### S7-B 补：委派工作区绑定（2026-11-09）
+
+**变更**：
+- `create_session` 新增 `workspace` 参数（工作区 id / 标题 / canonical 路径，大小写与路径归一化匹配）；持久化到 `tickets.workspace`（SQLite schema v3：`ALTER TABLE tickets ADD COLUMN workspace TEXT`，旧票为 NULL 沿用进程级工作区根）；worker cwd = `<workspace>/resident-work/<ticket-short>`，工作区目录消失时该轮直接失败，不在别处静默重建。
+- 新增 `list_workspaces` 工具（id/标题/路径）；修复两个列表工具只向模型输出数量的缺陷（render 实参顺序错误 + `type:'json'` 数组未回显）：现在 `list_workspaces` / `list_sessions` 都把逐条数据作为模型可见文本返回，`list_sessions` 附带工作区路径。
+- 管家自身会话绑定工作区根：启动时读取 `workspaceRegistry`（web 层插件异步初始化，最多等待 5s），用 `resident.workspace` 配置或首个注册工作区作为会话 cwd；dsh 按 header cwd 判定工作区成员，因此管家会话出现在该工作区下。resume 失败（日志缺失/损坏）时回退为新建会话，不再拖垮常驻层。
+- 任务抽屉工作项行显示委派工作区。
+
+**真机证据（2026-11-09）**：
+1. 绑定：`--dump` 无装配告警；旧会话重置后 `resident-butler` 落在 `~/.dsh/sessions/--D-HibuddyWorkspace--/`（工作区根 cwd），不再是 `--D-GenUI--`。
+2. 委派：经对话要求“在 default-workspace（非默认工作区）指派 worker 写 workspace-check.txt”，`tickets.workspace = C:\Users\chenb\Documents\deepseek-harness\default-workspace`，worker completed，文件实际落在该工作区 `resident-work/tkt_571b0d37-.../workspace-check.txt`，内容 `ok`。
+3. 工具可见性：修复后管家再次调用 `list_workspaces` 返回两条真实工作区（HibuddyWorkspace / default-workspace），`list_sessions` 返回 10 条含状态/目标/工作区路径。
+4. 契约测试：resident 127 例全绿（新增工作区解析/默认绑定/未知工作区拒绝/worker cwd/工作区消失失败/列表渲染 6 例）。
+

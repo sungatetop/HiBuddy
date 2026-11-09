@@ -29,7 +29,7 @@ import type {
 } from './domain.ts'
 
 /** Current schema version; bump and add a migration step for every change. */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 /** Name of the SQLite file inside the stateDir. */
 export const DB_FILENAME = 'orchestrator.sqlite'
@@ -176,6 +176,13 @@ FROM notifications;
 DROP TABLE notifications;
 `
 
+/**
+ * v3 (ADR-011 delegation workspace): a ticket records the canonical workspace
+ * path its worker executes under. NULL keeps the legacy behaviour (the
+ * process-level workspace root).
+ */
+const MIGRATE_V3 = `ALTER TABLE tickets ADD COLUMN workspace TEXT;`
+
 interface TicketRow {
   id: string
   goal: string
@@ -186,6 +193,7 @@ interface TicketRow {
   next_run_at: string | null
   plan: string | null
   summary: string | null
+  workspace: string | null
   session_id: string | null
   interrupted: number
   created_at: string
@@ -203,6 +211,7 @@ function rowToTicket(row: TicketRow): Ticket {
     nextRunAt: row.next_run_at,
     ...(row.plan !== null ? { plan: row.plan } : {}),
     ...(row.summary !== null ? { summary: row.summary } : {}),
+    ...(row.workspace !== null ? { workspace: row.workspace } : {}),
     ...(row.session_id !== null ? { sessionId: row.session_id } : {}),
     ...(row.interrupted ? { interrupted: true } : {}),
     createdAt: row.created_at,
@@ -295,6 +304,7 @@ export class Store {
           // Fresh databases also pass through V1, so the source table exists.
           this.db.exec(MIGRATE_V2)
         }
+        if (version < 3) this.db.exec(MIGRATE_V3)
         this.db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)')
         const existing = this.db.prepare('SELECT COUNT(*) AS n FROM schema_version').get() as {
           n: number
@@ -443,11 +453,12 @@ export class Store {
     this.db
       .prepare(
         `INSERT INTO tickets (id, goal, mandate, origin, state, period, next_run_at, plan,
-            summary, session_id, interrupted, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            summary, workspace, session_id, interrupted, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET goal=excluded.goal, mandate=excluded.mandate,
            origin=excluded.origin, state=excluded.state, period=excluded.period,
            next_run_at=excluded.next_run_at, plan=excluded.plan, summary=excluded.summary,
+           workspace=excluded.workspace,
            session_id=excluded.session_id, interrupted=excluded.interrupted,
            updated_at=excluded.updated_at`,
       )
@@ -461,6 +472,7 @@ export class Store {
         ticket.nextRunAt ?? null,
         ticket.plan ?? null,
         ticket.summary ?? null,
+        ticket.workspace ?? null,
         ticket.sessionId ?? null,
         ticket.interrupted ? 1 : 0,
         ticket.createdAt ?? now,

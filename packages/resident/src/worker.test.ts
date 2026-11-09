@@ -172,6 +172,37 @@ describe('dispatch: success paths', () => {
     expect(deps.resumed).toHaveLength(0)
   })
 
+  it('executes under the delegated workspace when the ticket names one', async () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'resident-ws-'))
+    try {
+      const deps = fakeDeps()
+      const orchestrator = new WorkerOrchestrator(deps, store)
+      seedWorking({ id: 'ws1', workspace })
+
+      orchestrator.dispatch(store.getTicket('ws1')!, { late: false })
+      await settle()
+
+      expect(deps.created).toHaveLength(1)
+      expect(deps.created[0]!.meta!.cwd).toBe(join(workspace, 'resident-work', 'ws1'))
+      expect(store.getTicket('ws1')!.state).toBe('completed')
+    } finally {
+      rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('fails the round instead of recreating a vanished workspace', async () => {
+    const deps = fakeDeps()
+    const orchestrator = new WorkerOrchestrator(deps, store)
+    seedWorking({ id: 'ws2', workspace: join(dir, 'missing-workspace') })
+
+    orchestrator.dispatch(store.getTicket('ws2')!, { late: false })
+    await settle()
+
+    expect(deps.created).toHaveLength(0)
+    expect(store.getTicket('ws2')!.state).toBe('failed')
+    expect(store.getTicket('ws2')!.summary).toContain('no longer exists')
+  })
+
   it('completes a periodic round: back to pending with the precomputed occurrence', async () => {
     const orchestrator = new WorkerOrchestrator(fakeDeps(), store)
     const next = new Date(Date.now() + 3_600_000).toISOString()

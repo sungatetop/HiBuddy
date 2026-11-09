@@ -35,8 +35,8 @@ date: 2026-11-09
 ─────────────────────────────────────────────────────────────────────
 管家层              @hibuddy/resident：管家会话 resident-butler（常驻 Agent Loop，hibuddy-butler preset 小工具面）
   入站               用户消息 / 事件信封 / worker 结果回执 / 审批事件（单轮串行 + 队列 + 聚合）
-  决策               create_session / send_to_session / get_session / list_sessions / cancel_session
-                     / resolve_approval（分级代管）/ send_message_to_user / 记忆
+  决策               create_session（可指定工作区）/ send_to_session / get_session / list_sessions / list_workspaces
+                     / cancel_session / resolve_approval（分级代管）/ send_message_to_user / 记忆
   出站               消息账本（in/out）→ 对话界面 / AG-UI（管家层）
 ─────────────────────────────────────────────────────────────────────
 确定性层            事件源框架（scheduler / monitor）→ 两级过滤 → 事件信封
@@ -60,6 +60,7 @@ worker 会话         普通 dsh 会话（create_session 发起；用户不直�
 | D8 | **Ticket 退化为委派账本**：仅由 `create_session`/`cancel_session` 驱动状态机，管家不直接改状态 | 避免双重记账（ADR-011 D5） |
 | D9 | **审批分级代管**：管家可代答 L0/L1 与免再询 grant 命中；L2/越权写入升级请用户确认；代答留痕 | ADR-011 D9；保留 S6-2 实质约束 |
 | D10 | **AG-UI 应用于管家层**：对外只暴露管家一个 agent，worker 不暴露 | ADR-011 D10 |
+| D11 | **委派可指定工作区**：`create_session` 接受工作区 id/标题/路径并写入 `tickets.workspace`；worker 在 `<workspace>/resident-work/<ticket-short>` 执行；缺省用管家绑定工作区（首个注册工作区，可由 `resident.workspace` 配置覆盖）；管家自身会话的 cwd 也绑定该工作区根（dsh 按 header cwd 校验工作区成员） | 用户指令（2026-11-09）；dsh 工作区成员关系由 canonical cwd 决定，cwd 绑定是最小且可靠的实现 |
 
 ## 3. 领域模型（个人场景精简）
 
@@ -138,7 +139,7 @@ interface SourceKind {
 ## 7. 执行：worker 会话编排
 
 - 每票一个 worker 会话 `resident-worker-<ticketId>`，走 dsh 原生 create/resume；装配三要素照 D2。
-- 工作目录：`<工作区>/resident-work/<ticket-short>/`（在 dsh 沙箱 workspace-write 根内，L1 审批语义不变）。
+- 工作目录：`<工作区>/resident-work/<ticket-short>/`（在 dsh 沙箱 workspace-write 根内，L1 审批语义不变）。工作区由 `create_session` 的 `workspace`（id/标题/路径）指定，缺省为管家绑定工作区；工作区目录消失时该轮失败，不在别处静默重建。
 - 长命令转后台 job、30 分钟上限、handoff 释放 slot——直接沿用 dsh/原型已验证机制，不自研。
 - **与 coworker 咬合**：coworker 的 `tools/pre-execute` 与 `approval/request` 挂载在根 ctx（覆盖 composition 内全部会话），worker 会话天然受 L0/L1/L2 分级与 L2 禁用约束——resident 不自建审批。增量两处：**①待批状态提升**——编排层监听 `approval/asked`，把对应 Ticket 置为 `awaiting_approval` 并写入审批卡消息；**②分级代管（ADR-011 D9）**——审批事件作为入站信封进入管家轮次，管家在代管范围内调用 `resolve_approval` 代答（留痕），超出范围则发 `question` 消息请用户确认，用户确认后由管家执行。实施时需真机验证 worker 会话确实命中 answerer 链（验收项）。
 - 免打扰窗对待批的影响：免打扰窗内通知仅落库不推送，**待批不挂起**（等待审批会阻塞 worker；个人场景默认仍即时可批，仅推送静默）。紧急策略演进登记开放问题。
@@ -147,7 +148,7 @@ interface SourceKind {
 ## 8. 持久化与恢复
 
 - **SQLite（WAL）**，路径 = `resident.stateDir`（必配拒启，D3）；建议默认 `$DSH_HOME/state/resident/orchestrator.sqlite`。
-- 表：`schema_version`、`source_instances`、`triggers`、`tickets`、`ticket_runs`、`worker_sessions`、`messages`（替代 notifications：in/out + kind + 幂等键 + 已读/触达）、`butler_session`（管家会话与入站游标）、`settings`（免打扰窗/并发/观察模式/代管开关）。
+- 表：`schema_version`、`source_instances`、`triggers`、`tickets`（含 `workspace` 委派工作区列）、`ticket_runs`、`worker_sessions`、`messages`（替代 notifications：in/out + kind + 幂等键 + 已读/触达）、`butler_session`（管家会话与入站游标）、`settings`（免打扰窗/并发/观察模式/代管开关）。
 - 留痕不进 SQLite：审批与工具调用走 dsh 原生 session JSONL（FR-08 复用，S3 已验证），SQLite 只存编排状态。
 - 启动重对账（恢复语义，S7-A 强证据项的对应实现）：
   1. 读 source_instances 恢复读位置与调度（missed at 补一次、周期跳过）；

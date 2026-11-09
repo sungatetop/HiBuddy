@@ -166,7 +166,7 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
   const approvals = new ApprovalBroker(store, notifier)
   const removeApprovalAnswerer = approvals.install(ctx)
 
-  butler = new ButlerRuntime(deps, store, notifier, approvals)
+  butler = new ButlerRuntime(deps, store, notifier, approvals, { workspace: config?.workspace })
   setResidentService(butler)
   await butler.start()
   // Chat data routes for the WeChat-style client panel (same trust fence as

@@ -242,6 +242,9 @@ export function TaskDrawer({ onClose }: DrawerProps): ReactNode {
                         <span style={styles.badge}>{STATE_LABELS[session.state] ?? session.state}</span>
                       </div>
                       <div style={styles.meta}>会话：{session.sessionId}</div>
+                      {session.workspace !== undefined ? (
+                        <div style={styles.meta}>工作区：{session.workspace}</div>
+                      ) : null}
                       {session.summary !== undefined ? <div style={styles.meta}>{session.summary}</div> : null}
                       {session.lastReport !== undefined ? (
                         <div style={{ ...styles.meta, marginTop: 4 }}>{session.lastReport}</div>

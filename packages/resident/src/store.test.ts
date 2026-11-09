@@ -57,6 +57,7 @@ describe('tickets', () => {
         origin: 'user',
         state: 'pending' as const,
         nextRunAt: '2026-11-06T10:00:00.000Z',
+        workspace: 'D:\\ProjectA',
         createdAt: '2026-11-05T00:00:00.000Z',
         updatedAt: '2026-11-05T00:00:00.000Z',
       }
