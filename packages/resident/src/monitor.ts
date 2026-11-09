@@ -10,8 +10,8 @@
  *
  * Failure handling: consecutive failures double the next check delay up to a
  * cap (退避), and after N consecutive failures the instance is marked
- * `degraded` with a one-shot system notification (the notification surface
- * itself is B6; the row is already the FR-10 record). A later successful
+ * `degraded` with a one-shot system notification through the notification
+ * surface (B6: persist before deliver, FR-10 rule 3). A later successful
  * check resets the failure counter and clears the degraded flag, so a source
  * recovers on its own — the panel (B8) only displays the state.
  *
@@ -23,6 +23,7 @@
 
 import { createHash, randomUUID } from 'node:crypto'
 import type { SourceInstance, Trigger } from './domain.ts'
+import { NotificationService } from './notifications.ts'
 import type { SourceKind, TriggerEmitter } from './sources.ts'
 import type { Store } from './store.ts'
 
@@ -123,6 +124,8 @@ export interface MonitorSourceOptions {
   tickMs?: number
   backoffCapMs?: number
   degradedAfterFailures?: number
+  /** Notification surface (B6); the host injects its shared instance. */
+  notifier?: NotificationService
   /** Injectable clock for determinism in tests. */
   now?: () => Date
 }
@@ -148,6 +151,7 @@ export class MonitorSource implements SourceKind {
   private readonly tickMs: number
   private readonly backoffCapMs: number
   private readonly degradedAfterFailures: number
+  private readonly notifier: NotificationService
   private readonly now: () => Date
   private readonly armed = new Map<string, TriggerEmitter>()
   private readonly inflight = new Set<string>()
@@ -159,6 +163,7 @@ export class MonitorSource implements SourceKind {
     this.tickMs = options.tickMs ?? 1000
     this.backoffCapMs = options.backoffCapMs ?? DEFAULT_BACKOFF_CAP_MS
     this.degradedAfterFailures = options.degradedAfterFailures ?? DEGRADED_AFTER_FAILURES
+    this.notifier = options.notifier ?? new NotificationService(store)
     this.now = options.now ?? (() => new Date())
   }
 
@@ -268,17 +273,14 @@ export class MonitorSource implements SourceKind {
       const delay = backoffDelayMs(config.intervalMs, failureCount, this.backoffCapMs)
       this.saveSource(instance, { ...cursor, lastCheckAt: nowIso, failureCount }, nowIso, delay, degraded)
       if (degraded && !instance.degraded) {
-        // One-shot system record (FR-10 rule 3); delivery is B6's surface.
-        this.store.addNotification({
-          id: `ntf_${randomUUID()}`,
-          ticketId: null,
+        // One-shot system record through the notification surface (§9); the
+        // idempotency key keeps it one-shot per degradation episode.
+        this.notifier.notify({
           type: 'system',
+          ticketId: null,
           idempotencyKey: `monitor:${instance.id}:degraded`,
           title: `监控「${label}」连续检查失败，已标记降级`,
           body: `连续 ${failureCount} 次检查失败（最近错误：${truncate(errorMessage(error))}）。已按退避策略降低检查频率，检查恢复后会自动解除降级。`,
-          read: false,
-          delivered: false,
-          createdAt: nowIso,
         })
       }
     }

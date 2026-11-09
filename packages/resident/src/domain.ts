@@ -127,6 +127,8 @@ export interface Notification {
 export interface ResidentSettings {
   /** Do-not-disturb window (notifications persist but do not push). */
   quietHours?: { start: string; end: string } | null
+  /** Ticket ids exempt from the do-not-disturb window (design §9). */
+  quietExceptions?: string[]
   /** Concurrent worker slots (design §5, default 2). */
   workerSlots?: number
   /** Global observe-mode switch for inferred actions (design §6). */

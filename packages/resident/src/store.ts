@@ -498,17 +498,18 @@ export class Store {
     return Number(result.changes) > 0
   }
 
-  listNotifications(options: { unreadOnly?: boolean; limit?: number } = {}): Notification[] {
-    const { unreadOnly = false, limit = 200 } = options
-    const rows = (
-      unreadOnly
-        ? this.db
-            .prepare('SELECT * FROM notifications WHERE read = 0 ORDER BY rowid DESC LIMIT ?')
-            .all(limit)
-        : this.db
-            .prepare('SELECT * FROM notifications ORDER BY rowid DESC LIMIT ?')
-            .all(limit)
-    ) as Array<Record<string, SQLInputValue>>
+  listNotifications(
+    options: { unreadOnly?: boolean; undeliveredOnly?: boolean; limit?: number } = {},
+  ): Notification[] {
+    const { unreadOnly = false, undeliveredOnly = false, limit = 200 } = options
+    const filters = [
+      unreadOnly ? 'read = 0' : undefined,
+      undeliveredOnly ? 'delivered = 0' : undefined,
+    ].filter(Boolean)
+    const where = filters.length > 0 ? ` WHERE ${filters.join(' AND ')}` : ''
+    const rows = this.db
+      .prepare(`SELECT * FROM notifications${where} ORDER BY rowid DESC LIMIT ?`)
+      .all(limit) as Array<Record<string, SQLInputValue>>
     return rows.map((row) => ({
       id: String(row.id),
       ticketId: row.ticket_id === null ? null : String(row.ticket_id),
@@ -524,6 +525,19 @@ export class Store {
 
   markNotificationRead(id: string): void {
     this.db.prepare('UPDATE notifications SET read = 1 WHERE id = ?').run(id)
+  }
+
+  /** Unread count — the panel badge source (design §10 概览). */
+  countUnreadNotifications(): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE read = 0').get() as {
+      n: number
+    }
+    return row.n
+  }
+
+  /** Delivery state — false only while the row is recorded but not yet pushed. */
+  markNotificationDelivered(id: string, delivered = true): void {
+    this.db.prepare('UPDATE notifications SET delivered = ? WHERE id = ?').run(delivered ? 1 : 0, id)
   }
 
   markAllNotificationsRead(): void {

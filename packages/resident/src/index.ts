@@ -22,12 +22,17 @@
  * lightweight check sessions emit triggers; the filter's gate (deterministic)
  * and assessment (LLM, observe mode by default) decide whether a hit becomes
  * a would-act record or an inferred-mandate ticket.
+ * B6: the notification surface — one shared NotificationService is the single
+ * write path for worker results/failures, observe-mode reports, and system
+ * problems; persist before deliver, idempotency keys, do-not-disturb window,
+ * and a startup pass that re-reaches recorded-but-undelivered rows.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import { FilterPipeline } from './filter.ts'
 import { MonitorSource } from './monitor.ts'
 import { acquireStateLock, type StateLock } from './lock.ts'
+import { NotificationService } from './notifications.ts'
 import { reconcile, type ReconcileHooks } from './reconcile.ts'
 import { Scheduler } from './scheduler.ts'
 import { SessionChecker } from './session-check.ts'
@@ -85,11 +90,14 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
   lock = await acquireStateLock(stateDir)
   store = Store.open(stateDir)
 
+  // B6: the single notification write path shared by worker, filter, monitor.
+  const notifier = new NotificationService(store)
+
   // B4: worker orchestration over ordinary dsh sessions. The inject list
   // guarantees the three core services exist; the reconciler uses the same
   // orchestrator to resume tickets that were working at shutdown.
   const deps: WorkerDeps = { ctx, agents: ctx.agents, presets: ctx.agentPresets, defaultModel: ctx.agentDefaultModel }
-  const orchestrator = new WorkerOrchestrator(deps, store)
+  const orchestrator = new WorkerOrchestrator(deps, store, notifier)
   const hooks: ReconcileHooks = { resumeWorker: (ticket) => orchestrator.resumeWorker(ticket) }
 
   const summary = await reconcile(store, new Date().toISOString(), hooks)
@@ -102,6 +110,11 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
     summary.reNotified,
     summary.missedOneShots,
   )
+
+  // B6 startup pass: reconcile just re-armed awaiting-approval delivery flags;
+  // deliverPending re-reaches every recorded-but-undelivered unread row (rows
+  // silenced by the do-not-disturb window stay pending by design, §9).
+  logger.info('notifications re-armed (delivered=%d)', notifier.deliverPending())
 
   // Scheduler armed with the dispatcher — scheduled firing is now live.
   scheduler = new Scheduler(store, { dispatcher: orchestrator })
@@ -124,13 +137,14 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
   const pipeline = new FilterPipeline(store, {
     assessor: checker,
     observeMode: () => store!.getSetting<boolean>('observeMode') ?? true,
+    notifier,
   })
   const emit: TriggerEmitter = (trigger) => {
     store!.saveTrigger(trigger)
     void pipeline.handle(trigger)
   }
   const registry = new SourceRegistry()
-  registry.register(new MonitorSource(store, checker))
+  registry.register(new MonitorSource(store, checker, { notifier }))
   const started = registry.startAll(store, emit)
   sources = registry
   logger.info('event sources started (armed instances: %d)', started)

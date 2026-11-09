@@ -3,7 +3,7 @@ title: HiBuddy 进度与验收报告
 summary: 各阶段的验收记录与缺口清单：S0 骨架与冒烟链路（2026-11-01）、S1 基础设施复用与编译打包（2026-11-02）、S2 品牌与人设基线（2026-11-03）、S3 审批分级与留痕（2026-11-03）、S3b AG-UI 桥 MVP（2026-11-03）、S4 生成式 UI 与工作台定制（2026-11-04）、S5 P0 收尾与双端交付（2026-11-04）、S6 生态接入与上游跟进（2026-11-04）均通过——P0 交付；S7-A 原型真机验证（2026-11-05：三机制两过一缺口）；每阶段含缺口清单
 keywords: [进度报告, 验收记录, 缺口清单, HiBuddy]
 status: accepted
-date: 2026-11-06
+date: 2026-11-09
 ---
 
 # HiBuddy 进度与验收报告
@@ -325,3 +325,25 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 **验收后清理**：monitor 实例置 disabled、测试文件与临时脚本删除、宿进程停毕无残留。
 
 **观察与后续**：①monitor/worker 会话的模型路由取 `agentDefaultModel.currentSelection()`，本机实测解析到 deepseek-official/deepseek-flash（DEEPSEEK_API_KEY 在用户环境时），与 profile `agent-default-model→minimax-cn` 的 patch 优先级关系待与 B7/B8 一并核对（不影响功能，路由有效）；②同指纹重复命中的去重靠通知幂等键与研判会话记忆双保险，B8 面板展示 would-act 记录列表时再评估是否需要专门的观察记录视图；③URL 目标已支持（fetch），网页类目标的大文本节选截断策略（6000 字符）留观察。
+
+### S7-B 验收登记：B6 通知面（对应 implementation-plan A6 前置收口，2026-11-09）
+
+**交付**（本提交）：`notifications.ts`（唯一通知写入路径）+ store 补 `listNotifications(undeliveredOnly)` / `countUnreadNotifications` / `markNotificationDelivered` + domain 补 `quietExceptions`；`filter.ts` / `monitor.ts` / `worker.ts` 三处直接落库全部收敛到通知服务，index.ts 构造单实例注入并在启动时执行一次补投。包内 vitest 105 例全绿（新增 notifications 13）；全仓 typecheck/build 绿；dump-config 装配回归正常。
+
+**B6 实现要点**（设计 §9）：
+- **先落库再触达**：`notify()` 一律先 `store.addNotification`，写成功且非静默才 `markNotificationDelivered` 置 delivered；写库失败直接兜底返回 `{recorded:false}`，绝不因触达异常影响编排主流程。
+- **幂等键**：调用方可显式传（monitor 降级 `monitor:<id>:degraded`、would-act `monitor:<id>:would-act:<指纹>`），默认则由 `contentKey(type, ticketId, title, body)` 生成 `<ticketId|global>:<type>:<sha256 前 16 位>`；唯一约束命中即视为重复，返回 `{recorded:false}`，不重复触达。
+- **通知类型四处接线**：worker 完成 → `result`（正文取轮次摘要）；worker 启动失败 / 轮次失败 → `system`；监控降级 → `system`；观察模式 would-act → `report`。blocked/awaiting_approval 的通知仍留 B7（与审批咬合一并落地）。
+- **免打扰窗**：`settings.quietHours = {start, end}`（`HH:MM` 本地时间，`end < start` 跨午夜，`start === end` 视为空窗，畸形值忽略不阻塞投递）；窗内一律只落库、`delivered=0`，**窗内暂停的是 PUSH 而非 ticket 状态**（审批待批不挂起）。`settings.quietExceptions = ticketId[]` 例外清单，例外票据的通知在窗内照常触达。
+- **补投**：`deliverPending()` 扫「未投递 + 未读 + 当前非静默」补触达并返回条数；宿启动在对账之后调用一次——对账已把 awaiting_approval 通知重新置为待投递，此步即完成重启后的补偿。
+- **读侧接口**：`unreadCount()` / `list({unreadOnly})` / `markRead()` / `markAllRead()` 供 B8 面板未读计数与通知 tab 直接消费。
+
+**端到端真机证据（A6 通知侧口径）**：
+1. **窗内仅落库**：`settings.quietHours` 置为覆盖当前时刻的窗口 → 注入一次性票 tkt-b6-notify（目标：工作目录写文件并简报）→ worker 真实执行至 completed → 通知行落库 `type=result`、`delivered=0`，幂等键 = `tkt-b6-notify:result:21a006e62dd22a95`（内容指纹）。
+2. **重启补投**：停宿 → 关窗（空窗）→ 重启宿 → 启动补投把该行置 `delivered=1`，B5 遗留的两条 would-act `report` 同批补投（共 3 条 → 全部 delivered=1），通知内容与未读状态跨重启完整保留。
+3. **幂等去重**：同一幂等键重复写入返回 `{recorded:false}` 且不新增行（单测覆盖显式键与内容指纹两路）。
+
+**验收后清理**：tkt-b6-notify 置 stopped、宿进程停毕无残留、临时查询/注票脚本删除（均在系统临时目录，未入库）。
+
+**观察与后续**：①触达渠道首批只有常驻面板（未读计数 + 通知 tab），桌面通知/IM 属后续渠道扩展，`delivered` 语义已按「已触达任一渠道」预留；②免打扰窗与例外的面板编辑入口在 B8；③`result` 通知默认用内容指纹去重——周期任务连续两轮产出完全相同的简报时只留一条，若面板需要逐轮留痕，B8 再评估改为带轮次号的显式键。
+
