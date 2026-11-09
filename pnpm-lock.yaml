@@ -166,6 +166,9 @@ importers:
       '@deepseek-ai/dsh-subagent':
         specifier: 0.2.1-rc.5
         version: 0.2.1-rc.5(829fa3f26582b8b902c27168ccbbe4e2)
+      '@deepseek-ai/dsh-tools':
+        specifier: 0.2.1-rc.5
+        version: 0.2.1-rc.5(47e11ee6492a70a2f2353a0c993abe69)
       '@types/node':
         specifier: ^24.0.0
         version: 24.19.2
