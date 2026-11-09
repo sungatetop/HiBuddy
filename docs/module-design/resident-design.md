@@ -12,6 +12,8 @@ date: 2026-11-09
 > 状态：accepted（2026-11-05 评审通过；2026-11-09 依 ADR-011 修订为管家形态，B1–B5 交付不返工，B6–B10 重排）。S7-B 实施任务与验收标准见 [implementation-plan §S7](../implementation-plan.md)。
 
 > **修订说明（2026-11-09，ADR-011）**：本文原 D1「不设常驻 router LLM 会话」被取代——常驻智能体本身就是一条常驻 Agent Loop（管家会话），用户面由「常驻面板四 tab」改为「微信式对话界面」。下文已按新形态改写；仍保留的确定性组件（事件源、调度、过滤、worker 编排、持久化、对账）继续有效。
+>
+> **图解**：分层设计、运行链路（对话/委派/审批时序）、Ticket 状态机、交互信息架构与 AG-UI 语义见 [butler-design-diagrams](butler-design-diagrams.md)。
 
 ## 1. 用户设计要点（原话落档，为最高设计约束）
 
