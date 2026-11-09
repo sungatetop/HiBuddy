@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Store, SCHEMA_VERSION, StoreError } from './store.ts'
+import { DatabaseSync } from 'node:sqlite'
+import { DB_FILENAME, Store, SCHEMA_VERSION, StoreError } from './store.ts'
 
 let dir: string
 
@@ -161,14 +162,15 @@ describe('sources and triggers', () => {
   })
 })
 
-describe('notifications', () => {
+describe('messages', () => {
   const base = {
     id: 'n1',
-    ticketId: 't1',
-    type: 'result' as const,
-    idempotencyKey: 't1|result|abc',
+    direction: 'out' as const,
+    kind: 'report' as const,
+    idempotencyKey: 't1|report|abc',
     title: '任务完成',
-    body: '整理完成',
+    text: '整理完成',
+    refs: { ticketId: 't1' },
     read: false,
     delivered: false,
     createdAt: '2026-11-05T00:00:00.000Z',
@@ -177,9 +179,9 @@ describe('notifications', () => {
   it('drops duplicate idempotency keys', () => {
     const store = Store.open(dir)
     try {
-      expect(store.addNotification(base)).toBe(true)
-      expect(store.addNotification({ ...base, id: 'n2' })).toBe(false)
-      expect(store.listNotifications()).toHaveLength(1)
+      expect(store.addMessage(base)).toBe(true)
+      expect(store.addMessage({ ...base, id: 'n2' })).toBe(false)
+      expect(store.listMessages()).toHaveLength(1)
     } finally {
       store.close()
     }
@@ -188,14 +190,14 @@ describe('notifications', () => {
   it('supports read flags and re-arming delivery', () => {
     const store = Store.open(dir)
     try {
-      store.addNotification(base)
-      store.addNotification({ ...base, id: 'n3', idempotencyKey: 'k3', type: 'awaiting_approval', ticketId: 't9' })
-      store.markNotificationRead('n1')
-      expect(store.listNotifications({ unreadOnly: true })).toHaveLength(1)
-      const reArmed = store.redeliverNotifications((n) => n.type === 'awaiting_approval')
+      store.addMessage(base)
+      store.addMessage({ ...base, id: 'n3', idempotencyKey: 'k3', kind: 'approval', refs: { ticketId: 't9' } })
+      store.markMessageRead('n1')
+      expect(store.listMessages({ unreadOnly: true })).toHaveLength(1)
+      const reArmed = store.redeliverMessages((m) => m.kind === 'approval')
       expect(reArmed).toBe(1)
-      store.markAllNotificationsRead()
-      expect(store.listNotifications({ unreadOnly: true })).toHaveLength(0)
+      store.markAllMessagesRead()
+      expect(store.listMessages({ unreadOnly: true })).toHaveLength(0)
     } finally {
       store.close()
     }
@@ -255,6 +257,42 @@ describe('transaction', () => {
       })
       expect(store.getSetting('outer')).toBe(1)
       expect(store.getSetting('inner')).toBe(2)
+    } finally {
+      store.close()
+    }
+  })
+})
+
+describe('v1 → v2 migration', () => {
+  it('turns notification rows into outbound messages and drops the old table', () => {
+    const db = new DatabaseSync(join(dir, DB_FILENAME))
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER NOT NULL);
+      INSERT INTO schema_version (version) VALUES (1);
+      CREATE TABLE notifications (
+        id TEXT PRIMARY KEY, ticket_id TEXT, type TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE, title TEXT NOT NULL, body TEXT NOT NULL,
+        read INTEGER NOT NULL DEFAULT 0, delivered INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO notifications (id, ticket_id, type, idempotency_key, title, body, read, delivered, created_at)
+      VALUES ('n1', 't1', 'result', 'k1', '任务完成', '整理完成', 0, 1, '2026-11-05T00:00:00.000Z');
+      INSERT INTO notifications (id, ticket_id, type, idempotency_key, title, body, read, delivered, created_at)
+      VALUES ('n2', 't2', 'awaiting_approval', 'k2', '待批', '需要确认', 0, 0, '2026-11-05T00:01:00.000Z');
+    `)
+    db.close()
+
+    const store = Store.open(dir)
+    try {
+      expect(store.schemaVersion()).toBe(SCHEMA_VERSION)
+      const messages = store.listMessages({ oldestFirst: true })
+      expect(messages).toHaveLength(2)
+      expect(messages[0]).toMatchObject({ direction: 'out', kind: 'report', text: '整理完成', delivered: true })
+      expect(messages[1]).toMatchObject({ direction: 'out', kind: 'approval', text: '需要确认' })
+      const old = store.db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='notifications'")
+        .get()
+      expect(old).toBeUndefined()
     } finally {
       store.close()
     }

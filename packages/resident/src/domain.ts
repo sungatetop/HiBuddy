@@ -105,27 +105,65 @@ export interface WorkerSession {
   updatedAt?: string
 }
 
-/** Notification kinds (design §9). */
-export type NotificationType = 'result' | 'awaiting_approval' | 'report' | 'system'
+/** Who wrote a message: the user ('in') or the butler ('out'). */
+export type MessageDirection = 'in' | 'out'
 
-/** A user-facing notification, persisted before any delivery (FR-10 rule 3). */
-export interface Notification {
-  id: string
+/**
+ * Message kinds (ADR-011 D2/D11). Outbound rows come from the butler's
+ * `send_message_to_user` tool except `approval`, which the host writes on
+ * `approval/asked`; inbound rows are user text plus event envelopes, worker
+ * receipts and approval events.
+ */
+export type MessageKind =
+  | 'text'
+  | 'question'
+  | 'report'
+  | 'system'
+  | 'event'
+  | 'receipt'
+  | 'approval'
+
+/** References a message points at (ticket / worker session / source / reply). */
+export interface MessageRefs {
   ticketId?: string | null
-  type: NotificationType
-  /** Idempotency key (ticketId + type + content fingerprint); duplicates are dropped. */
+  sessionId?: string | null
+  sourceId?: string | null
+  replyTo?: string | null
+}
+
+/**
+ * One row of the conversation ledger — the ONLY data source of the chat UI
+ * (ADR-011 D2). Persisted before any delivery; `delivered` tracks push.
+ */
+export interface Message {
+  id: string
+  direction: MessageDirection
+  kind: MessageKind
+  /** Optional heading (e.g. "任务完成：…"), the chat bubble itself uses `text`. */
+  title?: string
+  text: string
+  refs?: MessageRefs
+  /** Idempotency key; duplicates are dropped by the store. */
   idempotencyKey: string
-  title: string
-  body: string
   read: boolean
-  /** Delivery flag; reset on restart for awaiting-approval re-notification (§8 step 3). */
+  /** Delivery flag; do-not-disturb keeps it false until re-reached. */
   delivered: boolean
+  /** Inbound only: set when the butler turn consumed it (queue cursor). */
+  consumedAt?: string | null
   createdAt: string
+}
+
+/** Butler session bookkeeping (ADR-011 D1). */
+export interface ButlerState {
+  sessionId: string
+  /** idle | working. */
+  state: string
+  lastActiveAt?: string | null
 }
 
 /** Orchestrator settings persisted in SQLite (design §8; panel edits explicitly save/discard). */
 export interface ResidentSettings {
-  /** Do-not-disturb window (notifications persist but do not push). */
+  /** Do-not-disturb window (messages persist but do not push). */
   quietHours?: { start: string; end: string } | null
   /** Ticket ids exempt from the do-not-disturb window (design §9). */
   quietExceptions?: string[]
@@ -133,4 +171,6 @@ export interface ResidentSettings {
   workerSlots?: number
   /** Global observe-mode switch for inferred actions (design §6). */
   observeMode?: boolean
+  /** Butler may answer low-risk approvals itself (ADR-011 D9). */
+  approvalDelegation?: boolean
 }

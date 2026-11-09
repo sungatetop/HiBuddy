@@ -38,7 +38,7 @@ export interface ReconcileSummary {
   interrupted: number
   /** `awaiting_approval` tickets found (kept as-is). */
   awaitingApproval: number
-  /** Unread awaiting-approval notifications re-armed for delivery. */
+  /** Unread approval messages re-armed for delivery. */
   reNotified: number
   /** One-shot tickets whose due time already passed (scheduler fires once, B3). */
   missedOneShots: number
@@ -101,8 +101,9 @@ export async function reconcile(
     }
   }
 
-  // Step 3: re-arm delivery of unread awaiting-approval notifications.
-  summary.reNotified = store.redeliverNotifications((n) => n.type === 'awaiting_approval')
+  // Step 3: re-arm delivery of unread approval messages (ADR-011: the
+  // notification surface is now the message ledger; approval cards re-reach).
+  summary.reNotified = store.redeliverMessages((m) => m.kind === 'approval')
 
   // Step 4: panel state is read from SQLite wholesale — nothing to do.
   return summary

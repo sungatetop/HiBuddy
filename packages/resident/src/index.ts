@@ -32,7 +32,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { FilterPipeline } from './filter.ts'
 import { MonitorSource } from './monitor.ts'
 import { acquireStateLock, type StateLock } from './lock.ts'
-import { NotificationService } from './notifications.ts'
+import { MessageService } from './messages.ts'
 import { reconcile, type ReconcileHooks } from './reconcile.ts'
 import { Scheduler } from './scheduler.ts'
 import { SessionChecker } from './session-check.ts'
@@ -90,8 +90,8 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
   lock = await acquireStateLock(stateDir)
   store = Store.open(stateDir)
 
-  // B6: the single notification write path shared by worker, filter, monitor.
-  const notifier = new NotificationService(store)
+  // B6′: the single conversation-ledger write path shared by worker/filter/monitor.
+  const notifier = new MessageService(store)
 
   // B4: worker orchestration over ordinary dsh sessions. The inject list
   // guarantees the three core services exist; the reconciler uses the same
@@ -111,10 +111,10 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
     summary.missedOneShots,
   )
 
-  // B6 startup pass: reconcile just re-armed awaiting-approval delivery flags;
+  // B6′ startup pass: reconcile just re-armed awaiting-approval delivery flags;
   // deliverPending re-reaches every recorded-but-undelivered unread row (rows
   // silenced by the do-not-disturb window stay pending by design, §9).
-  logger.info('notifications re-armed (delivered=%d)', notifier.deliverPending())
+  logger.info('messages re-armed (delivered=%d)', notifier.deliverPending())
 
   // Scheduler armed with the dispatcher — scheduled firing is now live.
   scheduler = new Scheduler(store, { dispatcher: orchestrator })

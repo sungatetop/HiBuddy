@@ -16,8 +16,10 @@ import { mkdirSync, chmodSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 import type {
-  Notification,
-  NotificationType,
+  ButlerState,
+  Message,
+  MessageDirection,
+  MessageKind,
   SourceInstance,
   Ticket,
   TicketRun,
@@ -27,7 +29,7 @@ import type {
 } from './domain.ts'
 
 /** Current schema version; bump and add a migration step for every change. */
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 /** Name of the SQLite file inside the stateDir. */
 export const DB_FILENAME = 'orchestrator.sqlite'
@@ -117,6 +119,63 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `
 
+/**
+ * v2 (ADR-011): the conversation ledger replaces the one-way notification
+ * table. `messages` is the only user-facing data source; `butler_state` keeps
+ * the resident butler session and its turn state.
+ */
+const SCHEMA_V2 = `
+CREATE TABLE IF NOT EXISTS messages (
+  id TEXT PRIMARY KEY,
+  direction TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  title TEXT,
+  text TEXT NOT NULL,
+  ticket_id TEXT,
+  session_id TEXT,
+  source_id TEXT,
+  reply_to TEXT,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  read INTEGER NOT NULL DEFAULT 0,
+  delivered INTEGER NOT NULL DEFAULT 0,
+  consumed_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS messages_created ON messages(created_at);
+CREATE INDEX IF NOT EXISTS messages_pending_inbound
+  ON messages(created_at) WHERE direction = 'in' AND consumed_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS butler_state (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  state TEXT NOT NULL,
+  last_active_at TEXT
+);
+`
+
+/** v1 → v2 notification rows become outbound messages (types map onto kinds). */
+const MIGRATE_V2 = `
+INSERT OR IGNORE INTO messages
+  (id, direction, kind, title, text, ticket_id, idempotency_key, read, delivered, created_at)
+SELECT
+  id,
+  'out',
+  CASE type
+    WHEN 'awaiting_approval' THEN 'approval'
+    WHEN 'result' THEN 'report'
+    ELSE type
+  END,
+  title,
+  body,
+  ticket_id,
+  idempotency_key,
+  read,
+  delivered,
+  created_at
+FROM notifications;
+DROP TABLE notifications;
+`
+
 interface TicketRow {
   id: string
   goal: string
@@ -148,6 +207,28 @@ function rowToTicket(row: TicketRow): Ticket {
     ...(row.interrupted ? { interrupted: true } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  }
+}
+
+function rowToMessage(row: Record<string, SQLInputValue>): Message {
+  const refs = {
+    ...(row.ticket_id !== null ? { ticketId: String(row.ticket_id) } : {}),
+    ...(row.session_id !== null ? { sessionId: String(row.session_id) } : {}),
+    ...(row.source_id !== null ? { sourceId: String(row.source_id) } : {}),
+    ...(row.reply_to !== null ? { replyTo: String(row.reply_to) } : {}),
+  }
+  return {
+    id: String(row.id),
+    direction: String(row.direction) as MessageDirection,
+    kind: String(row.kind) as MessageKind,
+    ...(row.title !== null ? { title: String(row.title) } : {}),
+    text: String(row.text),
+    ...(Object.keys(refs).length > 0 ? { refs } : {}),
+    idempotencyKey: String(row.idempotency_key),
+    read: Number(row.read) === 1,
+    delivered: Number(row.delivered) === 1,
+    consumedAt: row.consumed_at === null ? null : String(row.consumed_at),
+    createdAt: String(row.created_at),
   }
 }
 
@@ -209,11 +290,19 @@ export class Store {
     try {
       this.transaction(() => {
         this.db.exec(SCHEMA_V1)
-        if (version < 1) {
-          this.db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)')
-          this.db
-            .prepare('INSERT INTO schema_version (version) VALUES (?)')
-            .run(SCHEMA_VERSION)
+        if (version < 2) {
+          this.db.exec(SCHEMA_V2)
+          // Fresh databases also pass through V1, so the source table exists.
+          this.db.exec(MIGRATE_V2)
+        }
+        this.db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)')
+        const existing = this.db.prepare('SELECT COUNT(*) AS n FROM schema_version').get() as {
+          n: number
+        }
+        if (existing.n === 0) {
+          this.db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(SCHEMA_VERSION)
+        } else {
+          this.db.prepare('UPDATE schema_version SET version = ?').run(SCHEMA_VERSION)
         }
       })
     } catch (error) {
@@ -470,87 +559,150 @@ export class Store {
     }))
   }
 
-  // ── notifications ───────────────────────────────────────────────────────
+  // ── messages (ADR-011: the conversation ledger) ──────────────────────────
 
   /**
-   * Persists a notification; a repeated idempotency key is dropped (FR-10 rule 3).
-   * @returns true when the notification was newly recorded.
+   * Persists a message; a repeated idempotency key is dropped (FR-10 rule 3).
+   * @returns true when the message was newly recorded.
    */
-  addNotification(notification: Notification): boolean {
+  addMessage(message: Message): boolean {
     const result = this.db
       .prepare(
-        `INSERT INTO notifications (id, ticket_id, type, idempotency_key, title, body, read,
-            delivered, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO messages (id, direction, kind, title, text, ticket_id, session_id,
+            source_id, reply_to, idempotency_key, read, delivered, consumed_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(idempotency_key) DO NOTHING`,
       )
       .run(
-        notification.id,
-        notification.ticketId ?? null,
-        notification.type,
-        notification.idempotencyKey,
-        notification.title,
-        notification.body,
-        notification.read ? 1 : 0,
-        notification.delivered ? 1 : 0,
-        notification.createdAt,
+        message.id,
+        message.direction,
+        message.kind,
+        message.title ?? null,
+        message.text,
+        message.refs?.ticketId ?? null,
+        message.refs?.sessionId ?? null,
+        message.refs?.sourceId ?? null,
+        message.refs?.replyTo ?? null,
+        message.idempotencyKey,
+        message.read ? 1 : 0,
+        message.delivered ? 1 : 0,
+        message.consumedAt ?? null,
+        message.createdAt,
       )
     return Number(result.changes) > 0
   }
 
-  listNotifications(
-    options: { unreadOnly?: boolean; undeliveredOnly?: boolean; limit?: number } = {},
-  ): Notification[] {
-    const { unreadOnly = false, undeliveredOnly = false, limit = 200 } = options
+  listMessages(
+    options: {
+      direction?: MessageDirection
+      unreadOnly?: boolean
+      undeliveredOnly?: boolean
+      /** Oldest-first when true (chat replay); newest-first by default (inbox). */
+      oldestFirst?: boolean
+      limit?: number
+    } = {},
+  ): Message[] {
+    const { direction, unreadOnly = false, undeliveredOnly = false, oldestFirst = false } = options
+    const limit = options.limit ?? 200
     const filters = [
+      direction ? 'direction = ?' : undefined,
       unreadOnly ? 'read = 0' : undefined,
       undeliveredOnly ? 'delivered = 0' : undefined,
     ].filter(Boolean)
     const where = filters.length > 0 ? ` WHERE ${filters.join(' AND ')}` : ''
+    const order = oldestFirst ? 'ASC' : 'DESC'
+    const params: SQLInputValue[] = []
+    if (direction) params.push(direction)
+    params.push(limit)
     const rows = this.db
-      .prepare(`SELECT * FROM notifications${where} ORDER BY rowid DESC LIMIT ?`)
+      .prepare(`SELECT * FROM messages${where} ORDER BY rowid ${order} LIMIT ?`)
+      .all(...params) as Array<Record<string, SQLInputValue>>
+    return rows.map(rowToMessage)
+  }
+
+  /** Inbound messages no butler turn has consumed yet, oldest first (the queue). */
+  listPendingInbound(limit = 100): Message[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM messages WHERE direction = 'in' AND consumed_at IS NULL
+         ORDER BY rowid ASC LIMIT ?`,
+      )
       .all(limit) as Array<Record<string, SQLInputValue>>
-    return rows.map((row) => ({
-      id: String(row.id),
-      ticketId: row.ticket_id === null ? null : String(row.ticket_id),
-      type: String(row.type) as NotificationType,
-      idempotencyKey: String(row.idempotency_key),
-      title: String(row.title),
-      body: String(row.body),
-      read: Number(row.read) === 1,
-      delivered: Number(row.delivered) === 1,
-      createdAt: String(row.created_at),
-    }))
+    return rows.map(rowToMessage)
   }
 
-  markNotificationRead(id: string): void {
-    this.db.prepare('UPDATE notifications SET read = 1 WHERE id = ?').run(id)
+  countPendingInbound(): number {
+    const row = this.db
+      .prepare("SELECT COUNT(*) AS n FROM messages WHERE direction = 'in' AND consumed_at IS NULL")
+      .get() as { n: number }
+    return row.n
   }
 
-  /** Unread count — the panel badge source (design §10 概览). */
-  countUnreadNotifications(): number {
-    const row = this.db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE read = 0').get() as {
+  /** Marks inbound rows consumed by a butler turn (the queue cursor). */
+  markInboundConsumed(ids: readonly string[], at: string): number {
+    if (ids.length === 0) return 0
+    const statement = this.db.prepare(
+      'UPDATE messages SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL',
+    )
+    let changed = 0
+    this.transaction(() => {
+      for (const id of ids) changed += Number(statement.run(at, id).changes)
+    })
+    return changed
+  }
+
+  markMessageRead(id: string): void {
+    this.db.prepare('UPDATE messages SET read = 1 WHERE id = ?').run(id)
+  }
+
+  /** Unread count — the chat badge source. */
+  countUnreadMessages(): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM messages WHERE read = 0').get() as {
       n: number
     }
     return row.n
   }
 
   /** Delivery state — false only while the row is recorded but not yet pushed. */
-  markNotificationDelivered(id: string, delivered = true): void {
-    this.db.prepare('UPDATE notifications SET delivered = ? WHERE id = ?').run(delivered ? 1 : 0, id)
+  markMessageDelivered(id: string, delivered = true): void {
+    this.db.prepare('UPDATE messages SET delivered = ? WHERE id = ?').run(delivered ? 1 : 0, id)
   }
 
-  markAllNotificationsRead(): void {
-    this.db.prepare('UPDATE notifications SET read = 1').run()
+  markAllMessagesRead(): void {
+    this.db.prepare('UPDATE messages SET read = 1').run()
   }
 
   /** Clears delivery flags so restart can re-reach the user (§8 step 3). */
-  redeliverNotifications(predicate: (n: Notification) => boolean): number {
-    const pending = this.listNotifications().filter((n) => !n.read && predicate(n))
-    for (const n of pending) {
-      this.db.prepare('UPDATE notifications SET delivered = 0 WHERE id = ?').run(n.id)
+  redeliverMessages(predicate: (m: Message) => boolean): number {
+    const pending = this.listMessages({ limit: 1000 }).filter((m) => !m.read && predicate(m))
+    for (const message of pending) {
+      this.db.prepare('UPDATE messages SET delivered = 0 WHERE id = ?').run(message.id)
     }
     return pending.length
+  }
+
+  // ── butler_state ────────────────────────────────────────────────────────
+
+  getButlerState(): ButlerState | undefined {
+    const row = this.db.prepare("SELECT * FROM butler_state WHERE id = 'butler'").get() as
+      | Record<string, SQLInputValue>
+      | undefined
+    if (!row) return undefined
+    return {
+      sessionId: String(row.session_id),
+      state: String(row.state),
+      lastActiveAt: row.last_active_at === null ? null : String(row.last_active_at),
+    }
+  }
+
+  upsertButlerState(state: ButlerState): void {
+    this.db
+      .prepare(
+        `INSERT INTO butler_state (id, session_id, state, last_active_at) VALUES ('butler', ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET session_id=excluded.session_id, state=excluded.state,
+           last_active_at=excluded.last_active_at`,
+      )
+      .run(state.sessionId, state.state, state.lastActiveAt ?? null)
   }
 
   // ── settings ────────────────────────────────────────────────────────────

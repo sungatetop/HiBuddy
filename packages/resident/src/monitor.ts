@@ -23,7 +23,7 @@
 
 import { createHash, randomUUID } from 'node:crypto'
 import type { SourceInstance, Trigger } from './domain.ts'
-import { NotificationService } from './notifications.ts'
+import { MessageService } from './messages.ts'
 import type { SourceKind, TriggerEmitter } from './sources.ts'
 import type { Store } from './store.ts'
 
@@ -125,7 +125,7 @@ export interface MonitorSourceOptions {
   backoffCapMs?: number
   degradedAfterFailures?: number
   /** Notification surface (B6); the host injects its shared instance. */
-  notifier?: NotificationService
+  notifier?: MessageService
   /** Injectable clock for determinism in tests. */
   now?: () => Date
 }
@@ -151,7 +151,7 @@ export class MonitorSource implements SourceKind {
   private readonly tickMs: number
   private readonly backoffCapMs: number
   private readonly degradedAfterFailures: number
-  private readonly notifier: NotificationService
+  private readonly notifier: MessageService
   private readonly now: () => Date
   private readonly armed = new Map<string, TriggerEmitter>()
   private readonly inflight = new Set<string>()
@@ -163,7 +163,7 @@ export class MonitorSource implements SourceKind {
     this.tickMs = options.tickMs ?? 1000
     this.backoffCapMs = options.backoffCapMs ?? DEFAULT_BACKOFF_CAP_MS
     this.degradedAfterFailures = options.degradedAfterFailures ?? DEGRADED_AFTER_FAILURES
-    this.notifier = options.notifier ?? new NotificationService(store)
+    this.notifier = options.notifier ?? new MessageService(store)
     this.now = options.now ?? (() => new Date())
   }
 
@@ -273,14 +273,14 @@ export class MonitorSource implements SourceKind {
       const delay = backoffDelayMs(config.intervalMs, failureCount, this.backoffCapMs)
       this.saveSource(instance, { ...cursor, lastCheckAt: nowIso, failureCount }, nowIso, delay, degraded)
       if (degraded && !instance.degraded) {
-        // One-shot system record through the notification surface (§9); the
+        // One-shot system record through the message ledger (§9); the
         // idempotency key keeps it one-shot per degradation episode.
-        this.notifier.notify({
-          type: 'system',
-          ticketId: null,
+        this.notifier.postOutbound({
+          kind: 'system',
+          refs: { sourceId: instance.id },
           idempotencyKey: `monitor:${instance.id}:degraded`,
           title: `监控「${label}」连续检查失败，已标记降级`,
-          body: `连续 ${failureCount} 次检查失败（最近错误：${truncate(errorMessage(error))}）。已按退避策略降低检查频率，检查恢复后会自动解除降级。`,
+          text: `连续 ${failureCount} 次检查失败（最近错误：${truncate(errorMessage(error))}）。已按退避策略降低检查频率，检查恢复后会自动解除降级。`,
         })
       }
     }

@@ -203,7 +203,7 @@ describe('monitor source: failure backoff and degraded flag', () => {
     currentMs += 2 * MIN
     await source.tick()
     expect(store.getSource('m1')!.degraded).toBe(true)
-    const systems = store.listNotifications().filter((n) => n.type === 'system')
+    const systems = store.listMessages().filter((m) => m.kind === 'system')
     expect(systems).toHaveLength(1)
     expect(systems[0]!.idempotencyKey).toBe('monitor:m1:degraded')
     expect(store.getSource('m1')!.nextRunAt).toBe(new Date(currentMs + 4 * MIN).toISOString())
@@ -211,7 +211,7 @@ describe('monitor source: failure backoff and degraded flag', () => {
     // already degraded → no duplicate record; backoff keeps growing
     currentMs += 4 * MIN
     await source.tick()
-    expect(store.listNotifications().filter((n) => n.type === 'system')).toHaveLength(1)
+    expect(store.listMessages().filter((m) => m.kind === 'system')).toHaveLength(1)
     expect(store.getSource('m1')!.nextRunAt).toBe(new Date(currentMs + 8 * MIN).toISOString())
   })
 

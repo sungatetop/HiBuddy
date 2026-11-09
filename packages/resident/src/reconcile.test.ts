@@ -83,15 +83,16 @@ describe('reconcile', () => {
     expect(runs[0]!.outcome).toBe('interrupted')
   })
 
-  it('keeps awaiting_approval tickets and re-arms their unread notifications', async () => {
+  it('keeps awaiting_approval tickets and re-arms their unread approval cards', async () => {
     store.upsertTicket(ticket({ id: 't2', state: 'awaiting_approval' }))
-    store.addNotification({
+    store.addMessage({
       id: 'n1',
-      ticketId: 't2',
-      type: 'awaiting_approval',
+      direction: 'out',
+      kind: 'approval',
       idempotencyKey: 'k1',
       title: '待批',
-      body: 'b',
+      text: 'b',
+      refs: { ticketId: 't2' },
       read: false,
       delivered: true,
       createdAt: NOW,
@@ -101,9 +102,9 @@ describe('reconcile', () => {
 
     expect(summary.awaitingApproval).toBe(1)
     expect(summary.reNotified).toBe(1)
-    const notification = store.listNotifications()[0]!
-    expect(notification.delivered).toBe(false)
-    expect(notification.read).toBe(false)
+    const message = store.listMessages()[0]!
+    expect(message.delivered).toBe(false)
+    expect(message.read).toBe(false)
   })
 
   it('counts missed one-shot pending tickets without rewriting them', async () => {

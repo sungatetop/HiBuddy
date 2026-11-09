@@ -19,7 +19,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Ticket, Trigger } from './domain.ts'
 import { parseMonitorConfig } from './monitor.ts'
-import { NotificationService } from './notifications.ts'
+import { MessageService } from './messages.ts'
 import type { Store } from './store.ts'
 
 /** Assessment verdict of stage 2. */
@@ -59,7 +59,7 @@ export interface FilterOptions {
   /** Observe-mode getter — settings-driven, defaults to true (design §6). */
   observeMode: () => boolean
   /** Notification surface (B6); the host injects its shared instance. */
-  notifier?: NotificationService
+  notifier?: MessageService
   /** Injectable clock for determinism in tests. */
   now?: () => Date
 }
@@ -67,12 +67,12 @@ export interface FilterOptions {
 export class FilterPipeline {
   private readonly store: Store
   private readonly options: FilterOptions
-  private readonly notifier: NotificationService
+  private readonly notifier: MessageService
 
   constructor(store: Store, options: FilterOptions) {
     this.store = store
     this.options = options
-    this.notifier = options.notifier ?? new NotificationService(store)
+    this.notifier = options.notifier ?? new MessageService(store)
   }
 
   /** Gate → assessment → observe/act. Never throws to the emitter. */
@@ -121,12 +121,12 @@ export class FilterPipeline {
     if (this.options.observeMode()) {
       // Observe mode: record the would-act verdict only (design §6). The
       // idempotency key dedupes re-hits of the same fingerprint.
-      this.notifier.notify({
-        type: 'report',
-        ticketId: null,
+      this.notifier.postOutbound({
+        kind: 'report',
+        refs: { sourceId: trigger.sourceId },
         idempotencyKey: `monitor:${trigger.sourceId}:would-act:${payload.fingerprint}`,
         title: '观察模式：监控命中，未执行行动',
-        body:
+        text:
           `检查目标「${payload.target}」满足条件「${payload.condition}」。\n` +
           `检查依据：${payload.rationale}\n` +
           `研判：${assessment.reason}\n` +

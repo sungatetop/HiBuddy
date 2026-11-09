@@ -43,7 +43,7 @@ import type { Session, SessionLogOffset, SessionId, TurnEndReason } from '@deeps
 // Pulls the `subagents` service declaration into the cordis ServiceMap.
 import type {} from '@deepseek-ai/dsh-subagent'
 import type { Ticket } from './domain.ts'
-import { NotificationService } from './notifications.ts'
+import { MessageService } from './messages.ts'
 import { nextOccurrence, type TicketDispatcher } from './scheduler.ts'
 import { transitionTicket } from './state-machine.ts'
 import type { Store } from './store.ts'
@@ -148,15 +148,15 @@ export function summarizeRound(
 export class WorkerOrchestrator implements TicketDispatcher {
   private readonly deps: WorkerDeps
   private readonly store: Store
-  private readonly notifier: NotificationService
+  private readonly notifier: MessageService
   /** Ticket ids with an in-flight round — the slot accounting. */
   private readonly active = new Set<string>()
   private workspaceRoot: string | undefined
 
-  constructor(deps: WorkerDeps, store: Store, notifier?: NotificationService) {
+  constructor(deps: WorkerDeps, store: Store, notifier?: MessageService) {
     this.deps = deps
     this.store = store
-    this.notifier = notifier ?? new NotificationService(store)
+    this.notifier = notifier ?? new MessageService(store)
   }
 
   /** Concurrent worker slots; panel-editable via store settings (design §8). */
@@ -287,12 +287,12 @@ export class WorkerOrchestrator implements TicketDispatcher {
           summary: `worker 会话打开失败：${truncate(errorMessage(error))}`,
           sessionId,
         })
-        // System problem through the notification surface (design §9).
-        this.notifier.notify({
-          type: 'system',
-          ticketId: ticket.id,
+        // System problem through the message ledger (design §9).
+        this.notifier.postOutbound({
+          kind: 'system',
+          refs: { ticketId: ticket.id },
           title: `任务启动失败：${truncate(ticket.goal, TITLE_GOAL_MAX_CHARS)}`,
-          body: `worker 会话打开失败：${truncate(errorMessage(error))}`,
+          text: `worker 会话打开失败：${truncate(errorMessage(error))}`,
         })
       }
       this.store.upsertWorkerSession({ ticketId: ticket.id, sessionId, state: 'blocked' })
@@ -379,13 +379,13 @@ export class WorkerOrchestrator implements TicketDispatcher {
         } else {
           transitionTicket(this.store, current, 'completed', { summary, sessionId: round.sessionId })
         }
-        // B6 result notification — persist before deliver; the default content
+        // B6 result message — persist before deliver; the default content
         // fingerprint key dedupes byte-identical periodic results (design §9).
-        this.notifier.notify({
-          type: 'result',
-          ticketId: round.ticketId,
+        this.notifier.postOutbound({
+          kind: 'report',
+          refs: { ticketId: round.ticketId, sessionId: round.sessionId },
           title: `任务完成：${truncate(current.goal, TITLE_GOAL_MAX_CHARS)}`,
-          body: summary !== '' ? summary : '本轮已完成，未产生摘要文本。',
+          text: summary !== '' ? summary : '本轮已完成，未产生摘要文本。',
         })
       }
       this.store.finishRun(round.runId, now, 'ok', detail)
@@ -423,12 +423,12 @@ export class WorkerOrchestrator implements TicketDispatcher {
         summary: truncate(detail),
         sessionId: round.sessionId,
       })
-      // System problem through the notification surface (design §9).
-      this.notifier.notify({
-        type: 'system',
-        ticketId: round.ticketId,
+      // System problem through the message ledger (design §9).
+      this.notifier.postOutbound({
+        kind: 'system',
+        refs: { ticketId: round.ticketId, sessionId: round.sessionId },
         title: `任务失败：${truncate(current.goal, TITLE_GOAL_MAX_CHARS)}`,
-        body: truncate(detail),
+        text: truncate(detail),
       })
     }
     this.store.upsertWorkerSession({
