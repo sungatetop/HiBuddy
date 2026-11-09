@@ -180,21 +180,26 @@ date: 2026-11-09
 
 ### S7 常驻/主动层（S7-A 原型验证 → S7-B 自研 @hibuddy/resident）
 
-**目标**：把 HiBuddy 从"会话内被动应答"升级为"个人常驻智能体"——常驻运行、事件驱动、主动执行、人管目标与验收（[ADR-010](decisions/ADR-010-resident-proactive-agent.md)）。混合路线：S7-A 先安装官方 `dsh-superagent-prototype`（dsh bundle，与 0.2.1-rc.5 兼容）真机验证 dsh 常驻机制面，沉淀结论；S7-B 据此自研 `@hibuddy/resident` 面向个人场景（首批事件源 = 定时/周期任务），复用 coworker 审批分级、生成式 UI、会话留痕。
+**目标**：把 HiBuddy 从"会话内被动应答"升级为"个人常驻智能体"——常驻运行、事件驱动、主动执行、人管目标与验收（[ADR-010](decisions/ADR-010-resident-proactive-agent.md)）。形态按 [ADR-011](decisions/ADR-011-butler-conversation-layer.md)：常驻智能体本身是直接面向用户的管家会话（常驻 Agent Loop，小工具面），经 `send_message_to_user` 双向对话、经 `create_session` 指派 worker（会话即 worker）；用户面为微信式对话界面；审批由管家分级代管或升级请用户确认；AG-UI 应用于管家层。混合路线：S7-A 先安装官方 `dsh-superagent-prototype` 真机验证常驻机制面；S7-B 自研 `@hibuddy/resident`，复用 coworker 审批分级、生成式 UI、会话留痕。
 
 **任务**（S7-B 详细任务与验收标准在 S7-A 结论登记后补全；先验证后定验收）：
 1. **S7-A 原型验证**：安装 `dsh-superagent-prototype` 到 hibuddy profile（遵守 ADR-005 版本纪律，核对 peer 依赖与 patch 层序）；真机验证 Router 常驻、Worker 并行、事件触发（GitHub 轮询可用最小配置）、SQLite 持久化与崩溃恢复；结论（机制可用性 / 与 0.2.1-rc.5 的兼容偏差 / 对 S7-B 的机制借鉴清单）登记 progress-report。
-2. **S7-B 设计**：`@hibuddy/resident` 模块设计（事件源框架、工作项/调度/持久化、通知面、与 coworker 审批分级咬合、常驻面板信息架构）落 docs/module-design/，安全口径（免打扰窗、Worker 权限授予——不采纳原型的 danger-full-access）随设计定稿。（已落档 2026-11-05：[resident-design](module-design/resident-design.md) draft——核心架构 = 用户要点"worker 会话即普通 dsh 会话，其上加一层常驻编排"：不设常驻 router LLM 会话（D1），编排层确定性管理 worker 会话生命周期；首批事件源 scheduler（定时/周期）+ monitor（条件/间隔/去重指纹/退避）；两级过滤 + 观察模式默认；SQLite stateDir 部署闸 + 启动重对账；worker 沿用 standard preset 沙箱 + coworker 分级（不采纳 danger-full-access），待批状态提升为编排层唯一审批增量；S6-2 自动 resume 观察项落为审批面板安全约束与负向验收用例；面板四 tab Web 先行）
+2. **S7-B 设计**：`@hibuddy/resident` 模块设计（事件源框架、工作项/调度/持久化、消息面、与 coworker 审批分级咬合、对话界面信息架构）落 docs/module-design/，安全口径（免打扰窗、Worker 权限授予——不采纳原型的 danger-full-access）随设计定稿。（已落档 2026-11-05，2026-11-09 依 [ADR-011](decisions/ADR-011-butler-conversation-layer.md) 修订：[resident-design](module-design/resident-design.md) accepted——核心架构 = 管家会话（常驻 Agent Loop、hibuddy-butler 小工具面）直接面向用户，经 send_message_to_user 双向对话、经 create_session 指派 worker（会话即 worker，原生 agents.create）；用户面为微信式对话界面（只渲染 in/out 消息与审批卡）；事件源 scheduler/monitor 保持确定性，产物以事件信封投递管家决策；Ticket 退化为委派账本；审批分级代管（L0/L1 与免再询命中可代答，L2/越权升级确认）；AG-UI 应用于管家层；B1–B5 已交付不返工，B6′–B10′ 重排）
 3. **S7-B 实施**（设计评审定稿后逐任务推进，每任务全绿一笔提交）：
    - B1 @hibuddy/resident 包骨架：bundle 后端半（cordis 插件）+ client 半注册、stateDir 必配拒启闸。
    - B2 持久化层：SQLite（WAL）schema（sources/triggers/tickets/ticket_runs/worker_sessions/notifications/settings）+ 启动重对账（missed at 补一次、周期跳过、working 续跑/标记中断）+ proper-lockfile 防双实例。
    - B3 scheduler 事件源 + 调度器：一次性 at / 周期 interval、周期任务 = 持续 Ticket + 执行轮次、next-run-at 调度、Ticket 状态机（pending/working/awaiting_approval/completed/failed/stopped）。
    - B4 worker 会话编排：每票 `resident-worker-<ticketId>` 走原生 create/resume（composeAgent 三要素：preset mount、agentDefaultModel、meta.agentPreset）、每票工作目录 `<工作区>/resident-work/<ticket-short>/`、worker slots 并发闸（默认 2，用户交互唤醒不占 slot）。
    - B5 monitor 事件源 + 两级过滤：条件（自然语言）+检查目标+间隔+去重指纹+退避降级、gate（确定性）→ assessment（LLM 研判，观察模式默认，observe→auto 面板切换）。
-   - B6 通知面：先落库再触达、幂等键、免打扰窗（通知静默、待批不挂起）、系统问题通知。（已交付 2026-11-09：`notifications.ts` 统一写入路径 + worker/filter/monitor 三处收敛 + 启动补投；见 progress-report S7-B B6 段）
+   - B6 通知面：先落库再触达、幂等键、免打扰窗（通知静默、待批不挂起）、系统问题通知。（已交付 2026-11-09：`notifications.ts` 统一写入路径 + worker/filter/monitor 三处收敛 + 启动补投；见 progress-report S7-B B6 段。按 ADR-011 将被消息账本取代，见 B6′）
    - B7 审批咬合：监听 approval/asked 将 Ticket 置 awaiting_approval（decided 后回 working）、coworker answerer 对 worker 会话覆盖的真机验证、S6-2 负向用例（无人工来源 resolved 不放行）。
    - B8 常驻面板：四 tab（概览/工作项/定时与监控/通知）+ 设置（免打扰窗/并发/观察模式/stateDir 只读）、显式保存模式。
    - B9 E2E 验收：定时任务创建→到期→worker 执行→通知闭环；重启恢复对账；免打扰窗；审批卡与待批提升；观察模式 would-act 记录。
+   - **B6′ 消息账本**（ADR-011，取代原 B6 通知面）：messages 表（direction/kind/引用/幂等/已读/触达）、由 notifications 迁移、免打扰窗、启动补投、客户端读取 API。
+   - **B7′ 管家会话运行时**：`hibuddy-butler` preset（小工具面：send_message_to_user / create_session / send_to_session / get_session / list_sessions / cancel_session / resolve_approval / 记忆）、`resident-butler` 常驻会话、入站队列（用户消息/事件信封/回执/审批）、单轮串行与事件聚合、重启恢复（会话 resume + 未消化入站重投）。
+   - **B8′ 委派与审批接线**：create_session 走 `agents.create`（非 subagents）→ 委派账本；scheduler/monitor 产物改为事件信封投递管家；worker 回执入站；审批分级代管（L0/L1 与免再询 grant 命中可代答，L2/越权升级 question）+ S6-2 负向用例。
+   - **B9′ 微信式对话界面**（client 半）：气泡流（左管家/右用户）、时间分组、底部输入框、处理中状态条、内嵌审批卡、任务抽屉（工作项/定时监控/设置）、显式保存；"思考不可见"验收（无 assistant 文本/tool call）。
+   - **B10′ AG-UI 管家层**：`/agui` 主体改为管家 agent（入站→队列，出站→TEXT_MESSAGE）；逐会话桥降为调试开关；E2E 与全仓回归。
 4. 回归：能力面完整性回归（横切纪律 1）+ 既有 vitest/E2E 全绿 + 常驻链路新增契约测试（调度/过滤/Ticket 状态机/通知幂等）。
 
 **验收标准**（S7-A 部分先行登记）：
@@ -203,8 +208,8 @@ date: 2026-11-09
 - [x] A3 S7-B 设计定稿：[resident-design](module-design/resident-design.md) 状态 draft → accepted 并登记 docs/README；本节任务与验收标准已依 S7-A 结论登记。（2026-11-05：设计文档落档并经评审通过转 accepted（含用户 worker 设计要点原话与 D1–D5 关键决策）；S7-B 任务 B1–B9 与验收 A3–A7 已登记本节）
 - [x] A4 S7-B 实施 B1–B3：resident 包装配生效（--dump-config 层序含 @hibuddy/resident）、stateDir 拒启闸行为验证、scheduler 定时任务端到端（创建→到期→Ticket 迁移→worker 会话启动）、重启恢复对账证据入 progress-report。（2026-11-05：B1–B4 四任务全交付；端到端真机证据 = 注入到期票→Trigger 落库→pending→working→worker 会话 `resident-worker-<ticketId>` 经 composeAgent 三要素真实执行→completed，周期票 on-time 触发回 pending 且 next_run_at 预置；重启恢复 = working 中途杀宿→重启→旧 run 关闭 interrupted→recovery note 续跑→回 pending，run detail "recovery resume after host restart"；验收记录见 progress-report §S7-B）
 - [x] A5 S7-B 实施 B4–B5：worker 会话经 composeAgent 三要素启动并完成真实任务；并发 slots 上限生效（第 3 票排队）；monitor 观察模式下命中仅记录 would-act 不执行，切 auto 后才行动。（B4 于 2026-11-05 真机验收；B5 于 2026-11-06 真机验收，见 progress-report S7-B B5 段——观察模式命中仅落 would-act 通知零建票，切 auto 后命中建票由 worker 完成并出简报；slots 连续采样 working=2/pending=1，maxWorking=2 第 3 票排队）
-- [ ] A6 S7-B 实施 B6–B7：通知先落库再触达（重启后通知仍在）+ 幂等去重；worker 会话越权写入触发审批卡且 Ticket 置 awaiting_approval（decided 后回 working）；S6-2 负向用例通过（无人工来源 resolved 不放行）。（B6 通知侧 2026-11-09 已完成：窗内仅落库→重启补投 delivered 1、幂等键去重、未读状态跨重启保留，见 progress-report S7-B B6 段；B7 审批咬合与 S6-2 负向用例待做）
-- [ ] A7 S7-B 实施 B8–B9 + 回归：常驻面板四 tab 可用（含显式保存）；E2E 全场景通过（含免打扰窗）；能力面完整性回归 + 既有 vitest/E2E 全绿 + 新增契约测试覆盖调度/过滤/Ticket 状态机/通知幂等。
+- [ ] A6 S7-B 实施 B6′–B8′：消息账本（先落库再触达、幂等、免打扰、重启补投）；管家会话经 send_message_to_user 完成对话闭环、经 create_session 指派 worker 并收到回执；审批事件进入管家，代管范围内的审批由管家代答留痕，L2/越权升级为 question 消息；S6-2 负向用例通过（无操作来源 resolved 不放行）。（原 B6 通知侧 2026-11-09 已完成：窗内仅落库→重启补投 delivered 1、幂等键去重、未读状态跨重启保留，见 progress-report S7-B B6 段；按 ADR-011 改造为消息账本后重验）
+- [ ] A7 S7-B 实施 B9′–B10′ + 回归：微信式对话界面可用（气泡流/时间分组/输入框/处理中/审批卡/任务抽屉，显式保存）；"思考不可见"通过（界面无 assistant 文本、tool call）；AG-UI 管家层闭环（外部前端仅见管家 agent）；E2E 全场景通过（含免打扰窗、重启恢复、对话→委派→汇报）；能力面完整性回归 + 既有 vitest/E2E 全绿 + 新增契约测试覆盖消息幂等/入站队列/代管阈值/委派账本。
 
 ## 3. 横切纪律（全阶段通用）
 
