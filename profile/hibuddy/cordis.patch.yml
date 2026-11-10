@@ -43,6 +43,7 @@
     retryPolicy:
       mode: normal
       maxRetries: 1
+    models: []
 
 - id: ui-settings-general
   name: "@deepseek-ai/dsh-client-ui-settings-general"
@@ -304,13 +305,19 @@
 - id: llm-pi-ai
   name: "@deepseek-ai/dsh-llm-pi-ai"
   config:
-    providers: {}
+    providers:
+      vol-ark:
+        apiKeyEnv: VOL_ARK_API_KEY
+        api: openai-completions
+        baseURL: https://ark.cn-beijing.volces.com/api/plan/v3
+        models:
+          - id: glm-5.3-flash
+            name: glm-5.3-flash
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
   config:
-    provider: deepseek-official
-    model: deepseek-flash
-    reasoningEffort: low
+    provider: vol-ark
+    model: glm-5.3-flash
 
 # ---------------------------------------------------------------------------
 # Resident layer persistence root (S7-B1, resident-design.md §8 / decision D3):
@@ -333,12 +340,12 @@
     # workspace; create_session may still target any other workspace per task.
     # workspace: "HibuddyWorkspace"
 
-# ---------------------------------------------------------------------------
-# AG-UI layer position (ADR-011 D10 / §4.5): the product endpoint /agui carries
-# the resident butler only (registered by @hibuddy/resident). The per-session
-# bridge is demoted to a debug surface and moves to /agui/debug, so both routes
-# can coexist without a duplicate path registration. Row semantics as above:
-# name and config are restated on a same-id override.
+    # ---------------------------------------------------------------------------
+    # AG-UI layer position (ADR-011 D10 / §4.5): the product endpoint /agui carries
+    # the resident butler only (registered by @hibuddy/resident). The per-session
+    # bridge is demoted to a debug surface and moves to /agui/debug, so both routes
+    # can coexist without a duplicate path registration. Row semantics as above:
+    # name and config are restated on a same-id override.
 - id: hibbuddy-ag-ui-bridge
   name: "@hibuddy/ag-ui-bridge"
   config:
