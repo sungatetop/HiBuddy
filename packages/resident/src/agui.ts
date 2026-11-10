@@ -14,6 +14,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
+import { attachmentHref } from './attachments.ts'
 import type { ResidentButler } from './butler.ts'
 import type { Message } from './domain.ts'
 
@@ -143,7 +144,15 @@ class SseRun {
 
 /** Streams one outbound ledger row as an AG-UI assistant text message. */
 function streamMessage(sink: SseRun, message: Message): void {
-  const text = message.title === undefined ? message.text : `${message.title}\n${message.text}`
+  const blocks = [message.title === undefined ? message.text : `${message.title}\n\n${message.text}`]
+  // Attachments ride along as Markdown so any AG-UI frontend can render them;
+  // local files point at the host's attachment route (same origin as /agui).
+  for (const attachment of message.attachments ?? []) {
+    const href = attachmentHref(attachment)
+    if (href === undefined) continue
+    blocks.push(attachment.kind === 'image' ? `![${attachment.name}](${href})` : `[${attachment.name}](${href})`)
+  }
+  const text = blocks.join('\n\n')
   sink.send({ type: 'TEXT_MESSAGE_START', messageId: message.id, role: 'assistant' })
   sink.send({ type: 'TEXT_MESSAGE_CONTENT', messageId: message.id, delta: text })
   sink.send({ type: 'TEXT_MESSAGE_END', messageId: message.id })

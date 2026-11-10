@@ -130,10 +130,12 @@ const styles = {
 
 interface DrawerProps {
   onClose: () => void
+  /** Opens the selected worker session in the main panel. */
+  openSession: (sessionId: string) => void
 }
 
 /** The task/settings drawer body. */
-export function TaskDrawer({ onClose }: DrawerProps): ReactNode {
+export function TaskDrawer({ onClose, openSession }: DrawerProps): ReactNode {
   const [tab, setTab] = useState<'tasks' | 'settings'>('tasks')
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [approvals, setApprovals] = useState<PendingApproval[]>([])
@@ -241,7 +243,19 @@ export function TaskDrawer({ onClose }: DrawerProps): ReactNode {
                         {session.goal || session.ticketId}
                         <span style={styles.badge}>{STATE_LABELS[session.state] ?? session.state}</span>
                       </div>
-                      <div style={styles.meta}>会话：{session.sessionId}</div>
+                      <div style={styles.meta}>
+                        会话：{session.sessionId}
+                        <button
+                          type="button"
+                          style={{ ...styles.link, marginLeft: 8 }}
+                          onClick={() => {
+                            onClose()
+                            openSession(session.sessionId)
+                          }}
+                        >
+                          打开会话
+                        </button>
+                      </div>
                       {session.workspace !== undefined ? (
                         <div style={styles.meta}>工作区：{session.workspace}</div>
                       ) : null}

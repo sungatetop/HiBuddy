@@ -391,3 +391,22 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 3. 工具可见性：修复后管家再次调用 `list_workspaces` 返回两条真实工作区（HibuddyWorkspace / default-workspace），`list_sessions` 返回 10 条含状态/目标/工作区路径。
 4. 契约测试：resident 127 例全绿（新增工作区解析/默认绑定/未知工作区拒绝/worker cwd/工作区消失失败/列表渲染 6 例）。
 
+### S7-B 补：消息 Markdown 与多媒体附件（2026-11-09）
+
+**变更**：
+- `send_message_to_user` 正文改为 Markdown（客户端 GFM 渲染：标题/列表/表格/行内代码/代码块/链接；不启用原始 HTML，链接新窗口打开）。
+- `send_message_to_user` 新增 `attachments`：`{path | url, name?, kind?}` 数组。本地文件必须位于已注册工作区根下（越界/缺失时工具调用失败并列出可用工作区），URL 仅 http(s)；`kind` 按扩展名推断（image/video/audio/file），可显式覆盖。
+- 新模块 `src/attachments.ts`：路径白名单（canonical + 大小写归一 + 前缀边界）、MIME/大小推断、URL 校验、预览地址生成。
+- SQLite schema v4：新增 `attachments` 表（id / message_id / kind / name / path / url / mime / size）；消息读取时按消息回填；`MessageService` 与 `contentKey` 纳入附件。
+- 新增 `GET /resident/api/attachment?id=`（信任栅栏内）：只认账本注册的附件 id（无原始路径参数）；媒体内联、Range 206 支持拖动进度；非媒体或 `download=1` 强制下载；响应带 `nosniff` 与 `CSP: sandbox`。
+- 客户端：`src/client/markdown.tsx`（react-markdown + remark-gfm，随 client bundle 内联，classic script 无外部 require）；图片缩略图 + 全屏灯箱、视频/音频内联播放、文件卡片（扩展名角标 + 大小 + 打开/下载）。管家 persona 增加 Markdown/附件使用说明。
+- AG-UI：出站附件以 Markdown 图片/链接随 `TEXT_MESSAGE_CONTENT` 下发。
+- **worker 会话跳转**：`send_message_to_user` 新增可选 `session_id`（写入账本 `refs.sessionId`），气泡显示「打开 worker 会话」；任务抽屉每个工作项显示「打开会话」。两者通过 dsh 客户端 `uiWorkspace.openSession(sessionId)` 在主面板打开原生会话（client 半 inject 增加 `uiWorkspace`）。
+
+**真机证据（2026-11-09）**：
+1. 渲染：注入含 GFM 表格/代码块/引用的 out 消息 + 三个附件（svg/mp4/md），管家面板显示标题、表格、代码块；`img.naturalWidth = 320`；`<video controls>` 存在；文件卡片展示「打开/下载」。
+2. 附件路由：`Range: bytes=0-9` → `206`、`content-range: bytes 0-9/208`、`content-type: image/svg+xml`、`CSP: sandbox`；文件 HEAD + `download=1` → `content-disposition: attachment`。
+3. 工具链路：对话要求“把 chart.svg 作为图片附件发给我”，管家实际调用 `send_message_to_user`，账本出现 `attachments` 行（normalized 路径），气泡渲染图片；测试数据已清理。
+4. 回归：resident 138 例全绿（新增附件解析 7 例、存储往返 2 例、sendMessage 附件 2 例）；全仓 typecheck/build 通过；页面重载后 console 零错误。会话跳转补验后为 139 例。
+5. 会话跳转（2026-11-09）：任务抽屉 10 个工作项均出现「打开会话」，点击后管家面板卸载、主面板显示该 worker 原生会话（含历史与用量）；账本 `refs.sessionId` 的 out 消息气泡出现「打开 worker 会话」，点击同样完成跳转；测试注入行已清理。
+

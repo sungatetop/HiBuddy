@@ -91,7 +91,7 @@ date: 2026-11-09
 
 | 工具 | 语义 | 备注 |
 |---|---|---|
-| `send_message_to_user` | 向用户发出站消息（`text` + `kind: text\|question\|report\|system` + `reply_to`） | 非阻塞：返回即"已入账本/已进 UI"；`question` 表达需要回复，不挂起轮次 |
+| `send_message_to_user` | 向用户发出站消息（`text`（Markdown）+ `kind: text\|question\|report\|system` + `reply_to` + 可选 `session_id` / `attachments`） | 非阻塞：返回即"已入账本/已进 UI"；`question` 表达需要回复，不挂起轮次；`session_id` 让气泡可一键打开被汇报的 worker 会话；附件为工作区内本地文件（`path`）或 http(s) URL（`url`），按 image/video/audio/file 预览，本地路径受工作区白名单约束 |
 | `create_session` | 指派一条 worker 会话（`goal`、可选 `title`、`workspace` = 工作区 id/标题/路径；缺省用管家绑定工作区）→ 返回 `sessionId` + `ticketId` + `workspace` | 内部即 `agents.create` + 委派账本落行（ticket.workspace 持久化）；worker 在 `<workspace>/resident-work/<ticket-short>` 内执行；目标文本随信封继承 `untrusted` 标记 |
 | `list_workspaces` | 列出已注册的 dsh 工作区（id/标题/路径） | 管家在用户点名项目/工作区时先查询，再把结果传给 `create_session` |
 | `send_to_session` | 向指定 worker 会话追加指令（followup） | 用于改目标、补充约束、回答 worker 的提问 |

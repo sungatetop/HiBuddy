@@ -82,14 +82,16 @@ flowchart TB
 | 层 | 文件 | 职责 |
 |---|---|---|
 | client | `src/client/index.tsx` | 注册 `sidebar.panellist`「管家」入口 + keyed `main` 对话页 |
-| client | `src/client/chat-page.tsx` | 气泡流、时间分组、处理中状态条、输入框、审批卡样式 |
+| client | `src/client/chat-page.tsx` | 气泡流、时间分组、处理中状态条、输入框、审批卡样式、附件预览与图片灯箱 |
+| client | `src/client/markdown.tsx` | 管家消息 Markdown 渲染（GFM、表格、代码块、外链新窗口；不启用原始 HTML） |
 | client | `src/client/drawer.tsx` | 任务抽屉：工作项、待审批、设置（显式保存/放弃） |
-| client | `src/client/api.ts` | 三条数据面请求封装（2s / 3s 轮询） |
+| client | `src/client/api.ts` | 三条数据面请求封装（2s / 3s 轮询）+ 附件预览地址 |
 | host | `src/messages.ts` | 账本唯一写路径：先落库、幂等键、免打扰、补投、入站唤醒、出站订阅 |
+| host | `src/attachments.ts` | 附件解析：工作区白名单校验、类型/MIME/大小推断、远程 URL 校验 |
 | host | `src/butler.ts` | 管家会话、入站队列、单轮串行泵、工具服务面、工作区解析 |
-| host | `src/butler-tools.ts` | 7 件工具：`send_message_to_user` / `list_workspaces` / `create_session` / `send_to_session` / `get_session` / `list_sessions` / `cancel_session` / `resolve_approval` |
+| host | `src/butler-tools.ts` | 8 件工具：`send_message_to_user`（含 Markdown 正文与附件）/ `list_workspaces` / `create_session` / `send_to_session` / `get_session` / `list_sessions` / `cancel_session` / `resolve_approval` |
 | host | `src/approvals.ts` | `approval/request` 前置 answerer；审批卡 + 入站审批事件；分级代管与超时 fail-closed |
-| host | `src/api.ts` | 对话/工作项/设置 HTTP 路由（同一信任栅栏） |
+| host | `src/api.ts` | 对话/工作项/设置/附件读取 HTTP 路由（同一信任栅栏；附件支持 Range） |
 | host | `src/agui.ts` | `/agui` 管家层 AG-UI：入站文本 → 管家；出站消息 → `TEXT_MESSAGE_*` |
 | host | `src/scheduler.ts` | 1s tick 轮询 `tickets.next_run_at`，迟到阈值 30s |
 | host | `src/worker.ts` | worker 会话 create/resume、回合驱动、结果对账、回执入站 |
@@ -104,6 +106,7 @@ erDiagram
     TICKETS ||--o{ TICKET_RUNS : "每次执行一轮"
     TICKETS ||--o| WORKER_SESSIONS : "当前 worker 会话"
     TICKETS ||--o{ MESSAGES : "回执/审批卡引用"
+    MESSAGES ||--o{ ATTACHMENTS : "图片/视频/音频/文件"
     SOURCE_INSTANCES ||--o{ TRIGGERS : "产生"
 
     TICKETS {
@@ -122,11 +125,21 @@ erDiagram
         text id PK
         text direction "in 或 out"
         text kind "text/question/report/system/event/receipt/approval"
-        text text
+        text text "Markdown 正文"
         text idempotency_key UK
         int read
         int delivered
         text consumed_at "入站队列游标"
+    }
+    ATTACHMENTS {
+        text id PK
+        text message_id FK
+        text kind "image/video/audio/file"
+        text name
+        text path "工作区内本地文件"
+        text url "远程地址"
+        text mime
+        int size
     }
     WORKER_SESSIONS {
         text ticket_id PK
@@ -347,6 +360,7 @@ flowchart TB
         R["用户消息：右对齐 · 微信绿 #95ec69"]
         L["管家消息：左对齐 · 白色"]
         AP["审批卡：黄底 + 标题（需要审批：工具名）"]
+        AT["附件：图片缩略图（灯箱）/ 视频音频内联 / 文件卡片（打开/下载）"]
         TS["时间分组：首条 / 跨天 / 间隔 > 5 分钟"]
     end
     subgraph DRAWER["任务抽屉（右侧浮层）"]
@@ -358,6 +372,7 @@ flowchart TB
     LIST --> R
     LIST --> L
     LIST --> AP
+    LIST --> AT
     LIST --> TS
     HEAD -->|点击任务| DRAWER
 ```
@@ -368,6 +383,11 @@ flowchart TB
 |---|---|---|
 | 打开面板 | 侧边栏「管家」入口 → keyed `main` 全屏页 | `sidebar.panellist` / `main` slot |
 | 发送消息 | 乐观追加右侧气泡 → `POST /resident/api/messages` → 轮询换取权威行 | 消息账本 |
+| Markdown | 管家气泡按 GFM 渲染（标题/列表/表格/代码/链接），用户气泡保留原样换行 | 账本 `text` 字段 |
+| 图片预览 | 缩略图点击 → 全屏灯箱，点击任意处关闭 | `/resident/api/attachment?id=` |
+| 视频/音频 | 内联播放器（controls），宿主 Range 206 支持拖动进度 | 同上 |
+| 文件卡片 | 扩展名角标 + 大小 + 「打开 / 下载」；下载追加 `download=1` | 同上 |
+| 会话跳转 | 气泡（`refs.sessionId`）与抽屉工作项均显示「打开会话」，调用 `uiWorkspace.openSession(sessionId)` 切到该 worker 原生会话 | `/resident/api/sessions` / 账本 `refs` |
 | 处理中 | `status.state === 'working'` 时显示状态条，轮次结束消失 | `butler_state` / 泵状态 |
 | 审批卡 | `kind=approval` 黄底气泡，展示工具与审批编号 | 账本 out 行（ApprovalBroker 写入） |
 | 任务抽屉 | 每 3s 刷新工作项/待审批；设置仅本地草稿，点「保存」才提交 | `/resident/api/sessions`、`/settings` |
@@ -426,6 +446,7 @@ sequenceDiagram
 
 - `threadId` 只是客户端标识；所有请求都进入同一条管家会话（单用户单线程）。
 - 输出只有管家的出站消息气泡；worker 拓扑、会话 id、工具调用**不出网**。
+- 附件随文本下发为 Markdown（图片 `![name](…)`，其余 `[name](…)`）；本地文件地址为同源 `/resident/api/attachment?id=`，远程 URL 原样使用。
 - 审批不在 AG-UI 层解决：前端只会看到 `kind=approval` 的出站气泡；决定在管家对话内完成。
 - 逐会话调试桥保留在 `/agui/debug`（profile patch 配置），产品端点为 `/agui`。
 
@@ -438,6 +459,8 @@ sequenceDiagram
 | 宿主重启 | 单实例锁 + reconcile：working 续跑/标记 interrupted；待批重发审批卡；漏触发补一次 | 重启后自动 |
 | worker 会话打开失败 | ticket → failed + 入站事件 | 管家可 `create_session` 重派 |
 | 工作区目录消失 | 该轮失败，不重建目录 | 用户确认工作区后重派 |
+| 附件路径越界 / 不存在 | 工具调用失败并提示可用工作区，消息不落库 | 管家改用工作区内路径或 URL 重发 |
+| 附件文件事后被删 | 读取路由返回 410；气泡正文与文件名仍在 | 让 worker 重新产出后重发 |
 | 审批 30 分钟未决 | fail-closed → rejected | 管家/用户重新发起 |
 | 免打扰窗 | 出站行照常入账本（对话可见），仅 `delivered` 推送标记延后 | 窗结束补投 |
 | AG-UI 客户端断开 | 关闭 SSE、释放 run 槽；服务端轮次继续 | 客户端重连新 run |

@@ -30,8 +30,8 @@
 
 | 文档 | 摘要 |
 |---|---|
-| [resident-design.md](module-design/resident-design.md) | @hibuddy/resident 常驻层模块设计（S7-B，accepted 2026-11-05，2026-11-09 依 ADR-011 修订）：管家会话直接面向用户（常驻 Agent Loop、hibbuddy-butler 小工具面、send_message_to_user 出站、create_session 指派 worker）→ 事件源 scheduler/monitor 确定性产出事件信封 → 两级过滤/观察模式 → 委派账本 + worker slots → 消息账本（in/out）+ 微信式对话界面 → SQLite stateDir 部署闸 + 启动重对账；worker 沿用 standard preset 沙箱 + coworker 审批分级（不采纳 danger-full-access），管家分级代管审批；含用户设计要点原话与 S6-2 自动 resume 安全约束 |
-| [butler-design-diagrams.md](module-design/butler-design-diagrams.md) | 管家图解说明（accepted 2026-11-09）：分层设计图与代码映射、数据模型 ER、启动装配/工作区绑定、用户消息→回复、create_session→worker→回执、审批代管/升级三条时序图、Ticket 状态机、事件源与观察模式、微信式界面信息架构与 AG-UI 交互语义、失败恢复路径与关键参数表 |
+| [resident-design.md](module-design/resident-design.md) | @hibuddy/resident 常驻层模块设计（S7-B，accepted 2026-11-05，2026-11-09 依 ADR-011 修订）：管家会话直接面向用户（常驻 Agent Loop、hibbuddy-butler 小工具面、send_message_to_user 出站（Markdown + 图片/视频/音频/文件附件）、create_session 指派 worker）→ 事件源 scheduler/monitor 确定性产出事件信封 → 两级过滤/观察模式 → 委派账本 + worker slots → 消息账本（in/out）+ 微信式对话界面 → SQLite stateDir 部署闸 + 启动重对账；worker 沿用 standard preset 沙箱 + coworker 审批分级（不采纳 danger-full-access），管家分级代管审批；含用户设计要点原话与 S6-2 自动 resume 安全约束 |
+| [butler-design-diagrams.md](module-design/butler-design-diagrams.md) | 管家图解说明（accepted 2026-11-09）：分层设计图与代码映射、数据模型 ER（含附件表）、启动装配/工作区绑定、用户消息→回复、create_session→worker→回执、审批代管/升级三条时序图、Ticket 状态机、事件源与观察模式、微信式界面信息架构（Markdown 渲染、附件预览、worker 会话跳转）与 AG-UI 交互语义、失败恢复路径与关键参数表 |
 
 ## 参考资料（docs/references/）
 

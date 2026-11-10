@@ -38,7 +38,7 @@ date: 2026-11-09
 管家层              @hibuddy/resident：管家会话 resident-butler（常驻 Agent Loop，hibuddy-butler preset 小工具面）
   入站               用户消息 / 事件信封 / worker 结果回执 / 审批事件（单轮串行 + 队列 + 聚合）
   决策               create_session（可指定工作区）/ send_to_session / get_session / list_sessions / list_workspaces
-                     / cancel_session / resolve_approval（分级代管）/ send_message_to_user / 记忆
+                     / cancel_session / resolve_approval（分级代管）/ send_message_to_user（Markdown 正文 + 附件）/ 记忆
   出站               消息账本（in/out）→ 对话界面 / AG-UI（管家层）
 ─────────────────────────────────────────────────────────────────────
 确定性层            事件源框架（scheduler / monitor）→ 两级过滤 → 事件信封
@@ -63,6 +63,7 @@ worker 会话         普通 dsh 会话（create_session 发起；用户不直�
 | D9 | **审批分级代管**：管家可代答 L0/L1 与免再询 grant 命中；L2/越权写入升级请用户确认；代答留痕 | ADR-011 D9；保留 S6-2 实质约束 |
 | D10 | **AG-UI 应用于管家层**：对外只暴露管家一个 agent，worker 不暴露 | ADR-011 D10 |
 | D11 | **委派可指定工作区**：`create_session` 接受工作区 id/标题/路径并写入 `tickets.workspace`；worker 在 `<workspace>/resident-work/<ticket-short>` 执行；缺省用管家绑定工作区（首个注册工作区，可由 `resident.workspace` 配置覆盖）；管家自身会话的 cwd 也绑定该工作区根（dsh 按 header cwd 校验工作区成员） | 用户指令（2026-11-09）；dsh 工作区成员关系由 canonical cwd 决定，cwd 绑定是最小且可靠的实现 |
+| D12 | **消息支持 Markdown 与多类型附件**：`send_message_to_user` 正文按 Markdown 渲染；`attachments` 接受工作区内本地文件或 http(s) URL，按扩展名/显式 kind 区分 image/video/audio/file；本地附件只能位于已注册工作区根下，由宿主按附件 id 提供 Range 流式读取；图片灯箱、视频/音频内联播放、文件卡片（打开/下载）由客户端按 kind 预览 | 用户指令（2026-11-09）；附件走注册 id 而非原始路径，杜绝路径穿越；工作区白名单防止被注入的 worker 借管家读取任意文件 |
 
 ## 3. 领域模型（个人场景精简）
 
@@ -76,7 +77,7 @@ worker 会话         普通 dsh 会话（create_session 发起；用户不直�
 | Mandate（授权依据） | 简化为 Ticket 上的两字段：`explicit`（用户创建，默认沙箱内执行） / `inferred`（monitor 命中 + 研判接受，观察模式只记录） | 强度、来源 trigger、研判记录引用 |
 | Monitor（周期监控） | 一等对象（OpenMuse 蓝本） | 条件（自然语言）、检查目标（URL/路径）、间隔、下次检查时间、去重指纹、退避计数、模式（观察/行动） |
 | WorkerSession（执行会话） | 新增显式建模（用户要点：worker=会话） | ticketId、session id、状态（idle/working/待批/blocked）、最后报告 |
-| **Message（消息）** | 新增一等对象（ADR-011 D2/D11）：用户面唯一数据源 | id、direction（in/out）、kind（text/question/report/system/event/receipt/approval）、text、引用（ticketId/sessionId/sourceId/replyTo）、幂等键、已读、触达、创建时间 |
+| **Message（消息）** | 新增一等对象（ADR-011 D2/D11）：用户面唯一数据源 | id、direction（in/out）、kind（text/question/report/system/event/receipt/approval）、text（Markdown）、attachments（id/kind/name/本地路径或 URL/mime/size）、引用（ticketId/sessionId/sourceId/replyTo）、幂等键、已读、触达、创建时间 |
 | **ButlerSession（管家会话）** | 新增一等对象（ADR-011 D1） | session id（`resident-butler`）、状态（idle/working）、最近活跃时间、入站队列游标 |
 | Notification（通知） | **并入 Message**：原类型（result/report/system/awaiting_approval）映射为 out 消息的 kind；先落库再触达/幂等/免打扰语义保留 | 不再单独建模 |
 | **裁剪** | Thread/Subscription/Correlation/Channel/Policy 多人身份体系/bot 名单/PR 流转 | 多源订阅扇出、跨身份映射、渠道回写是研发协作场景概念，个人场景不需要 |
@@ -166,7 +167,10 @@ interface SourceKind {
 - **入站**：用户消息（in/text）；事件信封（in/event，含来源、时间、untrusted、摘要）；worker 回执（in/receipt，含 sessionId、状态、摘要）；审批事件（in/event，附审批卡）。
 - **出站**：仅管家 `send_message_to_user`（out）；审批卡（out/approval）由系统在 `approval/asked` 时写入，保证必须被看见。
 - **先落库再触达，幂等去重**（幂等键 = 来源 + 类型 + 内容指纹）；PRD FR-10 规则 3 语义保留。
-- 触达渠道首批：对话界面（未读计数 + 气泡流）；AG-UI（管家层，见 §10）；桌面系统通知为 P1。
+- **正文按 Markdown 渲染**（出站；用户输入保持原样换行），支持标题、列表、链接、表格、行内代码与代码块；不启用原始 HTML，模型/worker 输出无法注入标记。
+- **附件（D12）**：`attachments` 为 `{path | url, name?, kind?}` 数组；本地路径必须位于已注册工作区根下（否则工具调用失败并提示可用工作区），URL 仅 http(s)。宿主解析后写入 `attachments` 表（schema v4），消息 API 按消息回填；客户端按 kind 预览——图片缩略图 + 灯箱、`<video>`/`<audio>` 内联播放、其余为文件卡片（打开 / 下载）。
+- **附件读取路由**：`GET /resident/api/attachment?id=` 只认账本中已注册的附件 id（无原始路径参数，杜绝穿越），媒体类型内联（Range 206 支持拖动进度），非媒体与 `download=1` 强制下载；响应带 `nosniff` 与 `CSP: sandbox`，避免 SVG/HTML 直开在本源执行脚本。
+- 触达渠道首批：对话界面（未读计数 + 气泡流）；AG-UI（管家层，见 §10，附件以 Markdown 图片/链接随文本下发）；桌面系统通知为 P1。
 - 系统问题（来源降级、派工失败）也以入站事件进入管家，由管家决定是否转述用户——不允许编排层绕过管家直接对用户说话。
 - 免打扰窗：设置项（时段 + 按 ticket 例外）；窗内仅落库不推送，轮次与待批不受影响。
 
@@ -176,7 +180,10 @@ interface SourceKind {
   - 气泡流：用户消息靠右、管家消息靠左；按时间分组（今天/昨天/更早 + 时间戳）；
   - 状态条：管家轮次进行中显示"正在处理…"（宿主事件驱动，不由模型输出）；
   - 底部输入框：Enter 发送、Shift+Enter 换行；发送即入账本（in 消息）；
+  - 正文：管家消息按 Markdown 渲染（标题/列表/表格/代码/链接）；用户消息保留原始换行，不做 Markdown 解释；
+  - 附件：图片缩略图（点击开灯箱）、视频/音频内联播放、其他文件为卡片（扩展名角标 + 大小 + 打开/下载）；附件失败时气泡正文仍然可见；
   - 审批卡内嵌在气泡流中（out/approval），仅提供"批准/拒绝"与"去回复"两个显式操作；
+  - **会话跳转**：管家汇报某任务时可通过 `send_message_to_user.session_id` 绑定 worker 会话，气泡显示「打开 worker 会话」；任务抽屉的每个工作项也提供「打开会话」。两者都调用 dsh 客户端的 `uiWorkspace.openSession(sessionId)`，在主面板打开该原生会话；
   - **不渲染**：assistant 文本、tool call、thinking、worker 执行细节。
 - **任务抽屉（二级）**：工作项列表（状态芯片）+ 详情（目标/执行历史/产出摘要/穿透 worker 会话只读）；定时与监控（scheduler/monitor 来源管理、观察↔行动切换）；设置（免打扰窗/并发/观察模式/审批代管开关/stateDir 只读）。
 - **设置显式保存/放弃**（S7-A 工程发现采纳）。
@@ -207,6 +214,7 @@ interface SourceKind {
 | **B8** | **管家工具集**：send_message_to_user、create_session、send_to_session、get_session、list_sessions、cancel_session、resolve_approval（分级代管）、记忆读写；与 scheduler/monitor/worker 回执接线 |
 | **B9** | **微信式对话界面**（client 半）：气泡流、时间分组、输入框、处理中状态条、审批卡、任务抽屉（工作项/定时监控/设置） |
 | **B10** | **AG-UI 管家层**：`/agui` 改为管家 agent（入站用户消息→队列；出站消息→TEXT_MESSAGE），逐会话桥降为调试开关；E2E 与回归 |
+| **B11** | **消息 Markdown 与附件**（D12）：`send_message_to_user` 正文 Markdown + `attachments`；schema v4 `attachments` 表；`/resident/api/attachment`（Range）；客户端 GFM 渲染与图片/视频/音频/文件预览——已交付 |
 
 ## 13. 开放问题
 

@@ -32,7 +32,15 @@ export default defineConfig([
     outDir: 'lib',
     format: 'cjs',
     platform: 'browser',
-    deps: { neverBundle: [...dshExternal, 'react', 'react/jsx-runtime'] },
+    // rolldown ignores `platform` for CJS unless it is declared on the input;
+    // without this the classic-script bundle would emit require('react-markdown')
+    // and the dsh module loader cannot resolve it. `alwaysBundle` pulls the
+    // Markdown stack (and its transitive deps) into the single classic script.
+    inputOptions: { platform: 'browser' },
+    deps: {
+      neverBundle: [...dshExternal, 'react', 'react/jsx-runtime'],
+      alwaysBundle: [/./],
+    },
     dts: false,
     sourcemap: false,
     outputOptions: {

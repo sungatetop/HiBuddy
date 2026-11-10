@@ -16,8 +16,10 @@ import { mkdirSync, chmodSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 import type {
+  AttachmentKind,
   ButlerState,
   Message,
+  MessageAttachment,
   MessageDirection,
   MessageKind,
   SourceInstance,
@@ -29,7 +31,7 @@ import type {
 } from './domain.ts'
 
 /** Current schema version; bump and add a migration step for every change. */
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 /** Name of the SQLite file inside the stateDir. */
 export const DB_FILENAME = 'orchestrator.sqlite'
@@ -183,6 +185,27 @@ DROP TABLE notifications;
  */
 const MIGRATE_V3 = `ALTER TABLE tickets ADD COLUMN workspace TEXT;`
 
+/**
+ * v4 (WeChat-style message surface): messages carry attachments — images,
+ * videos, audio and documents. Rows live in their own table so the host can
+ * serve one by id without scanning message JSON; the chat API hydrates them
+ * back onto each message.
+ */
+const MIGRATE_V4 = `
+CREATE TABLE IF NOT EXISTS attachments (
+  id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  path TEXT,
+  url TEXT,
+  mime TEXT,
+  size INTEGER,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS attachments_message ON attachments(message_id);
+`
+
 interface TicketRow {
   id: string
   goal: string
@@ -238,6 +261,18 @@ function rowToMessage(row: Record<string, SQLInputValue>): Message {
     delivered: Number(row.delivered) === 1,
     consumedAt: row.consumed_at === null ? null : String(row.consumed_at),
     createdAt: String(row.created_at),
+  }
+}
+
+function rowToAttachment(row: Record<string, SQLInputValue>): MessageAttachment {
+  return {
+    id: String(row.id),
+    kind: String(row.kind) as AttachmentKind,
+    name: String(row.name),
+    ...(row.path !== null ? { path: String(row.path) } : {}),
+    ...(row.url !== null ? { url: String(row.url) } : {}),
+    ...(row.mime !== null ? { mime: String(row.mime) } : {}),
+    ...(row.size !== null ? { size: Number(row.size) } : {}),
   }
 }
 
@@ -305,6 +340,7 @@ export class Store {
           this.db.exec(MIGRATE_V2)
         }
         if (version < 3) this.db.exec(MIGRATE_V3)
+        if (version < 4) this.db.exec(MIGRATE_V4)
         this.db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)')
         const existing = this.db.prepare('SELECT COUNT(*) AS n FROM schema_version').get() as {
           n: number
@@ -578,30 +614,75 @@ export class Store {
    * @returns true when the message was newly recorded.
    */
   addMessage(message: Message): boolean {
-    const result = this.db
-      .prepare(
-        `INSERT INTO messages (id, direction, kind, title, text, ticket_id, session_id,
-            source_id, reply_to, idempotency_key, read, delivered, consumed_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(idempotency_key) DO NOTHING`,
+    return this.transaction(() => {
+      const result = this.db
+        .prepare(
+          `INSERT INTO messages (id, direction, kind, title, text, ticket_id, session_id,
+              source_id, reply_to, idempotency_key, read, delivered, consumed_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(idempotency_key) DO NOTHING`,
+        )
+        .run(
+          message.id,
+          message.direction,
+          message.kind,
+          message.title ?? null,
+          message.text,
+          message.refs?.ticketId ?? null,
+          message.refs?.sessionId ?? null,
+          message.refs?.sourceId ?? null,
+          message.refs?.replyTo ?? null,
+          message.idempotencyKey,
+          message.read ? 1 : 0,
+          message.delivered ? 1 : 0,
+          message.consumedAt ?? null,
+          message.createdAt,
+        )
+      if (Number(result.changes) === 0) return false
+      const insertAttachment = this.db.prepare(
+        `INSERT INTO attachments (id, message_id, kind, name, path, url, mime, size, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(
-        message.id,
-        message.direction,
-        message.kind,
-        message.title ?? null,
-        message.text,
-        message.refs?.ticketId ?? null,
-        message.refs?.sessionId ?? null,
-        message.refs?.sourceId ?? null,
-        message.refs?.replyTo ?? null,
-        message.idempotencyKey,
-        message.read ? 1 : 0,
-        message.delivered ? 1 : 0,
-        message.consumedAt ?? null,
-        message.createdAt,
-      )
-    return Number(result.changes) > 0
+      for (const attachment of message.attachments ?? []) {
+        insertAttachment.run(
+          attachment.id,
+          message.id,
+          attachment.kind,
+          attachment.name,
+          attachment.path ?? null,
+          attachment.url ?? null,
+          attachment.mime ?? null,
+          attachment.size ?? null,
+          message.createdAt,
+        )
+      }
+      return true
+    })
+  }
+
+  /** Hydrates the attachment rows for a list of message ids. */
+  private attachmentsByMessage(ids: readonly string[]): Map<string, MessageAttachment[]> {
+    const grouped = new Map<string, MessageAttachment[]>()
+    if (ids.length === 0) return grouped
+    const placeholders = ids.map(() => '?').join(', ')
+    const rows = this.db
+      .prepare(`SELECT * FROM attachments WHERE message_id IN (${placeholders}) ORDER BY rowid`)
+      .all(...ids) as Array<Record<string, SQLInputValue>>
+    for (const row of rows) {
+      const messageId = String(row.message_id)
+      const list = grouped.get(messageId) ?? []
+      list.push(rowToAttachment(row))
+      grouped.set(messageId, list)
+    }
+    return grouped
+  }
+
+  /** One attachment by id (the host's file-serving route); with its owner message. */
+  getAttachment(id: string): (MessageAttachment & { messageId: string }) | undefined {
+    const row = this.db.prepare('SELECT * FROM attachments WHERE id = ?').get(id) as
+      | Record<string, SQLInputValue>
+      | undefined
+    return row === undefined ? undefined : { ...rowToAttachment(row), messageId: String(row.message_id) }
   }
 
   listMessages(
@@ -629,7 +710,7 @@ export class Store {
     const rows = this.db
       .prepare(`SELECT * FROM messages${where} ORDER BY rowid ${order} LIMIT ?`)
       .all(...params) as Array<Record<string, SQLInputValue>>
-    return rows.map(rowToMessage)
+    return this.hydrateAttachments(rows.map(rowToMessage))
   }
 
   /** Inbound messages no butler turn has consumed yet, oldest first (the queue). */
@@ -640,7 +721,18 @@ export class Store {
          ORDER BY rowid ASC LIMIT ?`,
       )
       .all(limit) as Array<Record<string, SQLInputValue>>
-    return rows.map(rowToMessage)
+    return this.hydrateAttachments(rows.map(rowToMessage))
+  }
+
+  /** Attaches the attachment rows to messages loaded from the ledger. */
+  private hydrateAttachments(messages: Message[]): Message[] {
+    if (messages.length === 0) return messages
+    const grouped = this.attachmentsByMessage(messages.map((message) => message.id))
+    if (grouped.size === 0) return messages
+    return messages.map((message) => {
+      const attachments = grouped.get(message.id)
+      return attachments === undefined ? message : { ...message, attachments }
+    })
   }
 
   countPendingInbound(): number {

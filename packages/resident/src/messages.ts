@@ -15,7 +15,13 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto'
-import type { Message, MessageDirection, MessageKind, MessageRefs } from './domain.ts'
+import type {
+  Message,
+  MessageAttachment,
+  MessageDirection,
+  MessageKind,
+  MessageRefs,
+} from './domain.ts'
 import type { Store } from './store.ts'
 
 /** Settings key holding the do-not-disturb window (`{start,end}`, `HH:MM`). */
@@ -34,8 +40,11 @@ export interface QuietWindow {
 export interface MessageInput {
   direction: MessageDirection
   kind: MessageKind
+  /** Markdown body. */
   text: string
   title?: string
+  /** Files/media riding on the message (images, video, audio, documents). */
+  attachments?: MessageAttachment[]
   refs?: MessageRefs
   /** Producer-owned dedup identity; defaults to the content fingerprint key. */
   idempotencyKey?: string
@@ -90,9 +99,13 @@ export function contentKey(
   refs: MessageRefs | undefined,
   title: string | undefined,
   text: string,
+  attachments: readonly MessageAttachment[] = [],
 ): string {
+  const attachmentKey = attachments
+    .map((attachment) => attachment.path ?? attachment.url ?? attachment.id)
+    .join('|')
   const fingerprint = createHash('sha256')
-    .update(`${title ?? ''}\n${text}`)
+    .update(`${title ?? ''}\n${text}\n${attachmentKey}`)
     .digest('hex')
     .slice(0, 16)
   const owner = refs?.ticketId ?? refs?.sourceId ?? refs?.sessionId ?? 'global'
@@ -165,10 +178,13 @@ export class MessageService {
       kind: input.kind,
       ...(input.title !== undefined ? { title: input.title } : {}),
       text: input.text,
+      ...(input.attachments !== undefined && input.attachments.length > 0
+        ? { attachments: input.attachments }
+        : {}),
       ...(input.refs !== undefined ? { refs: input.refs } : {}),
       idempotencyKey:
         input.idempotencyKey ??
-        contentKey(input.direction, input.kind, input.refs, input.title, input.text),
+        contentKey(input.direction, input.kind, input.refs, input.title, input.text, input.attachments),
       read: false,
       delivered: input.direction === 'in',
       createdAt: now.toISOString(),

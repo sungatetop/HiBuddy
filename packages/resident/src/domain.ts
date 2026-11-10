@@ -134,6 +134,32 @@ export interface MessageRefs {
 }
 
 /**
+ * Media kind of an attachment, chosen so the chat panel knows how to preview
+ * it (image lightbox, inline video/audio, file card).
+ */
+export type AttachmentKind = 'image' | 'video' | 'audio' | 'file'
+
+/**
+ * One file or media item riding on a message (ADR-011 message surface, WeChat
+ * parity). A local file (`path`, served by the host through its whitelisted
+ * attachment route) and a remote URL (`url`, used directly) are exclusive.
+ */
+export interface MessageAttachment {
+  id: string
+  kind: AttachmentKind
+  /** Display name (basename or the URL's last segment). */
+  name: string
+  /** Canonical local path; host serves it via `/resident/api/attachment?id=`. */
+  path?: string
+  /** Remote http(s) URL; the client renders it directly. */
+  url?: string
+  /** Resolved MIME type, when known. */
+  mime?: string
+  /** Byte size for local files. */
+  size?: number
+}
+
+/**
  * One row of the conversation ledger — the ONLY data source of the chat UI
  * (ADR-011 D2). Persisted before any delivery; `delivered` tracks push.
  */
@@ -143,7 +169,10 @@ export interface Message {
   kind: MessageKind
   /** Optional heading (e.g. "任务完成：…"), the chat bubble itself uses `text`. */
   title?: string
+  /** Markdown body; the chat panel renders it as Markdown. */
   text: string
+  /** Files/media riding on this message (images, video, audio, documents). */
+  attachments?: MessageAttachment[]
   refs?: MessageRefs
   /** Idempotency key; duplicates are dropped by the store. */
   idempotencyKey: string

@@ -200,6 +200,7 @@ date: 2026-11-09
    - **B8′ 委派与审批接线**：create_session 走 `agents.create`（非 subagents）→ 委派账本；**workspace 参数（id/标题/路径）写入 `tickets.workspace`，worker 在 `<workspace>/resident-work/<ticket-short>` 执行；list_workspaces 供管家查询**；scheduler/monitor 产物改为事件信封投递管家；worker 回执入站；审批分级代管（L0/L1 与免再询 grant 命中可代答，L2/越权升级 question）+ S6-2 负向用例。
    - **B9′ 微信式对话界面**（client 半）：气泡流（左管家/右用户）、时间分组、底部输入框、处理中状态条、内嵌审批卡、任务抽屉（工作项/定时监控/设置）、显式保存；"思考不可见"验收（无 assistant 文本/tool call）。
    - **B10′ AG-UI 管家层**：`/agui` 主体改为管家 agent（入站→队列，出站→TEXT_MESSAGE）；逐会话桥降为调试开关；E2E 与全仓回归。
+   - **B11′ 消息 Markdown 与多媒体附件**（2026-11-09 已交付）：`send_message_to_user` 正文 Markdown + `attachments`（工作区内本地文件或 http(s) URL，image/video/audio/file）+ `session_id`（气泡一键打开 worker 会话）；`attachments` 表（schema v4）；`/resident/api/attachment`（Range + CSP sandbox）；客户端 GFM 渲染、图片灯箱、视频/音频内联、文件卡片、任务抽屉「打开会话」；AG-UI 附件以 Markdown 下发。
 4. 回归：能力面完整性回归（横切纪律 1）+ 既有 vitest/E2E 全绿 + 常驻链路新增契约测试（调度/过滤/Ticket 状态机/通知幂等）。
 
 **验收标准**（S7-A 部分先行登记）：

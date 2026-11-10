@@ -25,6 +25,12 @@ function text(value: string): Array<{ type: 'text'; text: string }> {
   return [{ type: 'text' as const, text: value }]
 }
 
+/** Shared guidance for the attachments parameter. */
+const ATTACHMENT_HINT =
+  'Local files must live under a registered workspace (use list_workspaces; worker output lands in ' +
+  '<workspace>/resident-work/). Remote http(s) URLs are also accepted. Images/video/audio preview ' +
+  'inline; everything else shows as a downloadable file card. kind is inferred from the extension.'
+
 /** The butler service, or a clear failure when the host half is not ready. */
 function requireService(): ResidentButler {
   const service = getResidentService()
@@ -41,9 +47,11 @@ export function createButlerTools() {
     description:
       'Send a message to the user. THIS IS YOUR ONLY WAY TO SPEAK TO THE USER — plain assistant text is invisible. ' +
       'Use kind "text" for normal chat, "question" when you need a reply, "report" for task results, ' +
-      '"system" for notices (errors, degraded sources). Non-blocking: it returns once the message is recorded.',
+      '"system" for notices (errors, degraded sources). Text is rendered as Markdown (headings, lists, ' +
+      'code, links, tables). Attach images/videos/audio/documents with attachments. ' +
+      'Non-blocking: it returns once the message is recorded.',
     parameters: {
-      text: { type: 'string', required: true, description: 'Message body shown in the chat bubble.' },
+      text: { type: 'string', required: true, description: 'Markdown message body shown in the chat bubble.' },
       kind: {
         type: 'string',
         enum: ['text', 'question', 'report', 'system'],
@@ -53,6 +61,29 @@ export function createButlerTools() {
         type: 'string',
         description: 'Id of the message being answered, when replying to a question (optional).',
       },
+      session_id: {
+        type: 'string',
+        description:
+          'Worker session this message is about (optional). The chat shows an "open session" link on the bubble.',
+      },
+      attachments: {
+        type: 'array',
+        description: `Files or media to send with the message (optional). ${ATTACHMENT_HINT}`,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            path: { type: 'string', description: 'Absolute path of a file under a registered workspace.' },
+            url: { type: 'string', description: 'http(s) URL of a remote file (alternative to path).' },
+            name: { type: 'string', description: 'Display name; defaults to the file name.' },
+            kind: {
+              type: 'string',
+              enum: ['image', 'video', 'audio', 'file'],
+              description: 'Media kind; inferred from the extension when omitted.',
+            },
+          },
+        },
+      },
     },
     output: {
       schema: {
@@ -61,17 +92,23 @@ export function createButlerTools() {
         properties: {
           ok: { type: 'boolean', enum: [true], required: true, description: 'Recorded.' },
           id: { type: 'string', required: true, description: 'Message id in the ledger.' },
+          attachments: { type: 'integer', required: true, description: 'Attachment count recorded.' },
         },
       },
-      render: (_args, value) => text(`消息已发送（${value.id}）。`),
+      render: (_args, value) =>
+        text(`消息已发送（${value.id}${value.attachments > 0 ? `，${value.attachments} 个附件` : ''}）。`),
     },
     async execute(args) {
       const outcome = requireService().sendMessage({
         text: args.text,
         kind: (args.kind ?? 'text') as 'text' | 'question' | 'report' | 'system',
         ...(args.reply_to !== undefined ? { replyTo: args.reply_to } : {}),
+        ...(args.session_id !== undefined ? { sessionId: args.session_id } : {}),
+        ...(args.attachments !== undefined && args.attachments.length > 0
+          ? { attachments: args.attachments }
+          : {}),
       })
-      return { ok: true as const, id: outcome.id }
+      return { ok: true as const, id: outcome.id, attachments: args.attachments?.length ?? 0 }
     },
   })
 
@@ -117,6 +154,7 @@ export function createButlerTools() {
       'Delegate a goal to a NEW worker session (a real dsh session, not a subagent). ' +
       'Returns immediately with the deterministic session id; the scheduler starts it within a second. ' +
       'Pass workspace (id/title/path) to make the worker execute inside that workspace; omitted = the butler\'s bound workspace. ' +
+      'When you tell the user about this task, pass the returned sessionId as send_message_to_user.session_id so they can open it. ' +
       'The worker executes autonomously — monitor it with get_session/list_sessions and steer it with send_to_session.',
     parameters: {
       goal: {

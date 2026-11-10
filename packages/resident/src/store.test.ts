@@ -203,6 +203,42 @@ describe('messages', () => {
       store.close()
     }
   })
+
+  it('round-trips message attachments and serves them by id', () => {
+    const store = Store.open(dir)
+    try {
+      store.addMessage({
+        ...base,
+        attachments: [
+          { id: 'att_1', kind: 'image', name: 'chart.png', path: 'D:\\ws\\chart.png', mime: 'image/png', size: 16 },
+          { id: 'att_2', kind: 'video', name: 'clip.mp4', url: 'https://example.com/clip.mp4' },
+        ],
+      })
+      const [message] = store.listMessages()
+      expect(message!.attachments).toHaveLength(2)
+      expect(message!.attachments![0]).toMatchObject({ id: 'att_1', kind: 'image', size: 16 })
+      expect(message!.attachments![1]).toMatchObject({ id: 'att_2', url: 'https://example.com/clip.mp4' })
+      expect(store.getAttachment('att_1')).toMatchObject({ messageId: 'n1', name: 'chart.png' })
+      expect(store.getAttachment('nope')).toBeUndefined()
+    } finally {
+      store.close()
+    }
+  })
+
+  it('does not write attachments for a duplicate message', () => {
+    const store = Store.open(dir)
+    try {
+      store.addMessage(base)
+      const duplicate = store.addMessage({
+        ...base,
+        attachments: [{ id: 'att_x', kind: 'file', name: 'a.txt' }],
+      })
+      expect(duplicate).toBe(false)
+      expect(store.getAttachment('att_x')).toBeUndefined()
+    } finally {
+      store.close()
+    }
+  })
 })
 
 describe('worker sessions and settings', () => {

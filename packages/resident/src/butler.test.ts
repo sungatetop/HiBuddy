@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -233,6 +233,42 @@ describe('sendMessage', () => {
     expect(first.recorded).toBe(true)
     expect(second.recorded).toBe(true)
     expect(service.list({ direction: 'out' })).toHaveLength(2)
+  })
+
+  it('records a session link on the outbound row when the message is about a worker', async () => {
+    const deps = fakeDeps({ live: true })
+    const { runtime, service } = makeRuntime(deps)
+    await runtime.start()
+
+    runtime.sendMessage({ text: '已开始分析', kind: 'report', sessionId: 'resident-worker-t1' })
+
+    const stored = service.list({ direction: 'out' })[0]!
+    expect(stored.refs?.sessionId).toBe('resident-worker-t1')
+  })
+
+  it('records a workspace file attachment on the outbound row', async () => {
+    const deps = fakeDeps({ live: true, workspaces: [{ id: 'w1', path: dir, title: 'W' }] })
+    const { runtime, service } = makeRuntime(deps)
+    await runtime.start()
+    const file = join(dir, 'chart.png')
+    writeFileSync(file, Buffer.alloc(8))
+
+    runtime.sendMessage({ text: '图表如下', kind: 'report', attachments: [{ path: file }] })
+
+    const stored = service.list({ direction: 'out' })[0]!
+    expect(stored.attachments).toHaveLength(1)
+    expect(stored.attachments![0]).toMatchObject({ kind: 'image', name: 'chart.png', size: 8 })
+    expect(runtime.attachment(stored.attachments![0]!.id)).toMatchObject({ messageId: stored.id })
+  })
+
+  it('rejects attachments outside the registered workspaces', async () => {
+    const deps = fakeDeps({ live: true, workspaces: [{ id: 'w1', path: dir, title: 'W' }] })
+    const { runtime } = makeRuntime(deps)
+    await runtime.start()
+
+    expect(() =>
+      runtime.sendMessage({ text: 'x', kind: 'text', attachments: [{ path: 'C:\\Windows\\win.ini' }] }),
+    ).toThrow(/不在任何工作区/)
   })
 })
 

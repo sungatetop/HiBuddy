@@ -20,12 +20,18 @@ import { ChatPage } from './chat-page.tsx'
  * Required services. The loader passes the module exports as an object plugin,
  * so this declaration is what makes `ctx.slots` readable inside `apply` —
  * without it cordis throws "cannot get property slots without inject" and the
- * whole web boot aborts (one failed entry fails the frame).
+ * whole web boot aborts (one failed entry fails the frame). `uiWorkspace` is
+ * the shell's session navigation service (open a worker conversation).
  */
-export const inject = ['slots']
+export const inject = ['slots', 'uiWorkspace']
 
 /** Main-panel id shared by the sidebar entry and the `main` seat. */
 export const CHAT_PANEL_ID = 'hibuddy-chat'
+
+/** Structural face of the shell's session navigator (no value import needed). */
+interface WorkspaceNavigation {
+  openSession(sessionId: string): void
+}
 
 /** Sidebar glyph for the butler panel. */
 function ButlerIcon({ size }: PropsRuntime<'sidebar.panellist'>): ReactNode {
@@ -46,6 +52,10 @@ function ButlerIcon({ size }: PropsRuntime<'sidebar.panellist'>): ReactNode {
 
 /** Registers the sidebar entry and the full central chat page. */
 export function apply(ctx: ClientContext): void {
+  const navigation = ctx.get('uiWorkspace') as unknown as WorkspaceNavigation | undefined
+  const openSession = (sessionId: string): void => {
+    navigation?.openSession(sessionId)
+  }
   ctx.slots.inject('sidebar.panellist', () =>
     ctx.slots.register(
       {
@@ -58,6 +68,9 @@ export function apply(ctx: ClientContext): void {
     ),
   )
   ctx.slots.inject('main', () =>
-    ctx.slots.register({ name: 'main', key: CHAT_PANEL_ID }, ChatPage),
+    ctx.slots.register(
+      { name: 'main', key: CHAT_PANEL_ID, inject: () => ({ openSession }) },
+      ChatPage,
+    ),
   )
 }

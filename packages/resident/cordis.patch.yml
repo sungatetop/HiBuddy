@@ -29,6 +29,10 @@
                 用 send_to_session 追加指令，用 get_session / list_sessions 监控，用 cancel_session 叫停。
                 用户提到某个项目/工作区时，先用 list_workspaces 查明可用的工作区，再用 create_session 的
                 workspace 参数把 worker 指派到该工作区；未指明时使用你的默认绑定工作区。
+                send_message_to_user 的正文按 Markdown 渲染；需要给用户看图、视频、音频或文件时，
+                用 attachments 传工作区内的文件绝对路径或 http(s) 链接（图片/视频/音频可直接预览，
+                其他文件显示为可打开、可下载的文件卡片）。汇报某个委派任务时，把该任务的 sessionId
+                作为 send_message_to_user 的 session_id 传入，用户就能从消息一键打开 worker 会话。
                 用户的思考与你的思考都不可见：在聊天里只表现为消息的往来。保持简洁、可靠、像一位称职的管家。
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'

@@ -2,13 +2,35 @@
  * Client data access for the butler chat (same-origin, dsh fence cookie).
  */
 
+export type AttachmentKind = 'image' | 'video' | 'audio' | 'file'
+
+/** One file/media item riding on a chat message (mirrors the host domain type). */
+export interface ChatAttachment {
+  id: string
+  kind: AttachmentKind
+  name: string
+  path?: string
+  url?: string
+  mime?: string
+  size?: number
+}
+
 export interface ChatMessage {
   id: string
   direction: 'in' | 'out'
   kind: string
   title?: string
+  /** Markdown body (butler messages render it; user text stays literal). */
   text: string
+  attachments?: ChatAttachment[]
+  /** Ledger references; `sessionId` makes the bubble link to that worker session. */
+  refs?: { ticketId?: string; sessionId?: string; sourceId?: string; replyTo?: string }
   createdAt: string
+}
+
+/** Same-origin source for one attachment (remote URLs bypass the host route). */
+export function attachmentSrc(attachment: ChatAttachment): string {
+  return attachment.url ?? `/resident/api/attachment?id=${encodeURIComponent(attachment.id)}`
 }
 
 export interface ChatSnapshot {

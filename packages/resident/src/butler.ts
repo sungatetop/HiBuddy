@@ -26,7 +26,8 @@ import type { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { ApprovalBrokerFace, PendingApproval } from './approvals.ts'
-import type { Message, ResidentSettings, Ticket } from './domain.ts'
+import { prepareAttachments, type AttachmentRequest } from './attachments.ts'
+import type { Message, MessageAttachment, ResidentSettings, Ticket } from './domain.ts'
 import { parseQuietWindow, type MessageService } from './messages.ts'
 import { transitionTicket } from './state-machine.ts'
 import type { Store } from './store.ts'
@@ -97,6 +98,10 @@ export interface ResidentButler {
     text: string
     kind: 'text' | 'question' | 'report' | 'system'
     replyTo?: string
+    /** Worker session this message talks about; the chat links it for one-click open. */
+    sessionId?: string
+    /** Local workspace files or http(s) URLs to ride on the message. */
+    attachments?: AttachmentRequest[]
   }): { id: string; recorded: boolean }
   /** Delegates a goal to a new worker session (ticket + deterministic id). */
   createSession(input: { goal: string; title?: string; workspace?: string }): CreatedSession
@@ -113,6 +118,8 @@ export interface ResidentButler {
   resolveApproval(id: string, approved: boolean): { ok: boolean; error?: string }
   /** Chat transcript for the UI: user text + butler outbound (events/receipts hidden). */
   messages(limit?: number): Message[]
+  /** One attachment row by id (the host's file-serving route). */
+  attachment(id: string): (MessageAttachment & { messageId: string }) | undefined
   unreadCount(): number
   /** Observe outbound rows (butler messages + approval cards) as they are recorded. */
   onOutbound(listener: (message: Message) => void): () => void
@@ -279,6 +286,10 @@ export class ButlerRuntime implements ResidentButler {
       .slice(-limit)
   }
 
+  attachment(id: string): (MessageAttachment & { messageId: string }) | undefined {
+    return this.store.getAttachment(id)
+  }
+
   unreadCount(): number {
     return this.ledger.unreadCount()
   }
@@ -393,14 +404,27 @@ export class ButlerRuntime implements ResidentButler {
     text: string
     kind: 'text' | 'question' | 'report' | 'system'
     replyTo?: string
+    sessionId?: string
+    attachments?: AttachmentRequest[]
   }): { id: string; recorded: boolean } {
+    // Local attachments are limited to registered workspace roots: that is
+    // where workers write, and it keeps a prompt-injected worker from turning
+    // the butler into an arbitrary-file reader.
+    const attachments = prepareAttachments(
+      input.attachments,
+      this.listWorkspaces().map((workspace) => workspace.path),
+    )
+    const refs: NonNullable<Message['refs']> = {}
+    if (input.replyTo !== undefined) refs.replyTo = input.replyTo
+    if (input.sessionId !== undefined && input.sessionId.trim() !== '') refs.sessionId = input.sessionId.trim()
     // Butler messages are events, not deduplicable content: the same sentence
     // said twice must produce two bubbles, so the key is per call.
     const outcome = this.ledger.postOutbound({
       kind: input.kind,
       text: input.text,
+      ...(attachments.length > 0 ? { attachments } : {}),
       idempotencyKey: `butler:${randomUUID()}`,
-      ...(input.replyTo !== undefined ? { refs: { replyTo: input.replyTo } } : {}),
+      ...(Object.keys(refs).length > 0 ? { refs } : {}),
     })
     return { id: outcome.message?.id ?? '', recorded: outcome.recorded }
   }

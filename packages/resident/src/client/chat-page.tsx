@@ -8,9 +8,24 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
-import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { fetchChat, sendChat, type ChatMessage } from './api.ts'
+import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import {
+  attachmentSrc,
+  fetchChat,
+  sendChat,
+  type ChatAttachment,
+  type ChatMessage,
+} from './api.ts'
 import { TaskDrawer } from './drawer.tsx'
+import { Markdown } from './markdown.tsx'
+
+/** Injected shell capability: open one worker session in the main panel. */
+interface ChatInjected {
+  openSession: (sessionId: string) => void
+}
+
+/** Chat page props (runtime share + injected navigation callback). */
+type ChatProps = PropsRuntime<'main'> & InjectFace<ChatInjected>
 
 /** Greeting shown before the first exchange. */
 const GREETING = '你好，我是你的管家。告诉我你想完成什么，我会安排并跟进。'
@@ -54,14 +69,27 @@ const styles = {
     borderRadius: 8,
     fontSize: 14,
     lineHeight: 1.55,
-    whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
     boxShadow: '0 1px 1px rgba(0,0,0,0.04)',
   } as CSSProperties,
+  plainText: { whiteSpace: 'pre-wrap' } as CSSProperties,
   bubbleLeft: { background: '#ffffff' } as CSSProperties,
   bubbleRight: { background: '#95ec69' } as CSSProperties,
   bubbleApproval: { background: '#fff7e6', border: '1px solid #ffd8a8' } as CSSProperties,
   bubbleTitle: { fontSize: 12, fontWeight: 600, color: '#8a6d3b', marginBottom: 4 } as CSSProperties,
+  sessionLink: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+    padding: '3px 10px',
+    borderRadius: 12,
+    border: '1px solid #d9e6dc',
+    background: '#f2faf4',
+    color: '#1d7a3c',
+    fontSize: 12,
+    cursor: 'pointer',
+  } as CSSProperties,
   pending: {
     display: 'flex',
     alignItems: 'center',
@@ -121,6 +149,139 @@ const styles = {
     fontSize: 13,
     cursor: 'pointer',
   } as CSSProperties,
+  attachments: { display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 } as CSSProperties,
+  image: {
+    maxWidth: 260,
+    maxHeight: 260,
+    borderRadius: 6,
+    display: 'block',
+    cursor: 'zoom-in',
+    background: '#f2f2f2',
+  } as CSSProperties,
+  video: { maxWidth: 280, borderRadius: 6, display: 'block', background: '#000000' } as CSSProperties,
+  audio: { width: 240 } as CSSProperties,
+  fileCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '8px 10px',
+    borderRadius: 6,
+    background: 'rgba(255,255,255,0.85)',
+    border: '1px solid #e2e2e2',
+    color: '#191919',
+    textDecoration: 'none',
+  } as CSSProperties,
+  fileIcon: {
+    flex: 'none',
+    width: 34,
+    height: 40,
+    borderRadius: 4,
+    background: '#eef2f6',
+    color: '#5c6b7a',
+    fontSize: 10,
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  } as CSSProperties,
+  fileBody: { flex: 1, minWidth: 0 } as CSSProperties,
+  fileName: {
+    fontSize: 13,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  } as CSSProperties,
+  fileMeta: { fontSize: 11, color: '#8a8a8a', marginTop: 2 } as CSSProperties,
+  fileActions: { flex: 'none', display: 'flex', gap: 8 } as CSSProperties,
+  fileAction: { fontSize: 12, color: '#07c160', textDecoration: 'none' } as CSSProperties,
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 1000,
+    background: 'rgba(0,0,0,0.76)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'zoom-out',
+  } as CSSProperties,
+  overlayImage: { maxWidth: '92vw', maxHeight: '88vh', borderRadius: 4 } as CSSProperties,
+  overlayCaption: {
+    position: 'absolute',
+    bottom: 20,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#dddddd',
+  } as CSSProperties,
+}
+
+/** Human-readable byte size. */
+function sizeLabel(size: number | undefined): string {
+  if (size === undefined) return ''
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  if (size < 1024 * 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
+  return `${(size / 1024 / 1024 / 1024).toFixed(2)} GB`
+}
+
+/** Extension badge text for the file card. */
+function fileBadge(name: string): string {
+  const dot = name.lastIndexOf('.')
+  const extension = dot > 0 ? name.slice(dot + 1).toUpperCase() : 'FILE'
+  return extension.length > 4 ? extension.slice(0, 4) : extension
+}
+
+/** One attachment rendered per its media kind (image/video/audio/file). */
+function AttachmentView({
+  attachment,
+  onPreview,
+}: {
+  attachment: ChatAttachment
+  onPreview: (attachment: ChatAttachment) => void
+}): ReactNode {
+  const src = attachmentSrc(attachment)
+  if (attachment.kind === 'image') {
+    return (
+      <img
+        src={src}
+        alt={attachment.name}
+        title={attachment.name}
+        loading="lazy"
+        style={styles.image}
+        onClick={() => onPreview(attachment)}
+      />
+    )
+  }
+  if (attachment.kind === 'video') {
+    return <video src={src} controls preload="metadata" style={styles.video} />
+  }
+  if (attachment.kind === 'audio') {
+    return <audio src={src} controls preload="metadata" style={styles.audio} />
+  }
+  return (
+    <div style={styles.fileCard}>
+      <div style={styles.fileIcon}>{fileBadge(attachment.name)}</div>
+      <div style={styles.fileBody}>
+        <div style={styles.fileName} title={attachment.name}>
+          {attachment.name}
+        </div>
+        <div style={styles.fileMeta}>{sizeLabel(attachment.size) || attachment.mime || '文件'}</div>
+      </div>
+      <div style={styles.fileActions}>
+        <a href={src} target="_blank" rel="noreferrer noopener" style={styles.fileAction}>
+          打开
+        </a>
+        <a
+          href={`${src}${src.includes('?') ? '&' : '?'}download=1`}
+          download={attachment.name}
+          style={styles.fileAction}
+        >
+          下载
+        </a>
+      </div>
+    </div>
+  )
 }
 
 /** Local-time label for a message boundary (day or 5-minute gap). */
@@ -137,12 +298,13 @@ function boundaryLabel(current: ChatMessage, previous: ChatMessage | undefined):
 }
 
 /** Renders the chat page into the layout's keyed `main` panel. */
-export function ChatPage(_props: PropsRuntime<'main'>): ReactNode {
+export function ChatPage({ openSession }: ChatProps): ReactNode {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [working, setWorking] = useState(false)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | undefined>(undefined)
   const [drawer, setDrawer] = useState(false)
+  const [preview, setPreview] = useState<ChatAttachment | undefined>(undefined)
   const listRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -207,6 +369,7 @@ export function ChatPage(_props: PropsRuntime<'main'>): ReactNode {
           const label = boundaryLabel(message, messages[index - 1])
           const mine = message.direction === 'in'
           const approval = message.kind === 'approval'
+          const linkedSession = mine ? undefined : message.refs?.sessionId
           return (
             <div key={message.id} style={{ display: 'contents' }}>
               {label !== undefined ? <div style={styles.time}>{label}</div> : null}
@@ -219,7 +382,32 @@ export function ChatPage(_props: PropsRuntime<'main'>): ReactNode {
                   }}
                 >
                   {message.title !== undefined && !mine ? <div style={styles.bubbleTitle}>{message.title}</div> : null}
-                  {message.text}
+                  {mine || approval ? (
+                    <div style={styles.plainText}>{message.text}</div>
+                  ) : (
+                    <Markdown>{message.text}</Markdown>
+                  )}
+                  {message.attachments !== undefined && message.attachments.length > 0 ? (
+                    <div style={styles.attachments}>
+                      {message.attachments.map((attachment) => (
+                        <AttachmentView
+                          key={attachment.id}
+                          attachment={attachment}
+                          onPreview={setPreview}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                  {linkedSession !== undefined ? (
+                    <button
+                      type="button"
+                      style={styles.sessionLink}
+                      title={linkedSession}
+                      onClick={() => openSession(linkedSession)}
+                    >
+                      打开 worker 会话
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -253,7 +441,13 @@ export function ChatPage(_props: PropsRuntime<'main'>): ReactNode {
           发送
         </button>
       </div>
-      {drawer ? <TaskDrawer onClose={() => setDrawer(false)} /> : null}
+      {drawer ? <TaskDrawer onClose={() => setDrawer(false)} openSession={openSession} /> : null}
+      {preview !== undefined ? (
+        <div style={styles.overlay} onClick={() => setPreview(undefined)}>
+          <img src={attachmentSrc(preview)} alt={preview.name} style={styles.overlayImage} />
+          <div style={styles.overlayCaption}>{preview.name}</div>
+        </div>
+      ) : null}
     </div>
   )
 }
