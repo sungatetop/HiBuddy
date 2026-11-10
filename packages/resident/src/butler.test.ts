@@ -134,6 +134,23 @@ describe('turn pump', () => {
       ]),
     ).toContain('【任务回执｜刚刚】')
   })
+
+  it('prepends the situation snapshot and notes the remaining backlog (D2)', async () => {
+    const deps = fakeDeps({ live: true })
+    const { runtime, service } = makeRuntime(deps)
+    await runtime.start()
+
+    // More rows than one batch: the first turn must see the full queue and the
+    // backlog hint; the pump drains the rest in a second batch.
+    for (let i = 0; i < 25; i++) service.postInbound({ kind: 'text', text: `msg ${i}` })
+    await vi.waitFor(() => expect(deps.liveFollowups.length).toBeGreaterThanOrEqual(2))
+
+    expect(deps.liveFollowups[0]).toContain('【当前情境｜')
+    expect(deps.liveFollowups[0]).toContain('入站队列：25 条待处理')
+    expect(deps.liveFollowups[0]).toContain('还有 5 条待处理')
+    expect(deps.liveFollowups[0]).toContain('msg 0')
+    await vi.waitFor(() => expect(service.pendingInbound()).toHaveLength(0))
+  })
 })
 
 describe('renderInbound v2 (perception B12′ §5.1)', () => {

@@ -37,6 +37,7 @@ import type {
   Ticket,
 } from './domain.ts'
 import { parseQuietWindow, type MessageService } from './messages.ts'
+import { renderSituation } from './situation.ts'
 import { transitionTicket } from './state-machine.ts'
 import type { Store } from './store.ts'
 import { errorMessage, shortId } from './worker.ts'
@@ -616,6 +617,10 @@ export class ButlerRuntime implements ResidentButler {
     })
     this.restartTimer = undefined
     try {
+      // Resolve the bound workspace once per pump (may await the registry);
+      // the batch and its situation snapshot below stay free of awaits so the
+      // snapshot is the start-of-turn fact matching the batch.
+      const workspace = this.workspaceRoot ?? (await this.resolveWorkspaceRoot())
       // New rows that arrive mid-turn are handled by the next iteration.
       // Bounded by the queue draining; the loop exits as soon as it is empty.
       for (let guard = 0; guard < 50; guard++) {
@@ -623,7 +628,19 @@ export class ButlerRuntime implements ResidentButler {
         if (batch.length === 0) break
         const agent = this.agent
         if (agent === undefined) break
-        await this.runTurn(agent, renderInbound(batch, new Date()))
+        const now = new Date()
+        // Deterministic context (perception B12′ §5.2 / §6): a fresh situation
+        // snapshot first, then the framed inbound envelope, then — when more
+        // rows are still queued behind this batch — the backlog hint.
+        const situation = renderSituation(this.store, {
+          now,
+          workspace,
+          pendingApprovals: this.pendingApprovals(),
+        })
+        const remaining = this.store.countPendingInbound() - batch.length
+        const backlog =
+          remaining > 0 ? `\n（还有 ${remaining} 条待处理：先处理完当前批，可继续跟进，不必逐条汇报。）` : ''
+        await this.runTurn(agent, `${situation}\n\n${renderInbound(batch, now)}${backlog}`)
         this.ledger.consume(batch.map((message) => message.id))
       }
     } catch (error) {
