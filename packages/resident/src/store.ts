@@ -20,6 +20,7 @@ import type {
   ButlerState,
   Message,
   MessageAttachment,
+  MessageData,
   MessageDirection,
   MessageKind,
   SourceInstance,
@@ -31,7 +32,7 @@ import type {
 } from './domain.ts'
 
 /** Current schema version; bump and add a migration step for every change. */
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 /** Name of the SQLite file inside the stateDir. */
 export const DB_FILENAME = 'orchestrator.sqlite'
@@ -206,6 +207,13 @@ CREATE TABLE IF NOT EXISTS attachments (
 CREATE INDEX IF NOT EXISTS attachments_message ON attachments(message_id);
 `
 
+/**
+ * v5 (perception B12′): `messages.data` carries machine-readable envelope
+ * metadata (receipt outcome/runId/artifacts, event code/trust, approval id).
+ * The chat UI and AG-UI never render it — it feeds the butler's model context.
+ */
+const MIGRATE_V5 = `ALTER TABLE messages ADD COLUMN data TEXT;`
+
 interface TicketRow {
   id: string
   goal: string
@@ -256,6 +264,7 @@ function rowToMessage(row: Record<string, SQLInputValue>): Message {
     ...(row.title !== null ? { title: String(row.title) } : {}),
     text: String(row.text),
     ...(Object.keys(refs).length > 0 ? { refs } : {}),
+    ...(row.data !== null ? { data: JSON.parse(String(row.data)) as MessageData } : {}),
     idempotencyKey: String(row.idempotency_key),
     read: Number(row.read) === 1,
     delivered: Number(row.delivered) === 1,
@@ -341,6 +350,7 @@ export class Store {
         }
         if (version < 3) this.db.exec(MIGRATE_V3)
         if (version < 4) this.db.exec(MIGRATE_V4)
+        if (version < 5) this.db.exec(MIGRATE_V5)
         this.db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)')
         const existing = this.db.prepare('SELECT COUNT(*) AS n FROM schema_version').get() as {
           n: number
@@ -618,8 +628,8 @@ export class Store {
       const result = this.db
         .prepare(
           `INSERT INTO messages (id, direction, kind, title, text, ticket_id, session_id,
-              source_id, reply_to, idempotency_key, read, delivered, consumed_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              source_id, reply_to, idempotency_key, read, delivered, consumed_at, created_at, data)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(idempotency_key) DO NOTHING`,
         )
         .run(
@@ -637,6 +647,7 @@ export class Store {
           message.delivered ? 1 : 0,
           message.consumedAt ?? null,
           message.createdAt,
+          message.data === undefined ? null : JSON.stringify(message.data),
         )
       if (Number(result.changes) === 0) return false
       const insertAttachment = this.db.prepare(

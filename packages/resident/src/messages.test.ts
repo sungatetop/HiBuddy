@@ -80,6 +80,17 @@ describe('MessageService.post', () => {
     expect(store.listMessages()).toHaveLength(1)
   })
 
+  it('records explicit keys per run even with identical content (perception B12′ §5.4)', () => {
+    const service = new MessageService(store, { now: atNoon })
+    const input = { kind: 'receipt' as const, refs: { ticketId: 't1' }, title: '任务完成：x', text: '摘要 A' }
+    // Same summary, different run ids → both rounds must land.
+    expect(service.postInbound({ ...input, idempotencyKey: 'receipt:t1:1' }).recorded).toBe(true)
+    expect(service.postInbound({ ...input, idempotencyKey: 'receipt:t1:2' }).recorded).toBe(true)
+    // Replaying the same run id is dropped.
+    expect(service.postInbound({ ...input, idempotencyKey: 'receipt:t1:1' }).recorded).toBe(false)
+    expect(store.listMessages()).toHaveLength(2)
+  })
+
   it('silences pushes inside the window but still records', () => {
     store.setSetting(QUIET_HOURS_KEY, { start: '22:00', end: '07:00' })
     const service = new MessageService(store, { now: atNight })

@@ -7,6 +7,7 @@ import type { Agent, AgentHandle, AgentRegistry, CreateAgentOptions } from '@dee
 import type { AgentDefaultModelConfig } from '@deepseek-ai/dsh-agent-default-model'
 import type { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry'
 import { BUTLER_PRESET_ID, BUTLER_SESSION_ID, ButlerRuntime, renderInbound, type ButlerDeps } from './butler.ts'
+import type { Message } from './domain.ts'
 import { MessageService } from './messages.ts'
 import { Store } from './store.ts'
 
@@ -131,7 +132,129 @@ describe('turn pump', () => {
         { id: '1', direction: 'in', kind: 'text', text: 'hi', idempotencyKey: 'k', read: false, delivered: true, createdAt: '' },
         { id: '2', direction: 'in', kind: 'receipt', text: '完成', idempotencyKey: 'k2', read: false, delivered: true, createdAt: '' },
       ]),
-    ).toContain('【任务回执】完成')
+    ).toContain('【任务回执｜刚刚】')
+  })
+})
+
+describe('renderInbound v2 (perception B12′ §5.1)', () => {
+  const now = new Date('2026-11-10T09:05:00.000Z')
+  const base = {
+    direction: 'in' as const,
+    idempotencyKey: 'k',
+    read: false,
+    delivered: true,
+    createdAt: '2026-11-10T09:00:00.000Z',
+  }
+
+  function row(partial: Partial<Message> & { id: string; kind: Message['kind']; text: string }): Message {
+    return { ...base, ...partial }
+  }
+
+  it('frames user text with its relative age', () => {
+    const out = renderInbound([row({ id: '1', kind: 'text', text: '帮我看下项目' })], now)
+    expect(out).toContain('【用户｜5分钟前】')
+    expect(out).toContain('帮我看下项目')
+  })
+
+  it('renders receipt refs and title even without data (old rows)', () => {
+    const out = renderInbound(
+      [
+        row({
+          id: '2',
+          kind: 'receipt',
+          refs: { ticketId: 'tkt_abc', sessionId: 'resident-worker-tkt_abc' },
+          title: '任务完成：整理下载目录',
+          text: '已整理 3 个文件',
+        }),
+      ],
+      now,
+    )
+    expect(out).toContain('【任务回执｜5分钟前｜ticket=tkt_abc｜session=resident-worker-tkt_abc】')
+    expect(out).toContain('（标题）任务完成：整理下载目录')
+    expect(out).toContain('已整理 3 个文件')
+  })
+
+  it('renders receipt data: run/duration/outcome and the artifact line', () => {
+    const out = renderInbound(
+      [
+        row({
+          id: '3',
+          kind: 'receipt',
+          refs: { ticketId: 't1', sessionId: 's1' },
+          title: '任务完成：整理下载目录',
+          text: '已整理 3 个文件',
+          data: {
+            outcome: 'completed',
+            runId: 7,
+            startedAt: '2026-11-10T08:00:00.000Z',
+            finishedAt: '2026-11-10T08:00:48.000Z',
+            durationMs: 48_000,
+            artifacts: [
+              { name: 'chart.png', path: 'D:\\ws\\chart.png', size: 12_288, kind: 'image' },
+              { name: 'report.md', path: 'D:\\ws\\report.md', size: 3_072, kind: 'file' },
+            ],
+          },
+        }),
+      ],
+      now,
+    )
+    expect(out).toContain('【任务回执｜5分钟前｜ticket=t1｜session=s1｜run=7｜48s｜completed】')
+    expect(out).toContain('（产出）chart.png(12KB,image)；report.md(3KB,file)')
+  })
+
+  it('renders event code/source/untrusted flags and refs', () => {
+    const out = renderInbound(
+      [
+        row({
+          id: '4',
+          kind: 'event',
+          refs: { sourceId: 'm1', ticketId: 't1' },
+          title: '来源降级',
+          text: '连续 3 次检查失败',
+          data: { code: 'monitor_degraded', sourceId: 'm1', untrusted: true },
+        }),
+      ],
+      now,
+    )
+    expect(out).toContain('【事件｜5分钟前｜source=m1｜untrusted=true｜code=monitor_degraded｜ticket=t1】')
+    expect(out).toContain('（标题）来源降级')
+    expect(out).toContain('连续 3 次检查失败')
+  })
+
+  it('renders approval metadata and the requires-user flag', () => {
+    const out = renderInbound(
+      [
+        row({
+          id: '5',
+          kind: 'approval',
+          refs: { ticketId: 't1', sessionId: 's1' },
+          text: 'worker 发起了审批请求',
+          data: { approvalId: 'apr_8f3', toolName: 'write', requiresUser: true },
+        }),
+      ],
+      now,
+    )
+    expect(out).toContain('【审批请求｜5分钟前｜apr=apr_8f3｜tool=write｜ticket=t1｜session=s1｜需用户确认】')
+    expect(out).toContain('worker 发起了审批请求')
+  })
+
+  it('renders age as 刚刚 for future or malformed timestamps', () => {
+    const out = renderInbound(
+      [
+        { ...base, id: '6', kind: 'text' as const, text: 'hi', createdAt: '2099-01-01T00:00:00.000Z' },
+        { ...base, id: '7', kind: 'text' as const, text: 'hi', createdAt: '' },
+      ],
+      now,
+    )
+    expect(out).toContain('【用户｜刚刚】')
+  })
+
+  it('caps the body at 1200 characters and marks the cut', () => {
+    const long = 'x'.repeat(1300)
+    const out = renderInbound([row({ id: '8', kind: 'text', text: long })], now)
+    const bodyLine = out.split('\n').find((line) => line.includes('x'))!
+    expect(bodyLine.length).toBe(1201) // 1200 chars + the ellipsis
+    expect(bodyLine.endsWith('…')).toBe(true)
   })
 })
 

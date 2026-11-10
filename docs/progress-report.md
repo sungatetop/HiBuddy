@@ -410,3 +410,19 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 4. 回归：resident 138 例全绿（新增附件解析 7 例、存储往返 2 例、sendMessage 附件 2 例）；全仓 typecheck/build 通过；页面重载后 console 零错误。会话跳转补验后为 139 例。
 5. 会话跳转（2026-11-09）：任务抽屉 10 个工作项均出现「打开会话」，点击后管家面板卸载、主面板显示该 worker 原生会话（含历史与用量）；账本 `refs.sessionId` 的 out 消息气泡出现「打开 worker 会话」，点击同样完成跳转；测试注入行已清理。
 
+### S7-B 补：管家感知优化 B12′ D1（2026-11-10）
+
+设计：[butler-perception-design](../docs/solutions/butler-perception-design.md)（accepted 2026-11-10，§12 D1；任务登记 implementation-plan §S7 B12′）。
+
+**变更**：
+- **schema v5**：`messages` 新增 `data TEXT`（JSON 可空），承载 `MessageData` 联合类型（`ReceiptData` / `EventData` / `ApprovalData`，`src/domain.ts`）；`Store` 迁移链追加 `MIGRATE_V5`，`addMessage`/`rowToMessage` 读写 `data`。UI/AG-UI 不渲染 `data`——只进管家模型上下文。
+- **`renderInbound` v2 信封**（`butler.ts`）：每行固定格式头 + 标题行 + 产出文件行 + 正文 ≤1200 截断。头含相对时间（刚刚/N分钟前/N小时前/N天前，注入时钟）+ 结构化引用：回执 `ticket=/session=/run=/时长/outcome`（含 late/recovery），事件 `source=/untrusted=/code=`，审批 `apr=/tool=/需用户确认|可代管`；旧数据（无 `data`）回退渲染时间与 refs，无 schema 迁移的即时修复。
+- **回执按轮次幂等**（`worker.ts`）：成功回执 `idempotencyKey = receipt:<ticketId>:<runId>`——周期票两轮摘要相同也不再被默认内容指纹去重吞掉。
+- **工具失败反馈**（`butler-tools.ts`）：`send_message_to_user` 落库失败（store 错误）返回 `{ok:false, error:'消息未落库'}`（schema `ok` 枚举扩为 [true,false]，render 显示失败原因），管家可重试而非假成功。
+
+**契约测试**：resident 152 例全绿（新增：renderInbound 信封快照 8 例、回执幂等键模式 1 例、显式幂等键分轮落库 1 例、data 往返 + v4→v5 迁移 2 例、工具失败返回 ok:false 2 例）；typecheck/build 通过。
+
+**真机证据（2026-11-10）**：`pnpm dsh --profile hibuddy` 重启后零激活警告；`~/.dsh/state/resident/orchestrator.sqlite` 实测 `schema_version = 5`、`messages.data` 列存在（v4 原地迁移成功）。
+
+**后续（D2–D5）**：D2 每轮情境快照 + 积压提示；D3 回执富化 + 产出文件清单扫描 + 已读接线；D4 L1 状态边沿事件；D5（可选）L2 workspace-watch。
+

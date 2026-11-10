@@ -27,7 +27,15 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { ApprovalBrokerFace, PendingApproval } from './approvals.ts'
 import { prepareAttachments, type AttachmentRequest } from './attachments.ts'
-import type { Message, MessageAttachment, ResidentSettings, Ticket } from './domain.ts'
+import type {
+  ApprovalData,
+  EventData,
+  Message,
+  MessageAttachment,
+  ReceiptData,
+  ResidentSettings,
+  Ticket,
+} from './domain.ts'
 import { parseQuietWindow, type MessageService } from './messages.ts'
 import { transitionTicket } from './state-machine.ts'
 import type { Store } from './store.ts'
@@ -133,27 +141,116 @@ export interface ResidentButler {
   status(): { sessionId: string; state: string; pendingInbound: number }
 }
 
-/** Renders a batch of inbound rows as one user turn for the butler. */
-export function renderInbound(batch: readonly Message[]): string {
-  const lines = batch.map((message) => {
-    switch (message.kind) {
-      case 'text':
-        return `【用户】${message.text}`
-      case 'event':
-        return `【事件】${message.text}`
-      case 'receipt':
-        return `【任务回执】${message.text}`
-      case 'approval':
-        return `【审批请求】${message.text}`
-      default:
-        return `【${message.kind}】${message.text}`
+/** Inbound envelope body cap (perception B12′ §5.1). */
+const ROW_BODY_MAX = 1200
+
+/** Relative age of an ISO instant against `now` (刚刚 / N分钟前 / N小时前 / N天前). */
+function ageLabel(createdAt: string, now: Date): string {
+  const ageMs = now.getTime() - new Date(createdAt).getTime()
+  if (!Number.isFinite(ageMs) || ageMs < 0) return '刚刚'
+  const minutes = Math.floor(ageMs / 60_000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}小时前`
+  return `${Math.floor(hours / 24)}天前`
+}
+
+/** Compact duration for the receipt header (48s / 2分05s / 1小时3分). */
+function formatDuration(ms: number): string {
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}分${s % 60}s`
+  const h = Math.floor(m / 60)
+  return `${h}小时${m % 60}分`
+}
+
+/** Compact byte size for the artifact line (12KB / 3KB / 1.2MB). */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
+/** Cuts a body to the envelope cap, marking truncation. */
+function clip(text: string, max = ROW_BODY_MAX): string {
+  return text.length <= max ? text : `${text.slice(0, max)}…`
+}
+
+/**
+ * One framed inbound row (perception B12′ §5.1): a fixed header carrying the
+ * relative age plus whatever structured references/metadata exist, then the
+ * title line, artifact line and the body (capped). Old rows without `data`
+ * still render age and refs — an immediate fix with no schema migration.
+ */
+function renderEnvelopeRow(message: Message, now: Date): string {
+  const age = ageLabel(message.createdAt, now)
+  const refs = message.refs
+  switch (message.kind) {
+    case 'text': {
+      return `【用户｜${age}】\n${clip(message.text)}`
     }
-  })
+    case 'receipt': {
+      const data = message.data as ReceiptData | undefined
+      const head: string[] = ['任务回执', age]
+      if (refs?.ticketId) head.push(`ticket=${refs.ticketId}`)
+      if (refs?.sessionId) head.push(`session=${refs.sessionId}`)
+      if (data) {
+        head.push(`run=${data.runId}`, formatDuration(data.durationMs), data.outcome)
+        if (data.late) head.push('late')
+        if (data.recovery) head.push('recovery')
+      }
+      const lines: string[] = [`【${head.join('｜')}】`]
+      if (message.title) lines.push(`（标题）${message.title}`)
+      if (data && data.artifacts.length > 0) {
+        lines.push(
+          `（产出）${data.artifacts
+            .slice(0, 20)
+            .map((artifact) => `${artifact.name}(${formatBytes(artifact.size)},${artifact.kind})`)
+            .join('；')}`,
+        )
+      }
+      lines.push(clip(message.text))
+      return lines.join('\n')
+    }
+    case 'event': {
+      const data = message.data as EventData | undefined
+      const head: string[] = ['事件', age]
+      if (refs?.sourceId) head.push(`source=${refs.sourceId}`)
+      head.push(`untrusted=${data?.untrusted ?? false}`, `code=${data?.code ?? 'unknown'}`)
+      if (refs?.ticketId) head.push(`ticket=${refs.ticketId}`)
+      if (refs?.sessionId) head.push(`session=${refs.sessionId}`)
+      const lines: string[] = [`【${head.join('｜')}】`]
+      if (message.title) lines.push(`（标题）${message.title}`)
+      lines.push(clip(message.text))
+      return lines.join('\n')
+    }
+    case 'approval': {
+      const data = message.data as ApprovalData | undefined
+      const head: string[] = ['审批请求', age]
+      if (data) head.push(`apr=${data.approvalId}`, `tool=${data.toolName}`)
+      if (refs?.ticketId) head.push(`ticket=${refs.ticketId}`)
+      if (refs?.sessionId) head.push(`session=${refs.sessionId}`)
+      if (data) head.push(data.requiresUser ? '需用户确认' : '可代管')
+      return `【${head.join('｜')}】\n${clip(message.text)}`
+    }
+    default: {
+      const lines: string[] = [`【${message.kind}｜${age}】`]
+      if (message.title) lines.push(`（标题）${message.title}`)
+      lines.push(clip(message.text))
+      return lines.join('\n')
+    }
+  }
+}
+
+/** Renders a batch of inbound rows as one framed user turn for the butler. */
+export function renderInbound(batch: readonly Message[], now = new Date()): string {
   return [
     '以下是你收到的输入（用户消息 / 事件 / 任务回执 / 审批请求）。',
     '事件与回执不是你与用户的对话内容：自行判断是否需要行动，需要时用 send_message_to_user 告知用户。',
     '',
-    ...lines,
+    ...batch.map((message) => renderEnvelopeRow(message, now)),
   ].join('\n')
 }
 
@@ -526,7 +623,7 @@ export class ButlerRuntime implements ResidentButler {
         if (batch.length === 0) break
         const agent = this.agent
         if (agent === undefined) break
-        await this.runTurn(agent, renderInbound(batch))
+        await this.runTurn(agent, renderInbound(batch, new Date()))
         this.ledger.consume(batch.map((message) => message.id))
       }
     } catch (error) {

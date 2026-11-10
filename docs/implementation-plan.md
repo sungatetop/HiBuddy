@@ -201,6 +201,12 @@ date: 2026-11-09
    - **B9′ 微信式对话界面**（client 半）：气泡流（左管家/右用户）、时间分组、底部输入框、处理中状态条、内嵌审批卡、任务抽屉（工作项/定时监控/设置）、显式保存；"思考不可见"验收（无 assistant 文本/tool call）。
    - **B10′ AG-UI 管家层**：`/agui` 主体改为管家 agent（入站→队列，出站→TEXT_MESSAGE）；逐会话桥降为调试开关；E2E 与全仓回归。
    - **B11′ 消息 Markdown 与多媒体附件**（2026-11-09 已交付）：`send_message_to_user` 正文 Markdown + `attachments`（工作区内本地文件或 http(s) URL，image/video/audio/file）+ `session_id`（气泡一键打开 worker 会话）；`attachments` 表（schema v4）；`/resident/api/attachment`（Range + CSP sandbox）；客户端 GFM 渲染、图片灯箱、视频/音频内联、文件卡片、任务抽屉「打开会话」；AG-UI 附件以 Markdown 下发。
+   - **B12′ 管家感知优化**（设计见 [butler-perception-design](../docs/solutions/butler-perception-design.md)，accepted 2026-11-10；分阶段实施）：
+     - **D1（已交付 2026-11-10）**：schema v5 `messages.data`（JSON 元数据）+ `renderInbound` v2 结构化入站信封（时间/title/refs/untrusted，旧数据回退）+ 回执按轮次幂等 `receipt:<ticketId>:<runId>` + `send_message_to_user` 落库失败返回 `ok:false`。
+     - **D2**：每轮情境快照（`situation.ts`）+ 批内积压提示。
+     - **D3**：回执富化（outcome/耗时/runId/late/recovery）+ 产出文件清单扫描 + `POST /resident/api/messages/read` 已读接线。
+     - **D4**：L1 状态边沿事件（停滞/恢复检测、监控因果 `monitor_triggered`、未答提问提醒、免打扰抑制）。
+     - **D5（可选）**：L2 workspace-watch 首个新 SourceKind（独立 ADR）。
 4. 回归：能力面完整性回归（横切纪律 1）+ 既有 vitest/E2E 全绿 + 常驻链路新增契约测试（调度/过滤/Ticket 状态机/通知幂等）。
 
 **验收标准**（S7-A 部分先行登记）：

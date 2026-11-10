@@ -33,6 +33,12 @@
 | [resident-design.md](module-design/resident-design.md) | @hibuddy/resident 常驻层模块设计（S7-B，accepted 2026-11-05，2026-11-09 依 ADR-011 修订）：管家会话直接面向用户（常驻 Agent Loop、hibbuddy-butler 小工具面、send_message_to_user 出站（Markdown + 图片/视频/音频/文件附件）、create_session 指派 worker）→ 事件源 scheduler/monitor 确定性产出事件信封 → 两级过滤/观察模式 → 委派账本 + worker slots → 消息账本（in/out）+ 微信式对话界面 → SQLite stateDir 部署闸 + 启动重对账；worker 沿用 standard preset 沙箱 + coworker 审批分级（不采纳 danger-full-access），管家分级代管审批；含用户设计要点原话与 S6-2 自动 resume 安全约束 |
 | [butler-design-diagrams.md](module-design/butler-design-diagrams.md) | 管家图解说明（accepted 2026-11-09）：分层设计图与代码映射、数据模型 ER（含附件表）、启动装配/工作区绑定、用户消息→回复、create_session→worker→回执、审批代管/升级三条时序图、Ticket 状态机、事件源与观察模式、微信式界面信息架构（Markdown 渲染、附件预览、worker 会话跳转）与 AG-UI 交互语义、失败恢复路径与关键参数表 |
 
+## 方案文档（docs/solutions/）
+
+| 文档 | 摘要 |
+|---|---|
+| [butler-perception-design.md](solutions/butler-perception-design.md) | 管家感知能力优化设计（B12′，accepted 2026-11-10）：三层次感知——L0 上下文保真（schema v5 `messages.data` 结构化入站信封 + 每轮情境快照 + 回执富化/产出文件清单 + 按轮次幂等 + 出站真实反馈/已读接线）、L1 状态边沿事件（停滞检测/监控因果/未答提问提醒/积压提示）、L2 感知面扩展（workspace-watch/网页/RSS/邮件/IM 与只读查询工具）；含接口影响、persona 契约、安全边界、测试验收与 D1–D5 分阶段落地 |
+
 ## 参考资料（docs/references/）
 
 | 文档 | 摘要 |

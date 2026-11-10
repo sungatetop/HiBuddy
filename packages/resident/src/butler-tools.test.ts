@@ -41,6 +41,25 @@ afterEach(() => {
   clearResidentService()
 })
 
+describe('send_message_to_user feedback (perception B12′ §5.5)', () => {
+  it('returns ok:false with a reason when the ledger write fails', async () => {
+    setResidentService({ sendMessage: () => ({ id: '', recorded: false }) } as unknown as ResidentButler)
+    const value = await tool('send_message_to_user').execute({ text: 'hi', kind: 'text' } as never, {} as never)
+    expect(value).toMatchObject({ ok: false, error: '消息未落库' })
+    expect(rendered('send_message_to_user', value)).toContain('消息未能记录')
+  })
+
+  it('returns ok:true with the recorded id and attachment count', async () => {
+    setResidentService({ sendMessage: () => ({ id: 'msg_1', recorded: true }) } as unknown as ResidentButler)
+    const value = await tool('send_message_to_user').execute(
+      { text: 'hi', kind: 'text', attachments: [{ path: 'D:\\ws\\a.png' }] } as never,
+      {} as never,
+    )
+    expect(value).toMatchObject({ ok: true, id: 'msg_1', attachments: 1 })
+    expect(rendered('send_message_to_user', value)).toContain('msg_1')
+  })
+})
+
 describe('listing tools', () => {
   it('list_workspaces renders every workspace with its path', async () => {
     setResidentService(fakeService())

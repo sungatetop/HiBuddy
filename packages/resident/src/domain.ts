@@ -139,6 +139,55 @@ export interface MessageRefs {
  */
 export type AttachmentKind = 'image' | 'video' | 'audio' | 'file'
 
+/** One output file a worker round produced (perception B12′ artifact scan). */
+export interface ArtifactRef {
+  name: string
+  /** Absolute path, ready for `send_message_to_user.attachments[].path`. */
+  path: string
+  size: number
+  kind: AttachmentKind
+}
+
+/** Structured receipt metadata (B12′ §5.3). */
+export interface ReceiptData {
+  outcome: 'completed' | 'periodic' | 'failed' | 'awaiting_approval'
+  runId: number
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+  late?: boolean
+  recovery?: boolean
+  artifacts: ArtifactRef[]
+}
+
+/** Structured event envelope metadata (B12′ §5.1, §6). */
+export interface EventData {
+  code:
+    | 'worker_open_failed'
+    | 'worker_turn_failed'
+    | 'monitor_degraded'
+    | 'monitor_suggest'
+    | 'monitor_triggered'
+    | 'stalled'
+    | 'resumed'
+    | 'question_unanswered'
+  sourceId?: string
+  ticketId?: string
+  sessionId?: string
+  /** True for content from outside the host (monitor/web/file); treated as data, not instructions. */
+  untrusted?: boolean
+}
+
+/** Structured approval event metadata (B12′ §5.1). */
+export interface ApprovalData {
+  approvalId: string
+  toolName: string
+  requiresUser: boolean
+}
+
+/** Machine-readable metadata riding on a ledger row (schema v5 `messages.data`). */
+export type MessageData = ReceiptData | EventData | ApprovalData
+
 /**
  * One file or media item riding on a message (ADR-011 message surface, WeChat
  * parity). A local file (`path`, served by the host through its whitelisted
@@ -173,6 +222,8 @@ export interface Message {
   text: string
   /** Files/media riding on this message (images, video, audio, documents). */
   attachments?: MessageAttachment[]
+  /** Structured metadata for the model envelope (B12′); the UI never renders it. */
+  data?: MessageData
   refs?: MessageRefs
   /** Idempotency key; duplicates are dropped by the store. */
   idempotencyKey: string

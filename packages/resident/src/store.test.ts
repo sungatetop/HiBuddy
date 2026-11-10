@@ -239,6 +239,30 @@ describe('messages', () => {
       store.close()
     }
   })
+
+  it('round-trips structured data (schema v5) and keeps plain rows dataless', () => {
+    const store = Store.open(dir)
+    try {
+      store.addMessage({
+        ...base,
+        data: {
+          outcome: 'completed',
+          runId: 7,
+          startedAt: '2026-11-10T08:00:00.000Z',
+          finishedAt: '2026-11-10T08:00:48.000Z',
+          durationMs: 48_000,
+          artifacts: [],
+        },
+      })
+      store.addMessage({ ...base, id: 'n4', idempotencyKey: 'k4', kind: 'text', text: 'hi' })
+      const withData = store.listMessages()[1]!
+      const plain = store.listMessages()[0]!
+      expect(withData.data).toMatchObject({ outcome: 'completed', runId: 7, artifacts: [] })
+      expect(plain.data).toBeUndefined()
+    } finally {
+      store.close()
+    }
+  })
 })
 
 describe('worker sessions and settings', () => {
@@ -330,6 +354,78 @@ describe('v1 → v2 migration', () => {
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='notifications'")
         .get()
       expect(old).toBeUndefined()
+    } finally {
+      store.close()
+    }
+  })
+})
+
+describe('v4 → v5 migration (perception B12′)', () => {
+  it('adds the messages.data column, preserves old rows and round-trips new data', () => {
+    const db = new DatabaseSync(join(dir, DB_FILENAME))
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER NOT NULL);
+      INSERT INTO schema_version (version) VALUES (4);
+      CREATE TABLE messages (
+        id TEXT PRIMARY KEY,
+        direction TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        title TEXT,
+        text TEXT NOT NULL,
+        ticket_id TEXT,
+        session_id TEXT,
+        source_id TEXT,
+        reply_to TEXT,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        read INTEGER NOT NULL DEFAULT 0,
+        delivered INTEGER NOT NULL DEFAULT 0,
+        consumed_at TEXT,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO messages (id, direction, kind, title, text, ticket_id, idempotency_key, read, delivered, created_at)
+      VALUES ('m1', 'in', 'receipt', '任务完成', '整理完成', 't1', 'receipt:t1:1', 0, 1, '2026-11-10T08:00:00.000Z');
+      CREATE TABLE attachments (
+        id TEXT PRIMARY KEY,
+        message_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        path TEXT,
+        url TEXT,
+        mime TEXT,
+        size INTEGER,
+        created_at TEXT NOT NULL
+      );
+    `)
+    db.close()
+
+    const store = Store.open(dir)
+    try {
+      expect(store.schemaVersion()).toBe(SCHEMA_VERSION)
+      const [old] = store.listMessages()
+      expect(old!.idempotencyKey).toBe('receipt:t1:1')
+      expect(old!.data).toBeUndefined()
+
+      // A v5 row hydrates its data JSON.
+      store.addMessage({
+        id: 'm2',
+        direction: 'in',
+        kind: 'receipt',
+        refs: { ticketId: 't1', sessionId: 's1' },
+        text: '第二轮摘要相同',
+        idempotencyKey: 'receipt:t1:2',
+        read: false,
+        delivered: true,
+        createdAt: '2026-11-10T09:00:00.000Z',
+        data: {
+          outcome: 'completed',
+          runId: 2,
+          startedAt: '2026-11-10T09:00:00.000Z',
+          finishedAt: '2026-11-10T09:01:00.000Z',
+          durationMs: 60_000,
+          artifacts: [],
+        },
+      })
+      expect(store.listMessages()[0]!.data).toMatchObject({ outcome: 'completed', runId: 2, artifacts: [] })
     } finally {
       store.close()
     }

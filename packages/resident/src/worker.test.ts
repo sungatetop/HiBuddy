@@ -172,6 +172,20 @@ describe('dispatch: success paths', () => {
     expect(deps.resumed).toHaveLength(0)
   })
 
+  it('posts the receipt with a per-round idempotency key (perception B12′ §5.4)', async () => {
+    const deps = fakeDeps()
+    const orchestrator = new WorkerOrchestrator(deps, store)
+    seedWorking({ id: 't1' })
+
+    orchestrator.dispatch(store.getTicket('t1')!, { late: false })
+    await settle()
+
+    const receipts = store.listMessages().filter((m) => m.kind === 'receipt')
+    expect(receipts).toHaveLength(1)
+    expect(receipts[0]!.idempotencyKey).toBe('receipt:t1:1')
+    expect(receipts[0]!.refs).toMatchObject({ ticketId: 't1', sessionId: 'resident-worker-t1' })
+  })
+
   it('executes under the delegated workspace when the ticket names one', async () => {
     const workspace = mkdtempSync(join(tmpdir(), 'resident-ws-'))
     try {

@@ -90,13 +90,23 @@ export function createButlerTools() {
         type: 'object',
         additionalProperties: false,
         properties: {
-          ok: { type: 'boolean', enum: [true], required: true, description: 'Recorded.' },
+          ok: {
+            type: 'boolean',
+            enum: [true, false],
+            required: true,
+            description: 'Whether the message was recorded in the ledger.',
+          },
           id: { type: 'string', required: true, description: 'Message id in the ledger.' },
           attachments: { type: 'integer', required: true, description: 'Attachment count recorded.' },
+          error: { type: 'string', description: 'Reason when ok=false (retry, do not assume success).' },
         },
       },
       render: (_args, value) =>
-        text(`消息已发送（${value.id}${value.attachments > 0 ? `，${value.attachments} 个附件` : ''}）。`),
+        text(
+          value.ok
+            ? `消息已发送（${value.id}${value.attachments > 0 ? `，${value.attachments} 个附件` : ''}）。`
+            : `消息未能记录：${value.error ?? '未知原因'}。`,
+        ),
     },
     async execute(args) {
       const outcome = requireService().sendMessage({
@@ -108,6 +118,11 @@ export function createButlerTools() {
           ? { attachments: args.attachments }
           : {}),
       })
+      // The ledger write can fail (store error); report it so the butler can
+      // retry instead of believing a message was sent (perception B12′ §5.5).
+      if (!outcome.recorded) {
+        return { ok: false as const, id: outcome.id, attachments: 0, error: '消息未落库' }
+      }
       return { ok: true as const, id: outcome.id, attachments: args.attachments?.length ?? 0 }
     },
   })

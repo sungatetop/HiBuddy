@@ -395,12 +395,15 @@ export class WorkerOrchestrator implements TicketDispatcher {
           transitionTicket(this.store, current, 'completed', { summary, sessionId: round.sessionId })
         }
         // Worker receipt → inbound to the butler, who decides what to tell the
-        // user (ADR-011: only the butler speaks to the user).
+        // user (ADR-011: only the butler speaks to the user). Keyed per round
+        // (perception B12′ §5.4) so periodic tickets with identical summaries
+        // still deliver every round.
         this.notifier.postInbound({
           kind: 'receipt',
           refs: { ticketId: round.ticketId, sessionId: round.sessionId },
           title: `任务完成：${truncate(current.goal, TITLE_GOAL_MAX_CHARS)}`,
           text: summary !== '' ? summary : '本轮已完成，未产生摘要文本。',
+          idempotencyKey: `receipt:${round.ticketId}:${round.runId}`,
         })
       }
       this.store.finishRun(round.runId, now, 'ok', detail)
