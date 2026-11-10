@@ -144,7 +144,7 @@ interface SourceKind {
 ## 7. 执行：worker 会话编排
 
 - 每票一个 worker 会话 `resident-worker-<ticketId>`，走 dsh 原生 create/resume；装配三要素照 D2。
-- 工作目录分设（2026-11-10 修复）：**会话头 cwd = 工作区根**（dsh 工作区归属按 header cwd 精确匹配，子目录会落到 ungrouped），**有效工作目录 = `<工作区>/resident-work/<ticket-short>/`**（经 `workingDirectory.set` 移入，工具默认 cwd 仍隔离在票目录）。沙箱根跟随工作区根，L1 workspace-write 审批语义不变。工作区由 `create_session` 的 `workspace`（id/标题/路径）指定，缺省为管家绑定工作区；工作区目录消失时该轮失败，不在别处静默重建。
+- 工作目录分设（2026-11-10 修复）：**会话头 cwd = 工作区根**（dsh 工作区归属按 header cwd 精确匹配，子目录会落到 ungrouped），**有效工作目录 = `<工作区>/resident-work/<ticket-short>/`**（经 `workingDirectory.set` 移入，工具默认 cwd 仍隔离在票目录）。归属还需 **`workspace.attachSession` 入账**：dsh 分组表面只显示 registry 已 attach 的会话（web 会话创建由 session-controller attach，openRound 现同款补齐）。沙箱根跟随工作区根，L1 workspace-write 审批语义不变。工作区由 `create_session` 的 `workspace`（id/标题/路径）指定，缺省为管家绑定工作区；工作区目录消失时该轮失败，不在别处静默重建。
 - 长命令转后台 job、30 分钟上限、handoff 释放 slot——直接沿用 dsh/原型已验证机制，不自研。
 - **与 coworker 咬合**：coworker 的 `tools/pre-execute` 与 `approval/request` 挂载在根 ctx（覆盖 composition 内全部会话），worker 会话天然受 L0/L1/L2 分级与 L2 禁用约束——resident 不自建审批。增量两处：**①待批状态提升**——编排层监听 `approval/asked`，把对应 Ticket 置为 `awaiting_approval` 并写入审批卡消息；**②分级代管（ADR-011 D9）**——审批事件作为入站信封进入管家轮次，管家在代管范围内调用 `resolve_approval` 代答（留痕），超出范围则发 `question` 消息请用户确认，用户确认后由管家执行。实施时需真机验证 worker 会话确实命中 answerer 链（验收项）。
 - 免打扰窗对待批的影响：免打扰窗内通知仅落库不推送，**待批不挂起**（等待审批会阻塞 worker；个人场景默认仍即时可批，仅推送静默）。紧急策略演进登记开放问题。

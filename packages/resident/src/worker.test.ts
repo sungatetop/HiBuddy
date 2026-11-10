@@ -74,29 +74,47 @@ function fakeDeps(options: {
   live?: Agent
   createError?: Error
   resumeError?: Error
+  /** Registered workspace paths; resolveByPath only resolves these (ungrouped otherwise). */
+  workspaces?: string[]
 } = {}): WorkerDeps & {
   created: CreateAgentOptions[]
   resumed: ResumeAgentOptions[]
   workingDirectories: Array<{ path: string }>
+  attaches: Array<{ id: string; path: string }>
 } {
   const created: CreateAgentOptions[] = []
   const resumed: ResumeAgentOptions[] = []
   const workingDirectories: Array<{ path: string }> = []
+  const attaches: Array<{ id: string; path: string }> = []
   const open = async (opts: CreateAgentOptions | ResumeAgentOptions, error?: Error): Promise<AgentHandle> => {
     if (error) throw error
     return { agent: fakeAgent(options.events ?? COMPLETED), dispose: async () => {} }
   }
   const ctx = {
     on: () => () => {},
-    get: (name: string) =>
-      name === 'workingDirectory'
-        ? {
-            set: async (_agent: unknown, path: string) => {
-              workingDirectories.push({ path })
-              return path
-            },
-          }
-        : undefined,
+    get: (name: string) => {
+      if (name === 'workingDirectory') {
+        return {
+          set: async (_agent: unknown, path: string) => {
+            workingDirectories.push({ path })
+            return path
+          },
+        }
+      }
+      if (name === 'workspaceRegistry') {
+        return {
+          resolveByPath: async (path: string) =>
+            (options.workspaces ?? []).includes(path)
+              ? {
+                  attachSession: async (id: string) => {
+                    attaches.push({ id, path })
+                  },
+                }
+              : undefined,
+        }
+      }
+      return undefined
+    },
   } as unknown as Context
   const agents = {
     get: () => options.live,
@@ -122,6 +140,7 @@ function fakeDeps(options: {
     created,
     resumed,
     workingDirectories,
+    attaches,
   }
 }
 
@@ -206,7 +225,7 @@ describe('dispatch: success paths', () => {
   it('executes under the delegated workspace when the ticket names one', async () => {
     const workspace = mkdtempSync(join(tmpdir(), 'resident-ws-'))
     try {
-      const deps = fakeDeps()
+      const deps = fakeDeps({ workspaces: [workspace] })
       const orchestrator = new WorkerOrchestrator(deps, store)
       seedWorking({ id: 'ws1', workspace })
 
@@ -216,10 +235,25 @@ describe('dispatch: success paths', () => {
       expect(deps.created).toHaveLength(1)
       expect(deps.created[0]!.meta!.cwd).toBe(workspace)
       expect(deps.workingDirectories.at(-1)).toEqual({ path: join(workspace, 'resident-work', 'ws1') })
+      // The session is attached to the workspace record so grouping surfaces show it.
+      expect(deps.attaches).toEqual([{ id: 'resident-worker-ws1', path: workspace }])
       expect(store.getTicket('ws1')!.state).toBe('completed')
     } finally {
       rmSync(workspace, { recursive: true, force: true })
     }
+  })
+
+  it('leaves the session ungrouped when the root is not a registered workspace', async () => {
+    const deps = fakeDeps() // no registered workspaces
+    const orchestrator = new WorkerOrchestrator(deps, store)
+    seedWorking({ id: 'ws3' })
+
+    orchestrator.dispatch(store.getTicket('ws3')!, { late: false })
+    await settle()
+
+    expect(deps.created[0]!.meta!.cwd).toBe(process.cwd())
+    expect(deps.attaches).toHaveLength(0)
+    expect(store.getTicket('ws3')!.state).toBe('completed')
   })
 
   it('fails the round instead of recreating a vanished workspace', async () => {

@@ -445,12 +445,13 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 
 **问题**：管家 `create_session` 指定 Workspace 后，worker 会话并未归入该工作区，落在 ungrouped。根因：dsh 工作区归属 = **会话 header cwd 与工作区记录路径的精确匹配**（`workspaceRegistry` 的 `candidateMatches: sessionPaths.get(id) === path`），而 worker 会话 cwd 此前设为 `<工作区>/resident-work/<ticket-short>/` 子目录——子目录不等于工作区根，且会话持久化按各自 cwd 生成独立分组目录（如 `--D-HibuddyWorkspace-resident-work-tkt_x--`），注册表里没有任何工作区记录匹配该路径 → 界面显示为 ungrouped。
 
-**修复**（[worker.ts](../../packages/resident/src/worker.ts) `openRound`）：工作目录分设——
-- **会话头 cwd（meta.cwd）= 工作区根**：归属正确 + 沙箱 workspace-write 根跟随工作区（与工作区内任何会话一致）；
+**修复**（[worker.ts](../../packages/resident/src/worker.ts) `openRound`）：工作目录分设 + **工作区入账**——
+- **会话头 cwd（meta.cwd）= 工作区根**：归属判定 + 沙箱 workspace-write 根跟随工作区（与工作区内任何会话一致）；
 - **有效工作目录 = `<工作区>/resident-work/<ticket-short>/`**：经 `workingDirectory` 服务 `set(agent, cwd)` 移入（dsh 原生机制：header 是不可变"原项目"，有效目录独立投影且持久化，resume 自动重放；工具默认 cwd 仍隔离在票目录）。
+- **`workspace.attachSession(sessionId)` 入账**（关键补充）：dsh 分组表面（workspace-controller feed）读的是 `workspace.sessionIds`——**只有 registry 已 attach 的会话**才显示在工作区下；web 会话创建由 session-controller 在 create 后 attach，而 openRound 此前直接 `agents.create` 从未 attach，故 header cwd 正确仍显示 ungrouped。现按 `resolveByPath(root)` 找到工作区实体并 attach（幂等；非注册根/失败仅告警不影响执行）。
 - `workingDirectory.set` 可在宿主侧调用：cordis fiber 的 `uid` 仅在被 dispose 时清空，活体 agent 的 ctx fiber 始终 active（官方 `working-directory` 测试亦在轮次外调用）。
 
-**契约测试**：160 例全绿（worker 测试更新 4 处断言：header cwd = 工作区根、`workingDirectory.set` 收到 `resident-work/<ticket>`，覆盖 create/resume/live/恢复路径）。
+**契约测试**：161 例全绿（worker 测试新增 2 例：委派工作区 attach 断言 + 非注册根保持 ungrouped；既有 4 处 cwd/workingDirectory 断言更新）。
 
-**真机证据（2026-11-10）**：注入即时到期的票（workspace `D:\HibuddyWorkspace`）→ 调度派工 → worker 真实跑完一轮（outcome=ok）→ 会话投影实测：`identity.cwd = D:\HibuddyWorkspace`（归属工作区）、`rows.workingDirectory.val = D:\HibuddyWorkspace\resident-work\tkt_wscheck`（有效目录隔离）、`sandboxMode = workspace-write`；worker 自述工作目录为 `D:\HibuddyWorkspace\resident-work\tkt_wscheck`。测试票已置 stopped 防再触发。
+**真机证据（2026-11-10）**：注入即时到期的票（workspace `D:\HibuddyWorkspace`）→ 调度派工 → worker 真实跑完一轮（outcome=ok）→ 实测：`~/.dsh/storages/workspace.json` 中 `HibuddyWorkspace.sessionIds` **已包含** `resident-worker-tkt_attachchk`（分组表面可见）；会话投影 `identity.cwd = D:\HibuddyWorkspace`、`rows.workingDirectory.val = D:\HibuddyWorkspace\resident-work\tkt_attachchk`、`sandboxMode = workspace-write`；worker 自述工作目录为 `D:\HibuddyWorkspace\resident-work\tkt_attachchk`。测试票已置 stopped 防再触发。修复前创建的旧 worker 会话（header cwd 仍为子目录）无法 attach（cwd 校验不过），保持历史 ungrouped 分组，仅新会话生效。
 

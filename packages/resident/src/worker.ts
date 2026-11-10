@@ -246,6 +246,33 @@ export class WorkerOrchestrator implements TicketDispatcher {
     return this.workspaceRoot
   }
 
+  /**
+   * Account the worker session under its workspace record (grouping surfaces
+   * read `workspace.sessionIds`, which only lists sessions the registry
+   * attached). The web session-controller does this on session create; a
+   * missing/absent registry or a failed attach only affects grouping, so it
+   * warns instead of failing the round.
+   */
+  private async attachToWorkspace(sessionId: SessionId, root: string): Promise<void> {
+    const registry = this.deps.ctx.get('workspaceRegistry') as
+      | {
+          resolveByPath(path: string): Promise<
+            | { attachSession(id: string): Promise<void> }
+            | undefined
+          >
+        }
+      | undefined
+    if (registry === undefined) return
+    try {
+      const workspace = await registry.resolveByPath(root)
+      if (workspace !== undefined) await workspace.attachSession(sessionId)
+    } catch (error) {
+      console.warn(
+        `[hibbuddy-resident] could not attach worker session '${sessionId}' to workspace '${root}': ${errorMessage(error)}`,
+      )
+    }
+  }
+
   /** startRun → open the worker session (live / resume / create) → record it. */
   private async openRound(
     ticket: Ticket,
@@ -296,6 +323,12 @@ export class WorkerOrchestrator implements TicketDispatcher {
       // Move the effective working directory into the ticket's isolation dir
       // (the projection persists it, so a later resume replays the same dir).
       await this.deps.ctx.get('workingDirectory')?.set(agent, cwd)
+
+      // Account the session under the workspace record: grouping surfaces
+      // (workspace.sessionIds) only show sessions the registry ATTACHED — the
+      // web session-controller does the same on session create, and without it
+      // the header-cwd match alone still leaves the worker session ungrouped.
+      await this.attachToWorkspace(sessionId, root)
 
       this.store.upsertWorkerSession({ ticketId: ticket.id, sessionId, state: 'working' })
       this.store.upsertTicket({ ...ticket, sessionId, updatedAt: new Date().toISOString() })
