@@ -74,16 +74,29 @@ function fakeDeps(options: {
   live?: Agent
   createError?: Error
   resumeError?: Error
-} = {}): WorkerDeps & { created: CreateAgentOptions[]; resumed: ResumeAgentOptions[] } {
+} = {}): WorkerDeps & {
+  created: CreateAgentOptions[]
+  resumed: ResumeAgentOptions[]
+  workingDirectories: Array<{ path: string }>
+} {
   const created: CreateAgentOptions[] = []
   const resumed: ResumeAgentOptions[] = []
+  const workingDirectories: Array<{ path: string }> = []
   const open = async (opts: CreateAgentOptions | ResumeAgentOptions, error?: Error): Promise<AgentHandle> => {
     if (error) throw error
     return { agent: fakeAgent(options.events ?? COMPLETED), dispose: async () => {} }
   }
   const ctx = {
     on: () => () => {},
-    get: () => undefined,
+    get: (name: string) =>
+      name === 'workingDirectory'
+        ? {
+            set: async (_agent: unknown, path: string) => {
+              workingDirectories.push({ path })
+              return path
+            },
+          }
+        : undefined,
   } as unknown as Context
   const agents = {
     get: () => options.live,
@@ -108,6 +121,7 @@ function fakeDeps(options: {
     } as unknown as AgentDefaultModelConfig,
     created,
     resumed,
+    workingDirectories,
   }
 }
 
@@ -163,12 +177,15 @@ describe('dispatch: success paths', () => {
     expect(runs).toHaveLength(1)
     expect(runs[0]!.outcome).toBe('ok')
 
-    // composeAgent three elements on create
+    // composeAgent three elements on create; the header cwd is the WORKSPACE
+    // root (grouping + sandbox root), while the effective working directory is
+    // moved into the ticket's isolation dir (workspace-grouping fix, 2026-11-10).
     expect(deps.created).toHaveLength(1)
     expect(deps.created[0]!.sessionId).toBe('resident-worker-t1')
     expect(deps.created[0]!.meta).toMatchObject({ agentPreset: 'preset-1' })
     expect(deps.created[0]!.agentOptions).toMatchObject({ provider: 'minimax-cn' })
-    expect(deps.created[0]!.meta!.cwd).toContain(join('resident-work', 't1'))
+    expect(deps.created[0]!.meta!.cwd).toBe(process.cwd())
+    expect(deps.workingDirectories.at(-1)).toEqual({ path: join(process.cwd(), 'resident-work', 't1') })
     expect(deps.resumed).toHaveLength(0)
   })
 
@@ -197,7 +214,8 @@ describe('dispatch: success paths', () => {
       await settle()
 
       expect(deps.created).toHaveLength(1)
-      expect(deps.created[0]!.meta!.cwd).toBe(join(workspace, 'resident-work', 'ws1'))
+      expect(deps.created[0]!.meta!.cwd).toBe(workspace)
+      expect(deps.workingDirectories.at(-1)).toEqual({ path: join(workspace, 'resident-work', 'ws1') })
       expect(store.getTicket('ws1')!.state).toBe('completed')
     } finally {
       rmSync(workspace, { recursive: true, force: true })
@@ -243,6 +261,8 @@ describe('dispatch: success paths', () => {
     expect(deps.resumed).toHaveLength(1)
     expect(deps.resumed[0]!.resumeSessionId).toBe('resident-worker-t2')
     expect(deps.created).toHaveLength(0)
+    // The effective working directory is still moved into the ticket dir on resume.
+    expect(deps.workingDirectories.at(-1)).toEqual({ path: join(process.cwd(), 'resident-work', 't2') })
     expect(store.getTicket('t2')!.state).toBe('completed')
   })
 
@@ -258,6 +278,7 @@ describe('dispatch: success paths', () => {
 
     expect(deps.created).toHaveLength(0)
     expect(deps.resumed).toHaveLength(0)
+    expect(deps.workingDirectories.at(-1)).toEqual({ path: join(process.cwd(), 'resident-work', 't3') })
     expect(store.getTicket('t3')!.state).toBe('completed')
   })
 
@@ -355,7 +376,8 @@ describe('recovery (reconcile hook)', () => {
 
     expect(resumed).toBe(true)
     expect(deps.created).toHaveLength(1)
-    expect(deps.created[0]!.meta!.cwd).toContain(join('resident-work', 'rec'))
+    expect(deps.created[0]!.meta!.cwd).toBe(process.cwd())
+    expect(deps.workingDirectories.at(-1)).toEqual({ path: join(process.cwd(), 'resident-work', 'rec') })
     expect(store.getTicket('rec')!.state).toBe('completed')
     const runs = store.listRuns('rec')
     expect(runs[0]!.detail).toContain('recovery')

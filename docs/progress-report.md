@@ -426,3 +426,31 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 
 **后续（D2–D5）**：D2 每轮情境快照 + 积压提示；D3 回执富化 + 产出文件清单扫描 + 已读接线；D4 L1 状态边沿事件；D5（可选）L2 workspace-watch。
 
+### S7-B 补：管家感知优化 B12′ D2（2026-11-10）
+
+设计：[butler-perception-design](../docs/solutions/butler-perception-design.md) §5.2 / §6。
+
+**变更**：
+- **新模块 `src/situation.ts`**（`renderSituation`）：每轮泵现算的情境快照，置于 prompt 最前。头部 = 本地时间 + 绑定工作区；模式行 = 观察模式 / 免打扰（含窗口与当前是否生效）/ 并行上限；随后活跃票（进行中：working/awaiting_approval 按 `updatedAt` 估时长、pending 显下次到期钟点、failed 亦列出，`ticket.sessionId` 附会话 id）、待审批（编号/工具/需用户确认|可代管）、入站队列条数、最近完成（≤3）。数据全来自 Store 现算，**不新增表**；上限：活跃 ≤10、待批 ≤5、目标截断 40 字符、总长 ≤1200；空节省略（缺失即零项）；注入时钟 + 固定排序（working→awaiting_approval→pending→failed）保证确定性。
+- **pump 接线**：取批后（批与快照之间无 await，保证快照是"轮次开始时刻"的事实）先渲染情境快照、再接 `renderInbound` v2 信封；批后若 `countPendingInbound() - batch.length > 0` 追加积压提示"还有 N 条待处理：先处理完当前批，可继续跟进，不必逐条汇报"。工作区解析移到每泵一次（此前在取批与快照之间插入 await，实测导致首轮批次只有 1 条而快照看到整队列的错位）。
+- **persona 增补**（cordis.patch.yml）："每轮开头的【当前情境】与各【…】信封是当前事实：若与你的会话记忆冲突，以情境/信封为准"；"批末出现'还有 N 条待处理'时，先处理完当前批，可继续跟进，不必逐条汇报"。
+
+**契约测试**：resident 160 例全绿（新增 situation 7 例：空态/工作区/活跃票排序与时长/免打扰窗/模式开关/待审批/截断与上限；butler pump 1 例：快照置首 + 队列 25 条批 20 条时积压提示"还有 5 条待处理"+ 泵排空）。
+
+**真机证据（2026-11-10）**：重启后 resident 正常激活（butler_state 写入、无 LockError）；遗留入站触发的真实轮次（resident-butler 会话 turn 7）prompt 首部即为情境快照——`【当前情境｜2026-11-10 16:26｜工作区 D:\HibuddyWorkspace】观察模式：开；免打扰：否；并行上限：2 / 进行中（2）：tkt_f2941d… awaiting_approval 28 小时3 分… / tkt_dfaed1… failed 6 分钟… / 入站队列：1 条待处理 / 最近完成（3）…`，模型据此在回复中主动提及"28 小时前的审批请求仍挂着"并重派失败会话（D2 场景 2/4 验收口径：不调工具即答出活跃票、耗时、待批）。
+
+**后续（D3）**：回执富化（outcome/耗时/runId/late/recovery）+ 产出文件清单扫描 + `POST /resident/api/messages/read` 已读接线。
+
+### S7-B 补：worker 会话工作区归属修复（2026-11-10）
+
+**问题**：管家 `create_session` 指定 Workspace 后，worker 会话并未归入该工作区，落在 ungrouped。根因：dsh 工作区归属 = **会话 header cwd 与工作区记录路径的精确匹配**（`workspaceRegistry` 的 `candidateMatches: sessionPaths.get(id) === path`），而 worker 会话 cwd 此前设为 `<工作区>/resident-work/<ticket-short>/` 子目录——子目录不等于工作区根，且会话持久化按各自 cwd 生成独立分组目录（如 `--D-HibuddyWorkspace-resident-work-tkt_x--`），注册表里没有任何工作区记录匹配该路径 → 界面显示为 ungrouped。
+
+**修复**（[worker.ts](../../packages/resident/src/worker.ts) `openRound`）：工作目录分设——
+- **会话头 cwd（meta.cwd）= 工作区根**：归属正确 + 沙箱 workspace-write 根跟随工作区（与工作区内任何会话一致）；
+- **有效工作目录 = `<工作区>/resident-work/<ticket-short>/`**：经 `workingDirectory` 服务 `set(agent, cwd)` 移入（dsh 原生机制：header 是不可变"原项目"，有效目录独立投影且持久化，resume 自动重放；工具默认 cwd 仍隔离在票目录）。
+- `workingDirectory.set` 可在宿主侧调用：cordis fiber 的 `uid` 仅在被 dispose 时清空，活体 agent 的 ctx fiber 始终 active（官方 `working-directory` 测试亦在轮次外调用）。
+
+**契约测试**：160 例全绿（worker 测试更新 4 处断言：header cwd = 工作区根、`workingDirectory.set` 收到 `resident-work/<ticket>`，覆盖 create/resume/live/恢复路径）。
+
+**真机证据（2026-11-10）**：注入即时到期的票（workspace `D:\HibuddyWorkspace`）→ 调度派工 → worker 真实跑完一轮（outcome=ok）→ 会话投影实测：`identity.cwd = D:\HibuddyWorkspace`（归属工作区）、`rows.workingDirectory.val = D:\HibuddyWorkspace\resident-work\tkt_wscheck`（有效目录隔离）、`sandboxMode = workspace-write`；worker 自述工作目录为 `D:\HibuddyWorkspace\resident-work\tkt_wscheck`。测试票已置 stopped 防再触发。
+

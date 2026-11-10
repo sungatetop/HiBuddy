@@ -12,9 +12,15 @@
  *      + HiBuddy's `{{model}}` persona variable resolve);
  *   3. `meta.agentPreset` on create.
  *
- * Working directory: `<workspace>/resident-work/<ticket-short>/` — inside the
- * dsh sandbox workspace-write root, so L1 approval semantics stay unchanged
- * (D4: no danger-full-access).
+ * Working directory split (S7-B 补 2026-11-10): the session HEADER cwd is the
+ * workspace root — dsh workspace membership is an exact canonical-cwd match,
+ * so a per-ticket subdir would leave the worker session outside the delegated
+ * workspace ("ungrouped") — while the EFFECTIVE working directory (what tools
+ * default to) is moved into `<workspace>/resident-work/<ticket-short>` via the
+ * working-directory service. The header stays the immutable "original
+ * project", so the sandbox workspace-write root and the workspace grouping
+ * both follow the workspace; L1 approval semantics stay unchanged (D4: no
+ * danger-full-access).
  *
  * Round lifecycle: startRun → open (live / resume / create) → followup(goal)
  * → whenIdle (+ subagent drain) → flush → summarize → finalize. Success is the
@@ -253,6 +259,9 @@ export class WorkerOrchestrator implements TicketDispatcher {
     )
     try {
       const root = await this.resolveWorkspaceRoot(ticket)
+      // Effective working directory (tools default here); the session HEADER
+      // cwd stays the workspace root so the session groups under the delegated
+      // workspace (exact-cwd membership) and the sandbox root is the workspace.
       const cwd = join(root, 'resident-work', shortId(ticket.id))
       mkdirSync(cwd, { recursive: true })
 
@@ -277,12 +286,16 @@ export class WorkerOrchestrator implements TicketDispatcher {
         agent = (
           await this.deps.agents.create({
             sessionId,
-            meta: { cwd, agentPreset: preset.id },
+            meta: { cwd: root, agentPreset: preset.id },
             agentOptions,
             setup: mount,
           })
         ).agent
       }
+
+      // Move the effective working directory into the ticket's isolation dir
+      // (the projection persists it, so a later resume replays the same dir).
+      await this.deps.ctx.get('workingDirectory')?.set(agent, cwd)
 
       this.store.upsertWorkerSession({ ticketId: ticket.id, sessionId, state: 'working' })
       this.store.upsertTicket({ ...ticket, sessionId, updatedAt: new Date().toISOString() })
