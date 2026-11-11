@@ -3,7 +3,7 @@ title: HiBuddy 进度与验收报告
 summary: 各阶段的验收记录与缺口清单：S0 骨架与冒烟链路（2026-11-01）、S1 基础设施复用与编译打包（2026-11-02）、S2 品牌与人设基线（2026-11-03）、S3 审批分级与留痕（2026-11-03）、S3b AG-UI 桥 MVP（2026-11-03）、S4 生成式 UI 与工作台定制（2026-11-04）、S5 P0 收尾与双端交付（2026-11-04）、S6 生态接入与上游跟进（2026-11-04）均通过——P0 交付；S7-A 原型真机验证（2026-11-05：三机制两过一缺口）；每阶段含缺口清单
 keywords: [进度报告, 验收记录, 缺口清单, HiBuddy]
 status: accepted
-date: 2026-11-09
+date: 2026-11-11
 ---
 
 # HiBuddy 进度与验收报告
@@ -529,3 +529,24 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 - **auto 模式**：临时切 auto → 写 stderr-probe.txt → `monitor_triggered` 事件落账本（幂等 `monitor:watch-smoke:triggered:<指纹>`）→ 建票 `tkt_58660dc9`（origin=`monitor:watch-smoke`、mandate=inferred、goal 含变更摘要与条件）→ dispatcher 真实执行至 completed。
 - **评估延迟口径**：评估会话（`resident-monitor-<shortId>`）多 trigger 串行排队（同会话 followup 队列）+ 单轮 30–60s（deepseek-flash），非故障；「未见 would-act」多为研判 act=false（例行重复）。账本事件已入管家上下文（renderInbound 渲染 event 行），「管家能说出变更来源」未做独立对话轮次实测，登记验证深度。
 - 探测数据已清理（源行/目录/文件已删，observeMode 恢复 true，completed 票留档）。
+
+### S7-B 遗留收口（2026-11-11）
+
+S5/S7 收官后遗留观察项的集中处理；LLM 凭据失效导致部分真机验证按当前证据收口。
+
+**1. 事件 code 统一（提前执行，commit 87e42d0）**：filter auto 分支补发的因果事件 code `monitor_triggered` → `source_triggered`（[filter.ts](../../packages/resident/src/filter.ts) 发出处与注释、[edge.ts](../../packages/resident/src/edge.ts) 注释、filter/workspace-watch 测试 5 处断言同步，[ADR-012](decisions/ADR-012-workspace-watch.md) §6.3 注记「已收口」、[butler-perception-design](solutions/butler-perception-design.md) 事件契约表同步；implementation-plan D4 行同步）。幂等键与 ticket origin 的 `monitor:` 前缀为不透明存储标识保持不变、无数据迁移（原定第三个源种类引入时统一，遗留收口时提前执行）。顺修 D5 遗留 tsc 错误（workspace-watch.test.ts fake assessor 的 `inputs` 类型收窄为 `Array<{untrusted?: boolean}>`，vitest 不查类型故测试绿而 tsc 红；放宽为 `AssessmentInput[]`）。197 例 vitest + typecheck + build 全绿。
+
+**2. S7-A gh CLI 补验收口（commit d00458d）**：本机未安装 gh CLI；事件触发分派机制已被自研实现端到端证明（S7-B B4/B5 monitor 源、B12′ D5 watch 源：事件 → Trigger → 两级过滤 → 建票 → worker 执行 → completed），原型 github-watch 具体路径不再补验，implementation-plan S7-A 行缺口登记已更新为收口注记（如日后需要装 gh CLI + auth 后重装原型即可）。
+
+**3. dsh 上游跟进评估**：npm 存在更新版本 0.2.2-alpha.2 / alpha.3 / rc.1（> 在用 0.2.1-rc.5）。0.2.2-rc.1 的 plugin-manager 大改（minified 102KB → 138KB，新增 HMR 感知安装语义与安装回滚——package.json/lockfile 快照恢复），**热激活缺口（S5/S6 登记）是否修复未确认，需升级实测**。S5 UX P1 三条建议评估：P1-1 插件热激活失败的开关语义、P1-2 按钮可及性均涉 dsh 上游组件 → 等升级后重验；P1-3 Run 时间线入口 → 维持登记。结论：暂不升级（rc.5 稳定运行中），升级时按 ADR-005 冒烟流程并重点实测热激活。
+
+**4. 4b/4c 真机实测（部分完成，LLM 凭据阻塞收口）**：
+- **已验证**（宿主重启 + watch 源注入后）：探针文件写入 → Trigger 落库（watcher 拉前 ~1s）→ cursor 收敛（变更指纹入表不重触发）→ 研判会话创建且 prompt 正确注入（源名、条件、untrusted「按数据处理」指令、判断口径全会话 JSONL 实证）。
+- **4c stalled 边沿注入式真机验证通过**：注入 working 票（死会话 sessionId + updatedAt 置 5min 前，观察项「真机 stalled 触发」的成因路径为审批卡住，因凭据不可用以确定性停滞替代）→ EdgeDetector 30s 扫描触发 → stalled 事件落账本（title「任务疑似停滞」、text 含「1 分钟」= `stallMinutes` settings 实时读生效、幂等键 `stall:tkt_stallprobe:0`）→ 跨多个扫描周期幂等（仅 1 条）→ 清理（票置 stopped、测试消息删除）。
+- **凭据阻塞（收口原因）**：三 LLM 渠道全部失效——minimax-cn HTTP 402 余额不足、deepseek HTTP 402 余额不足、vol-ark HTTP 401 key 无效（`.credentials.yaml` refs + 项目 .env 逐一探测实证）。研判会话在 turn 1 两步工具调用后第三步请求挂起（无 turn/end，5min 无新事件、stderr 无痕，与既往「LLM 错误不进日志」经验一致）。
+- **待凭据恢复后补验**：4b「管家能说出变更来源」独立对话轮次实测（研判产出 would-act 与管家对话均依赖 LLM；D5 期账本已有历史事件可供溯源验证）；4c 完整成因路径（真实审批卡住 → blocked → stalled）。
+- 测试环境已清理（watch-4b 源与 triggers 删除、approvalDelegation 还原 true、stallMinutes 删除、探针目录删除）。
+
+**5. 4d 评估结论**：/plugins/events SSE 重试自愈 = dsh 原生 EventSource 标准自动重连语义（浏览器内建），非 HiBuddy 定制面，真机验证信息增量有限 → 维持观察；NSIS /S 静默安装 = 需重打包并静默安装影响本机已装版，且 S5 验收已覆盖交互路径安装后文件数比对，/S 差异仅在 UI/权限层 → 维持观察。
+
+**6. 文档同步（commit c0339ed）**：implementation-plan §4 验收记录表 S7 行补登通过（S7-A 2026-11-05 / S7-B 2026-11-09 收官 / B12′ D1–D5 2026-11-11），frontmatter date 同步。
