@@ -263,6 +263,23 @@ describe('messages', () => {
       store.close()
     }
   })
+
+  it('marks batches read and everything up to a cursor (B12′ §5.5)', () => {
+    const store = Store.open(dir)
+    try {
+      store.addMessage({ ...base, id: 'a1', idempotencyKey: 'k-a', createdAt: '2026-11-05T00:00:00.000Z' })
+      store.addMessage({ ...base, id: 'b1', idempotencyKey: 'k-b', createdAt: '2026-11-05T00:01:00.000Z' })
+
+      expect(store.markMessagesRead(['a1', 'missing-id'])).toBe(1)
+      expect(store.countUnreadMessages()).toBe(1)
+      expect(store.markReadUpTo('b1')).toBe(1)
+      expect(store.countUnreadMessages()).toBe(0)
+      // Repeating the same cursor is a no-op.
+      expect(store.markReadUpTo('b1')).toBe(0)
+    } finally {
+      store.close()
+    }
+  })
 })
 
 describe('worker sessions and settings', () => {

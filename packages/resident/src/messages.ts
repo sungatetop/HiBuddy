@@ -18,6 +18,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import type {
   Message,
   MessageAttachment,
+  MessageData,
   MessageDirection,
   MessageKind,
   MessageRefs,
@@ -45,6 +46,8 @@ export interface MessageInput {
   title?: string
   /** Files/media riding on the message (images, video, audio, documents). */
   attachments?: MessageAttachment[]
+  /** Structured envelope metadata (B12′); the UI never renders it. */
+  data?: MessageData
   refs?: MessageRefs
   /** Producer-owned dedup identity; defaults to the content fingerprint key. */
   idempotencyKey?: string
@@ -181,6 +184,7 @@ export class MessageService {
       ...(input.attachments !== undefined && input.attachments.length > 0
         ? { attachments: input.attachments }
         : {}),
+      ...(input.data !== undefined ? { data: input.data } : {}),
       ...(input.refs !== undefined ? { refs: input.refs } : {}),
       idempotencyKey:
         input.idempotencyKey ??

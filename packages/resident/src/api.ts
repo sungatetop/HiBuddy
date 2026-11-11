@@ -5,6 +5,7 @@
  * Routes (all behind dsh's trust fence, same as the AG-UI bridge):
  * - `GET  /resident/api/messages` → `{ messages, status, unread }`
  * - `POST /resident/api/messages` `{ text }` → `202 { ok: true }`
+ * - `POST /resident/api/messages/read` `{ ids | upTo }` → `{ ok, marked }`
  * - `GET  /resident/api/attachment?id=` → bytes (Range-capable media stream)
  * - `GET  /resident/api/sessions` → `{ sessions, approvals }` (task drawer)
  * - `GET  /resident/api/settings` → settings snapshot
@@ -144,6 +145,31 @@ export function registerResidentApi(ctx: Context, current: () => ResidentButler 
       }
       butler.postUserMessage(text.trim().slice(0, MAX_TEXT))
       json(res, 202, { ok: true })
+    })
+
+    // Read marking: the chat marks the outbound rows it has shown. Accepts a
+    // set of message ids or an `upTo` cursor (everything at/before one row).
+    route('/resident/api/messages/read', 'POST', async (req, res, butler) => {
+      const essence = String(req.headers['content-type']).split(';', 1)[0]?.trim().toLowerCase()
+      if (essence !== 'application/json') {
+        json(res, 415, { error: 'content-type must be application/json' })
+        return
+      }
+      const body = await readJson(req)
+      if (typeof body !== 'object' || body === null) {
+        json(res, 400, { error: 'body must be JSON' })
+        return
+      }
+      const request = body as { upTo?: unknown; ids?: unknown }
+      const ids = Array.isArray(request.ids)
+        ? request.ids.filter((id): id is string => typeof id === 'string')
+        : []
+      const upTo = typeof request.upTo === 'string' ? request.upTo : undefined
+      if (ids.length === 0 && upTo === undefined) {
+        json(res, 400, { error: 'ids or upTo is required' })
+        return
+      }
+      json(res, 200, { ok: true, marked: butler.markRead({ ids, upTo }) })
     })
 
     // Attachment media route: serves a registered attachment by id. Only ids

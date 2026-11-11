@@ -710,7 +710,9 @@ export class Store {
     const limit = options.limit ?? 200
     const filters = [
       direction ? 'direction = ?' : undefined,
-      unreadOnly ? 'read = 0' : undefined,
+      // Unread is an OUTBOUND concept: the butler's messages the user has not
+      // seen yet. Inbound rows (user text, events) are the user's own view.
+      unreadOnly ? "read = 0 AND direction = 'out'" : undefined,
       undeliveredOnly ? 'delivered = 0' : undefined,
     ].filter(Boolean)
     const where = filters.length > 0 ? ` WHERE ${filters.join(' AND ')}` : ''
@@ -770,12 +772,37 @@ export class Store {
     this.db.prepare('UPDATE messages SET read = 1 WHERE id = ?').run(id)
   }
 
-  /** Unread count — the chat badge source. */
+  /** Unread count — the chat badge source (outbound rows only). */
   countUnreadMessages(): number {
-    const row = this.db.prepare('SELECT COUNT(*) AS n FROM messages WHERE read = 0').get() as {
-      n: number
-    }
+    const row = this.db
+      .prepare("SELECT COUNT(*) AS n FROM messages WHERE read = 0 AND direction = 'out'")
+      .get() as { n: number }
     return row.n
+  }
+
+  /** Marks a set of rows read (the chat marks the visible outbound rows). */
+  markMessagesRead(ids: readonly string[]): number {
+    if (ids.length === 0) return 0
+    const statement = this.db.prepare(
+      "UPDATE messages SET read = 1 WHERE id = ? AND read = 0 AND direction = 'out'",
+    )
+    let changed = 0
+    this.transaction(() => {
+      for (const id of ids) changed += Number(statement.run(id).changes)
+    })
+    return changed
+  }
+
+  /** Marks everything at or before `id` read (a one-shot "seen up to here"). */
+  markReadUpTo(id: string): number {
+    const row = this.db
+      .prepare('SELECT created_at FROM messages WHERE id = ?')
+      .get(id) as { created_at: string } | undefined
+    if (row === undefined) return 0
+    const update = this.db.prepare(
+      "UPDATE messages SET read = 1 WHERE direction = 'out' AND read = 0 AND created_at <= ?",
+    )
+    return Number(update.run(row.created_at).changes)
   }
 
   /** Delivery state — false only while the row is recorded but not yet pushed. */

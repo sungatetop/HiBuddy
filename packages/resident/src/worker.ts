@@ -48,7 +48,8 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionLogOffset, SessionId, TurnEndReason } from '@deepseek-ai/dsh-session'
 // Pulls the `subagents` service declaration into the cordis ServiceMap.
 import type {} from '@deepseek-ai/dsh-subagent'
-import type { Ticket } from './domain.ts'
+import type { ArtifactRef, Ticket } from './domain.ts'
+import { scanArtifacts } from './artifacts.ts'
 import { MessageService } from './messages.ts'
 import { nextOccurrence, type TicketDispatcher } from './scheduler.ts'
 import { transitionTicket } from './state-machine.ts'
@@ -79,6 +80,10 @@ interface RoundContext {
   agent: Agent
   sessionId: SessionId
   prompt: string
+  /** Round start instant (ISO); the receipt's `startedAt`. */
+  startedAt: string
+  /** The ticket's isolation working directory (artifact scan root). */
+  workdir: string
 }
 
 /** Filesystem-safe short form of a ticket id for session/dir naming. */
@@ -279,9 +284,10 @@ export class WorkerOrchestrator implements TicketDispatcher {
     info: { late: boolean; recovery: boolean },
   ): Promise<RoundContext> {
     const sessionId = brandString(`resident-worker-${shortId(ticket.id)}`) as SessionId
+    const startedAt = new Date().toISOString()
     const runId = this.store.startRun(
       ticket.id,
-      new Date().toISOString(),
+      startedAt,
       info.recovery ? 'recovery resume after host restart' : info.late ? 'late compensation' : undefined,
     )
     try {
@@ -337,7 +343,7 @@ export class WorkerOrchestrator implements TicketDispatcher {
       const prompt =
         `${buildPrompt(ticket, priorRounds, info)}\n\n` +
         `你的工作目录是 ${cwd}（任务中的相对路径以它为基准；“工作目录”即指此处）。`
-      return { ticketId: ticket.id, runId, agent, sessionId, prompt }
+      return { ticketId: ticket.id, runId, agent, sessionId, prompt, startedAt, workdir: cwd }
     } catch (error) {
       this.store.finishRun(runId, new Date().toISOString(), 'failed', `worker session open failed: ${errorMessage(error)}`)
       if (info.recovery) throw error
@@ -443,13 +449,26 @@ export class WorkerOrchestrator implements TicketDispatcher {
         // Worker receipt → inbound to the butler, who decides what to tell the
         // user (ADR-011: only the butler speaks to the user). Keyed per round
         // (perception B12′ §5.4) so periodic tickets with identical summaries
-        // still deliver every round.
+        // still deliver every round. The data block is the enriched receipt
+        // (B12′ §5.3): outcome/runId/timing + the host-side artifact scan.
+        const finishedAt = new Date().toISOString()
+        const artifacts = this.scanRoundArtifacts(round)
         this.notifier.postInbound({
           kind: 'receipt',
           refs: { ticketId: round.ticketId, sessionId: round.sessionId },
           title: `任务完成：${truncate(current.goal, TITLE_GOAL_MAX_CHARS)}`,
           text: summary !== '' ? summary : '本轮已完成，未产生摘要文本。',
           idempotencyKey: `receipt:${round.ticketId}:${round.runId}`,
+          data: {
+            outcome: current.period ? 'periodic' : 'completed',
+            runId: round.runId,
+            startedAt: round.startedAt,
+            finishedAt,
+            durationMs: Math.max(0, Date.parse(finishedAt) - Date.parse(round.startedAt)),
+            ...(info.late ? { late: true } : {}),
+            ...(info.recovery ? { recovery: true } : {}),
+            artifacts,
+          },
         })
       }
       this.store.finishRun(round.runId, now, 'ok', detail)
@@ -501,5 +520,21 @@ export class WorkerOrchestrator implements TicketDispatcher {
       state: 'blocked',
       lastReport: truncate(detail),
     })
+  }
+
+  /**
+   * Host-side artifact scan over the round's working directory (B12′ §5.3).
+   * Files modified at/after the round start, newest first, capped at 20. A
+   * broken scan degrades to `[]` and only warns — it must never fail a receipt.
+   */
+  private scanRoundArtifacts(round: RoundContext): ArtifactRef[] {
+    try {
+      return scanArtifacts(round.workdir, Date.parse(round.startedAt) - 1000)
+    } catch (error) {
+      console.warn(
+        `[hibuddy-resident] artifact scan failed for ticket ${round.ticketId}: ${errorMessage(error)}`,
+      )
+      return []
+    }
   }
 }

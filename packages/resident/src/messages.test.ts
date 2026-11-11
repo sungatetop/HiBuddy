@@ -147,14 +147,15 @@ describe('MessageService.deliverPending', () => {
 })
 
 describe('MessageService read API', () => {
-  it('counts unread rows and marks them read', () => {
+  it('counts unread outbound rows only and marks them read', () => {
     const service = new MessageService(store, { now: atNoon })
     service.postOutbound({ kind: 'report', title: 'a', text: '1' })
     service.postOutbound({ kind: 'system', title: 'b', text: '2' })
     service.postInbound({ kind: 'text', text: 'user' })
 
-    expect(service.unreadCount()).toBe(3)
-    expect(service.markAllRead()).toBe(3)
+    // Unread is an OUTBOUND concept: inbound rows are the user's own view.
+    expect(service.unreadCount()).toBe(2)
+    expect(service.markAllRead()).toBe(2)
     expect(service.unreadCount()).toBe(0)
   })
 
@@ -164,6 +165,19 @@ describe('MessageService read API', () => {
     service.postOutbound({ kind: 'text', text: 'two' })
     expect(service.list({ oldestFirst: true }).map((m) => m.text)).toEqual(['one', 'two'])
     expect(service.list().map((m) => m.text)).toEqual(['two', 'one'])
+  })
+
+  it('marks only the requested outbound ids read (B12′ §5.5)', () => {
+    const service = new MessageService(store, { now: atNoon })
+    service.postOutbound({ kind: 'report', title: 'a', text: '1' })
+    service.postOutbound({ kind: 'system', title: 'b', text: '2' })
+    service.postInbound({ kind: 'text', text: 'user' })
+    const out = store.listMessages({ direction: 'out' })
+
+    service.markRead(out[0]!.id)
+    expect(service.unreadCount()).toBe(1)
+    service.markRead(out[1]!.id)
+    expect(service.unreadCount()).toBe(0)
   })
 })
 

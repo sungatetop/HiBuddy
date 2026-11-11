@@ -138,8 +138,10 @@ export interface ResidentButler {
   settings(): ResidentSettings
   /** Persists a settings patch and returns the resulting snapshot. */
   saveSettings(patch: ResidentSettings): ResidentSettings
-  /** Live status for the chat UI ("处理中"). */
-  status(): { sessionId: string; state: string; pendingInbound: number }
+  /** Live status for the chat UI ("处理中"). `quiet` reflects do-not-disturb. */
+  status(): { sessionId: string; state: string; pendingInbound: number; quiet: boolean }
+  /** Marks outbound rows read: a set of ids, or everything up to `upTo`. */
+  markRead(input: { upTo?: string; ids?: string[] }): number
 }
 
 /** Inbound envelope body cap (perception B12′ §5.1). */
@@ -365,12 +367,20 @@ export class ButlerRuntime implements ResidentButler {
     void this.pump()
   }
 
-  status(): { sessionId: string; state: string; pendingInbound: number } {
+  status(): { sessionId: string; state: string; pendingInbound: number; quiet: boolean } {
     return {
       sessionId: this.sessionId,
       state: this.pumping ? 'working' : 'idle',
       pendingInbound: this.store.countPendingInbound(),
+      quiet: this.ledger.isQuiet(),
     }
+  }
+
+  /** Marks outbound rows read; returns how many flipped. */
+  markRead(input: { upTo?: string; ids?: string[] }): number {
+    if (input.upTo !== undefined) return this.store.markReadUpTo(input.upTo)
+    const ids = (input.ids ?? []).filter((id): id is string => typeof id === 'string')
+    return ids.length === 0 ? 0 : this.store.markMessagesRead(ids)
   }
 
   /**

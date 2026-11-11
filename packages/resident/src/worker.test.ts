@@ -7,7 +7,7 @@ import type { Agent, AgentHandle, AgentRegistry } from '@deepseek-ai/dsh-agent'
 import type { AgentDefaultModelConfig } from '@deepseek-ai/dsh-agent-default-model'
 import type { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry'
 import type { CreateAgentOptions, ResumeAgentOptions } from '@deepseek-ai/dsh-agent'
-import type { Ticket } from './domain.ts'
+import type { ReceiptData, Ticket } from './domain.ts'
 import { transitionTicket } from './state-machine.ts'
 import { Store } from './store.ts'
 import { WorkerOrchestrator, buildPrompt, summarizeRound, type WorkerDeps } from './worker.ts'
@@ -220,6 +220,51 @@ describe('dispatch: success paths', () => {
     expect(receipts).toHaveLength(1)
     expect(receipts[0]!.idempotencyKey).toBe('receipt:t1:1')
     expect(receipts[0]!.refs).toMatchObject({ ticketId: 't1', sessionId: 'resident-worker-t1' })
+  })
+
+  it('enriches the receipt with outcome, timing and the artifact scan (B12′ §5.3)', async () => {
+    const deps = fakeDeps()
+    const orchestrator = new WorkerOrchestrator(deps, store)
+    seedWorking({ id: 't2' })
+
+    orchestrator.dispatch(store.getTicket('t2')!, { late: true })
+    await settle()
+
+    const receipt = store.listMessages().find((m) => m.kind === 'receipt')
+    expect(receipt).toBeDefined()
+    const data = receipt!.data as ReceiptData | undefined
+    expect(data).toBeDefined()
+    expect(data!.outcome).toBe('completed')
+    expect(data!.runId).toBe(1)
+    expect(data!.late).toBe(true)
+    expect(Number.isFinite(data!.durationMs)).toBe(true)
+    expect(Date.parse(data!.finishedAt)).toBeGreaterThanOrEqual(Date.parse(data!.startedAt))
+    expect(Array.isArray(data!.artifacts)).toBe(true)
+  })
+
+  it('marks a periodic receipt outcome as periodic', async () => {
+    const deps = fakeDeps()
+    const orchestrator = new WorkerOrchestrator(deps, store)
+    seedWorking({ id: 'tp', period: { intervalMs: 60_000 } })
+
+    orchestrator.dispatch(store.getTicket('tp')!, { late: false })
+    await settle()
+
+    const receipt = store.listMessages().find((m) => m.kind === 'receipt')
+    expect((receipt!.data as ReceiptData).outcome).toBe('periodic')
+    expect(store.getTicket('tp')!.state).toBe('pending')
+  })
+
+  it('marks a recovered receipt as recovery', async () => {
+    const deps = fakeDeps()
+    const orchestrator = new WorkerOrchestrator(deps, store)
+    seedWorking({ id: 'tr' })
+
+    await orchestrator.resumeWorker(store.getTicket('tr')!)
+    await settle()
+
+    const receipt = store.listMessages().find((m) => m.kind === 'receipt')
+    expect((receipt!.data as ReceiptData).recovery).toBe(true)
   })
 
   it('executes under the delegated workspace when the ticket names one', async () => {

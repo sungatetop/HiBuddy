@@ -444,3 +444,30 @@ describe('settings', () => {
     expect(saved.workerSlots).toBe(8)
   })
 })
+
+describe('read API (B12′ §5.5)', () => {
+  it('marks outbound rows read by ids or up to a cursor', () => {
+    const deps = fakeDeps({ live: true })
+    const { runtime, service } = makeRuntime(deps)
+    service.postOutbound({ kind: 'report', title: 'a', text: '1' })
+    service.postOutbound({ kind: 'system', title: 'b', text: '2' })
+    service.postInbound({ kind: 'text', text: 'user' })
+    const out = store.listMessages({ direction: 'out', oldestFirst: true })
+
+    expect(runtime.unreadCount()).toBe(2)
+    expect(runtime.markRead({ ids: [out[0]!.id] })).toBe(1)
+    expect(runtime.unreadCount()).toBe(1)
+    expect(runtime.markRead({ upTo: out[1]!.id })).toBe(1)
+    expect(runtime.unreadCount()).toBe(0)
+    expect(runtime.markRead({ ids: [] })).toBe(0)
+    expect(runtime.markRead({ upTo: 'missing' })).toBe(0)
+  })
+
+  it('surfaces the do-not-disturb state in status()', () => {
+    const service = new MessageService(store, { now: () => new Date('2026-11-11T23:30:00') })
+    const { runtime } = makeRuntime(fakeDeps(), service)
+    expect(runtime.status().quiet).toBe(false)
+    runtime.saveSettings({ quietHours: { start: '22:00', end: '07:00' } })
+    expect(runtime.status().quiet).toBe(true)
+  })
+})
