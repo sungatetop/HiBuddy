@@ -3,7 +3,7 @@ title: 管家感知能力优化设计（B12′）
 summary: 分析 @hibuddy/resident 管家当前"每一轮看到什么"的失真点，设计三层次感知优化：L0 上下文保真（结构化入站信封 + 每轮情境快照 + 回执富化与产出文件清单 + 按轮次幂等 + 出站真实反馈/已读感知）、L1 状态边沿事件（停滞检测 / 监控因果 / 未答提问提醒 / 积压提示）、L2 感知面扩展（workspace-watch、网页/RSS、邮件/IM、只读查询工具）；给出 schema v5 数据模型、接口影响、提示词契约、安全边界、测试验收与分阶段落地
 keywords: [感知, perception, 管家, butler, 情境快照, 结构化信封, 回执富化, artifacts, 停滞检测, untrusted, SourceKind, 消息账本, B12′, resident]
 status: accepted
-date: 2026-11-10
+date: 2026-11-11
 ---
 
 # 管家感知能力优化设计（B12′）
@@ -218,7 +218,7 @@ worker 发起了审批请求……
 
 ## 7. L2：感知面扩展（预留设计）
 
-- **workspace-watch**：新 `SourceKind`，`fs.watch`/轮询监听工作区文件增改；去重指纹 = `path+size+mtime`；噪声过滤（忽略 `node_modules`/`.git`/临时文件）；事件 `untrusted=true`（文件内容属外部数据）。典型场景"帮我盯着下载目录/构建产物"。
+- **workspace-watch**：新 `SourceKind`，`fs.watch`/轮询监听工作区文件增改；去重指纹 = `path+size+mtime`；噪声过滤（忽略 `node_modules`/`.git`/临时文件）；事件 `untrusted=true`（文件内容属外部数据）。典型场景"帮我盯着下载目录/构建产物"。**已实施（2026-11-11）：[ADR-012](../decisions/ADR-012-workspace-watch.md)，watch 拉前 + 确定性扫描兜底双路径，指纹采用 sha256(path|size|mtime) 前 16 位。**
 - **网页 / RSS**：fetch 带超时与重试，`sha256` 指纹去重，退避与降级复用 monitor 框架；`untrusted=true`。
 - **邮件 / IM / 日历**：凭据管理 + 读位置 + 限频；复用 `SourceKind` registry（[index.ts](../../packages/resident/src/index.ts#L140-L157)），编排层零改动。
 - **只读查询工具**（首批可无）：`workspace_overview`（最近变更/目录概览，元数据不含正文，降低注入面）；正文读取走监控/研判，不直接进管家工具。
@@ -303,7 +303,7 @@ worker 发起了审批请求……
 | D2 ✅（2026-11-10 交付） | 情境快照 + 积压提示 | 场景 2、4 |
 | D3 ✅（2026-11-11 交付） | 回执富化 + artifact 扫描 + read API/已读 | 场景 3；unreadCount 语义修复 |
 | D4 ✅（2026-11-11 交付） | L1：停滞检测 + 监控因果 + 未答提问提醒（设置开关 `perceptionEvents` 默认开） | 场景 5、6；事件频控单测 |
-| D5（可选） | L2 workspace-watch 首个 SourceKind | 独立 ADR 后再实施 |
+| D5 ✅（2026-11-11 交付） | L2 workspace-watch 首个 SourceKind（[ADR-012](../decisions/ADR-012-workspace-watch.md)） | 场景 7；watch 拉前 + 扫描兜底双路径真机实证 |
 
 每阶段完成后按既有纪律：契约测试全绿 → 真机证据入 progress-report → 按任务粒度提交。
 

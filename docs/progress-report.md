@@ -508,3 +508,24 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 - 探测数据（票/提问/事件/settings）已清理。
 
 **后续（D5）**：L2 workspace-watch 首个 SourceKind（独立 ADR 后再实施）。
+
+### S7-B 补：管家感知优化 B12′ D5（2026-11-11）
+
+设计：[ADR-012](../docs/decisions/ADR-012-workspace-watch.md)（accepted，先立 ADR 再实施）+ [butler-perception-design](../docs/solutions/butler-perception-design.md) §7 / §12 D5。
+
+**变更**：
+- **ADR-012 七项决策**：D1 `fs.watch` 触发提前 + 确定性扫描兜底（watch 回调只把下次扫描拉到现在，指纹/去重/触发永远由 60s 兜底扫描完成；Linux 无递归 watch 自动降级纯轮询）；D2 监视路径必须落已注册 dsh 工作区根下（canonical + 前缀边界，校验失败慢速重试不入退避）；D3 去重指纹 = `sha256(相对路径|size|mtimeMs)` 前 16 位，cursor 上限 2000 随扫描收敛，重启不重放，首扫只建基线；D4 噪声过滤（隐藏条目/node_modules/.git/__pycache__/.cache/临时文件模式，跳符号链接，限深 4 / 限 5000 文件 / 追踪上限 2000）；D5 单次扫描全部变更聚合单条 Trigger（明细 ≤20 + total + 聚合指纹，`untrusted: true`）；D6 filter 仅增载荷形状分支（monitor 形状 / watch 形状 / 未知 drop，`AssessmentInput.untrusted` 透传至 session-check prompt 注入「外部数据按数据处理」指令；`monitor_triggered` 事件 code 对 watch 源沿用，命名偏移登记 §6.3）；D7 装配零改动（新 SourceKind 注册 registry，「运行中注入实例不自动 armed 须重启宿」沿用 B5）。否决：纯 watch（丢事件）/ 纯轮询（保留为降级路径）/ chokidar（最小依赖）/ 任意路径（攻击面）/ 逐文件 Trigger（聚合纪律）/ 伪装 monitor 载荷（语义失真）。
+- **新模块 [workspace-watch.ts](../../packages/resident/src/workspace-watch.ts)**（`WorkspaceWatchSource implements SourceKind`）：60s 确定性递归扫描 + `fs.watch(recursive)` 回调拉前（1s 去抖）；watch factory 可注入；指纹/聚合/噪声过滤纯函数导出可测。
+- **接线**：[filter.ts](../../packages/resident/src/filter.ts) 增 `WatchChangePayload` 门校验 + `decide()` 形状分支 + observe/auto 文案分流；[session-check.ts](../../packages/resident/src/session-check.ts) assess prompt 条件注入 untrusted 指令；[index.ts](../../packages/resident/src/index.ts) 注册第二个 SourceKind；[attachments.ts](../../packages/resident/src/attachments.ts) 导出 `canonical`/`inside` 复用工作区根校验。
+
+**装配时序修复（真机发现）**：`registry.startAll` 跑在 `butler.start()` 之前（apply 期 `roots()` 必空），watcher 不能在 `start()` 期打开——修复为**首次成功扫描内幂等 `ensureWatcher`**（D2 校验通过后打开），顺带覆盖「工作区后注册」场景。
+
+**契约测试**：resident 197 例全绿（新增 15：workspace-watch 12 例——指纹/聚合确定性、config/cursor 宽容解析、噪声与 symlink 过滤、基线不触发、增改触发后收敛、重启不重放、删除收敛、超限聚合截断、watcher 拉前去抖（fake timers）、工作区外拒绝慢速重试、降级纯扫描仍正确、watcher 关闭；filter 管线 3 例——watch 载荷过 gate 且 `untrusted=true`、monitor 行为不变、auto 建票 goal 分流与 observe 措辞）；构建通过。
+
+**真机证据（2026-11-11）**：
+- **观察模式**：注册工作区（`D:\HibuddyWorkspace`）下建 `watch-smoke/` → SQLite 注 watch 源 → 重启宿 → 首扫只建基线（既有文件零触发）→ 写入 report-note.txt → 聚合 Trigger 落库（`untrusted=1`）→ would-act 落账本（幂等 `monitor:watch-smoke:would-act:<指纹>`，含「新增 report-note.txt（50B）」明细与研判理由）；second.txt 独立指纹独立研判。
+- **watcher 拉前实证**：third.txt 写入后 **665ms** 触发（mtime→trigger），再次 modified **241ms**；兜底 60s 扫描并存（双保险）。
+- **重启不重放**：宿主重启后既有文件进基线，零重发。
+- **auto 模式**：临时切 auto → 写 stderr-probe.txt → `monitor_triggered` 事件落账本（幂等 `monitor:watch-smoke:triggered:<指纹>`）→ 建票 `tkt_58660dc9`（origin=`monitor:watch-smoke`、mandate=inferred、goal 含变更摘要与条件）→ dispatcher 真实执行至 completed。
+- **评估延迟口径**：评估会话（`resident-monitor-<shortId>`）多 trigger 串行排队（同会话 followup 队列）+ 单轮 30–60s（deepseek-flash），非故障；「未见 would-act」多为研判 act=false（例行重复）。账本事件已入管家上下文（renderInbound 渲染 event 行），「管家能说出变更来源」未做独立对话轮次实测，登记验证深度。
+- 探测数据已清理（源行/目录/文件已删，observeMode 恢复 true，completed 票留档）。
