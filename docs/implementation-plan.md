@@ -3,7 +3,7 @@ title: HiBuddy P0 实施计划
 summary: P0 的分阶段执行计划（S1–S7）：S1 先把 dsh 基础设施三端（CLI/Web/桌面）全部复用跑通、验证 dsh 原生能力面完整性（插件安装/启停/分层配置）并建立编译打包链路，S2 起再按 PRD 需求做深度定制（品牌人设→核心工具/审批→生成式 UI→收尾双端交付）；S6 为 P0 后续（AG-UI 桥 CopilotKit 生态真机接入 + dsh 上游热激活缺口收口）；S7 为定位修订后的常驻/主动层（ADR-010：先验 dsh-superagent-prototype 原型，再自研 @hibuddy/resident）；每阶段含可判定的验收标准
 keywords: [实施计划, 里程碑, 验收标准, P0, 分阶段交付, 基础设施复用, 插件生态, AG-UI, 常驻智能体, HiBuddy]
 status: accepted
-date: 2026-11-09
+date: 2026-11-11
 ---
 
 # HiBuddy P0 实施计划
@@ -203,10 +203,10 @@ date: 2026-11-09
    - **B11′ 消息 Markdown 与多媒体附件**（2026-11-09 已交付）：`send_message_to_user` 正文 Markdown + `attachments`（工作区内本地文件或 http(s) URL，image/video/audio/file）+ `session_id`（气泡一键打开 worker 会话）；`attachments` 表（schema v4）；`/resident/api/attachment`（Range + CSP sandbox）；客户端 GFM 渲染、图片灯箱、视频/音频内联、文件卡片、任务抽屉「打开会话」；AG-UI 附件以 Markdown 下发。
    - **B12′ 管家感知优化**（设计见 [butler-perception-design](../docs/solutions/butler-perception-design.md)，accepted 2026-11-10；分阶段实施）：
      - **D1（已交付 2026-11-10）**：schema v5 `messages.data`（JSON 元数据）+ `renderInbound` v2 结构化入站信封（时间/title/refs/untrusted，旧数据回退）+ 回执按轮次幂等 `receipt:<ticketId>:<runId>` + `send_message_to_user` 落库失败返回 `ok:false`。
-     - **D2**：每轮情境快照（`situation.ts`）+ 批内积压提示。
-     - **D3**：回执富化（outcome/耗时/runId/late/recovery）+ 产出文件清单扫描 + `POST /resident/api/messages/read` 已读接线。
-     - **D4**：L1 状态边沿事件（停滞/恢复检测、监控因果 `monitor_triggered`、未答提问提醒、免打扰抑制）。
-     - **D5（可选）**：L2 workspace-watch 首个新 SourceKind（独立 ADR）。
+     - **D2（已交付 2026-11-11）**：每轮情境快照（`situation.ts`）+ 批内积压提示。
+     - **D3（已交付 2026-11-11）**：回执富化（outcome/耗时/runId/late/recovery）+ 产出文件清单扫描 + `POST /resident/api/messages/read` 已读接线。
+     - **D4（已交付 2026-11-11）**：L1 状态边沿事件（停滞/恢复检测、监控因果 `monitor_triggered`、未答提问提醒、免打扰抑制）。
+     - **D5（可选，已交付 2026-11-11，[ADR-012](decisions/ADR-012-workspace-watch.md)）**：L2 workspace-watch 首个新 SourceKind。
 4. 回归：能力面完整性回归（横切纪律 1）+ 既有 vitest/E2E 全绿 + 常驻链路新增契约测试（调度/过滤/Ticket 状态机/通知幂等）。
 
 **验收标准**（S7-A 部分先行登记）：
@@ -239,4 +239,4 @@ date: 2026-11-09
 | S4 | 2026-11-04 | 通过 | [progress-report §S4](progress-report.md) |
 | S5 | 2026-11-04 | 通过 | [progress-report §S5](progress-report.md) |
 | S6 | 2026-11-04 | 通过 | [progress-report §S6](progress-report.md) |
-| S7 | — | 未开始（立项 2026-11-04，ADR-010） | — |
+| S7 | 2026-11-09 | 通过 | [progress-report §S7](progress-report.md)（S7-A 2026-11-05 原型验证；S7-B 2026-11-09 收官 A3–A7；B12′ 感知优化 D1–D5 2026-11-11 交付） |
