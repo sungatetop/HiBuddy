@@ -210,7 +210,7 @@ date: 2026-11-11
 4. 回归：能力面完整性回归（横切纪律 1）+ 既有 vitest/E2E 全绿 + 常驻链路新增契约测试（调度/过滤/Ticket 状态机/通知幂等）。
 
 **验收标准**（S7-A 部分先行登记）：
-- [x] A1 S7-A：原型在 hibuddy profile 真机运行，Router 常驻 + 事件触发分派 + 持久化恢复三机制至少各一项行为证据入 progress-report。（2026-11-05：Router 常驻 ✓ + SQLite 持久化恢复 ✓（设置写入→全重启→恢复的强证据）；事件触发分派 = 缺口登记——端到端需 gh CLI 操作员凭据配置，管线就绪旁证（触发 tab / 计数器 / github-watch 激活）入报告，gh 配置后补验）
+- [x] A1 S7-A：原型在 hibuddy profile 真机运行，Router 常驻 + 事件触发分派 + 持久化恢复三机制至少各一项行为证据入 progress-report。（2026-11-05：Router 常驻 ✓ + SQLite 持久化恢复 ✓（设置写入→全重启→恢复的强证据）；事件触发分派的原型 github-watch 端到端因 gh CLI 操作员凭据未配未走通（管线就绪旁证入报告）。**缺口收口 2026-11-11**：gh 本机未安装、补验需装 CLI+登录+重装已卸载的原型，信息增量有限——分派机制已被自研实现端到端证明（S7-B B4/B5 monitor 源、B12′ D5 watch 源：事件→Trigger→两级过滤→建票→worker 执行→completed），原型 github-watch 具体路径不再补验，如日后需要装 gh CLI + auth 后重装原型即可）
 - [x] A2 S7-A：与 0.2.1-rc.5 的兼容结论（含已知偏差清单）登记；卸载原型后 profile 回归原状（能力面完整性抽查通过）。（兼容：engines.dsh ^0.2.1-alpha.2 兼容 rc.5，激活装配/面板/持久化全工作；已知偏差 = POSIX-only 路径校验拒 Windows 盘符路径（本地构建放宽两处，非上游变更）；卸载还原后重启装配零警告 + Superagent 入口消失 + 侧边栏正常）
 - [x] A3 S7-B 设计定稿：[resident-design](module-design/resident-design.md) 状态 draft → accepted 并登记 docs/README；本节任务与验收标准已依 S7-A 结论登记。（2026-11-05：设计文档落档并经评审通过转 accepted（含用户 worker 设计要点原话与 D1–D5 关键决策）；S7-B 任务 B1–B9 与验收 A3–A7 已登记本节）
 - [x] A4 S7-B 实施 B1–B3：resident 包装配生效（--dump-config 层序含 @hibuddy/resident）、stateDir 拒启闸行为验证、scheduler 定时任务端到端（创建→到期→Ticket 迁移→worker 会话启动）、重启恢复对账证据入 progress-report。（2026-11-05：B1–B4 四任务全交付；端到端真机证据 = 注入到期票→Trigger 落库→pending→working→worker 会话 `resident-worker-<ticketId>` 经 composeAgent 三要素真实执行→completed，周期票 on-time 触发回 pending 且 next_run_at 预置；重启恢复 = working 中途杀宿→重启→旧 run 关闭 interrupted→recovery note 续跑→回 pending，run detail "recovery resume after host restart"；验收记录见 progress-report §S7-B）
