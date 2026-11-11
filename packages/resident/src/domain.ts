@@ -255,4 +255,10 @@ export interface ResidentSettings {
   observeMode?: boolean
   /** Butler may answer low-risk approvals itself (ADR-011 D9). */
   approvalDelegation?: boolean
+  /** L1 edge events master switch (perception B12′ D4), default on. */
+  perceptionEvents?: boolean
+  /** Working-ticket stall threshold in minutes (B12′ D4), default 10. */
+  stallMinutes?: number
+  /** Unanswered-question reminder delay in minutes (B12′ D4), default 30. */
+  reminderMinutes?: number
 }

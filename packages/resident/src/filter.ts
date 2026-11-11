@@ -143,8 +143,9 @@ export class FilterPipeline {
       `监控命中：检查目标「${payload.target}」满足条件「${payload.condition}」。` +
         `检查依据：${payload.rationale}。研判：${assessment.reason}。` +
         '请核实该情况并按需处理，完成后给出简报。'
+    const ticketId = `tkt_${randomUUID()}`
     this.store.upsertTicket({
-      id: `tkt_${randomUUID()}`,
+      id: ticketId,
       goal,
       mandate: 'inferred',
       origin: `monitor:${trigger.sourceId}`,
@@ -153,6 +154,23 @@ export class FilterPipeline {
       createdAt: nowIso,
       updatedAt: nowIso,
     })
+    // L1 causality (perception B12′ §6): the butler must be able to answer
+    // "why does this ticket exist" — keyed per fingerprint so a re-hit never
+    // re-fires. Do-not-disturb suppresses it (the situation snapshot still
+    // shows the new ticket by its `monitor:<sourceId>` origin).
+    if (!this.notifier.isQuiet()) {
+      this.notifier.postInbound({
+        kind: 'event',
+        refs: { sourceId: trigger.sourceId, ticketId },
+        idempotencyKey: `monitor:${trigger.sourceId}:triggered:${payload.fingerprint}`,
+        title: '监控命中并创建任务',
+        text:
+          `检查目标「${payload.target}」满足条件「${payload.condition}」。\n` +
+          `检查依据：${payload.rationale}。研判：${assessment.reason}。\n` +
+          `已创建任务 ${ticketId}（来源 ${trigger.sourceId}，指纹 ${payload.fingerprint.slice(0, 12)}…）。`,
+        data: { code: 'monitor_triggered', sourceId: trigger.sourceId, ticketId },
+      })
+    }
     return 'acted'
   }
 }

@@ -418,6 +418,9 @@ export class ButlerRuntime implements ResidentButler {
     const observeMode = this.store.getSetting<boolean>('observeMode')
     const approvalDelegation = this.store.getSetting<boolean>('approvalDelegation')
     const quietExceptions = this.store.getSetting<unknown>('quietExceptions')
+    const perceptionEvents = this.store.getSetting<boolean>('perceptionEvents')
+    const stallMinutes = this.store.getSetting<number>('stallMinutes')
+    const reminderMinutes = this.store.getSetting<number>('reminderMinutes')
     return {
       quietHours: parseQuietWindow(this.store.getSetting<unknown>('quietHours')) ?? null,
       quietExceptions: Array.isArray(quietExceptions)
@@ -426,6 +429,9 @@ export class ButlerRuntime implements ResidentButler {
       workerSlots: typeof workerSlots === 'number' ? workerSlots : 2,
       observeMode: observeMode !== false,
       approvalDelegation: approvalDelegation !== false,
+      perceptionEvents: perceptionEvents !== false,
+      stallMinutes: typeof stallMinutes === 'number' && stallMinutes >= 1 ? Math.floor(stallMinutes) : 10,
+      reminderMinutes: typeof reminderMinutes === 'number' && reminderMinutes >= 1 ? Math.floor(reminderMinutes) : 30,
     }
   }
 
@@ -446,6 +452,17 @@ export class ButlerRuntime implements ResidentButler {
     if (patch.observeMode !== undefined) this.store.setSetting('observeMode', patch.observeMode === true)
     if (patch.approvalDelegation !== undefined) {
       this.store.setSetting('approvalDelegation', patch.approvalDelegation === true)
+    }
+    if (patch.perceptionEvents !== undefined) {
+      this.store.setSetting('perceptionEvents', patch.perceptionEvents === true)
+    }
+    if (patch.stallMinutes !== undefined) {
+      const minutes = Math.max(1, Math.min(120, Math.trunc(patch.stallMinutes)))
+      this.store.setSetting('stallMinutes', minutes)
+    }
+    if (patch.reminderMinutes !== undefined) {
+      const minutes = Math.max(1, Math.min(1440, Math.trunc(patch.reminderMinutes)))
+      this.store.setSetting('reminderMinutes', minutes)
     }
     return this.settings()
   }

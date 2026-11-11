@@ -417,18 +417,31 @@ describe('settings', () => {
     const deps = fakeDeps()
     const { runtime } = makeRuntime(deps)
 
-    expect(runtime.settings()).toMatchObject({ workerSlots: 2, observeMode: true, approvalDelegation: true })
+    expect(runtime.settings()).toMatchObject({
+      workerSlots: 2,
+      observeMode: true,
+      approvalDelegation: true,
+      perceptionEvents: true,
+      stallMinutes: 10,
+      reminderMinutes: 30,
+    })
 
     const saved = runtime.saveSettings({
       quietHours: { start: '22:30', end: '07:00' },
       workerSlots: 4,
       observeMode: false,
       approvalDelegation: false,
+      perceptionEvents: false,
+      stallMinutes: 20,
+      reminderMinutes: 60,
     })
     expect(saved.quietHours).toEqual({ start: '22:30', end: '07:00' })
     expect(saved.workerSlots).toBe(4)
     expect(saved.observeMode).toBe(false)
     expect(saved.approvalDelegation).toBe(false)
+    expect(saved.perceptionEvents).toBe(false)
+    expect(saved.stallMinutes).toBe(20)
+    expect(saved.reminderMinutes).toBe(60)
     expect(runtime.settings()).toEqual(saved)
   })
 

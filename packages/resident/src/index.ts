@@ -33,6 +33,7 @@ import { registerResidentAgui } from './agui.ts'
 import { registerResidentApi } from './api.ts'
 import { ApprovalBroker } from './approvals.ts'
 import { ButlerRuntime } from './butler.ts'
+import { EdgeDetector } from './edge.ts'
 import { FilterPipeline } from './filter.ts'
 import { MonitorSource } from './monitor.ts'
 import { acquireStateLock, type StateLock } from './lock.ts'
@@ -169,6 +170,11 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
   butler = new ButlerRuntime(deps, store, notifier, approvals, { workspace: config?.workspace })
   setResidentService(butler)
   await butler.start()
+  // B12′ D4: L1 edge events — stalled/resumed workers and unanswered-question
+  // reminders, polled on a 30s scan (settings `perceptionEvents` master switch).
+  const edge = new EdgeDetector(ctx, store, notifier)
+  edge.start()
+  logger.info('edge detector started (scan %ds, stall %dm, reminder %dm)', 30, 10, 30)
   // Chat data routes for the WeChat-style client panel (same trust fence as
   // dsh's own routes; headless compositions never register them).
   registerResidentApi(ctx, () => butler)
@@ -182,6 +188,7 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
   )
 
   return () => {
+    edge.stop()
     butler?.stop()
     butler = undefined
     clearResidentService()

@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import type { Ticket, Trigger } from './domain.ts'
 import { fingerprintOf } from './monitor.ts'
 import { FilterPipeline, type Assessment, type Assessor, type AssessmentInput } from './filter.ts'
+import { MessageService } from './messages.ts'
 import { Store } from './store.ts'
 
 let dir: string
@@ -27,7 +28,15 @@ function fakeAssessor(verdicts: Assessment[]): Assessor & { inputs: AssessmentIn
 }
 
 function makePipeline(assessor: Assessor, observeMode = true): FilterPipeline {
-  return new FilterPipeline(store, { assessor, observeMode: () => observeMode, now: () => new Date(currentMs) })
+  // Fixed-clock notifier so do-not-disturb checks (B12′ D4 monitor_triggered)
+  // are deterministic: noon, outside any window.
+  const notifier = new MessageService(store, { now: () => new Date(currentMs) })
+  return new FilterPipeline(store, {
+    assessor,
+    observeMode: () => observeMode,
+    now: () => new Date(currentMs),
+    notifier,
+  })
 }
 
 function seedMonitor(id = 'm1', config: unknown = undefined): void {
@@ -156,6 +165,36 @@ describe('filter: assessment and observe mode', () => {
     })
     expect(tickets[0]!.goal).toContain('包含 HIT')
     expect(tickets[0]!.goal).toContain('需要处理')
+
+    // L1 causality: the butler learns which monitor + fingerprint created it.
+    const events = store.listMessages().filter((m) => m.kind === 'event')
+    expect(events).toHaveLength(1)
+    expect(events[0]!.data).toMatchObject({ code: 'monitor_triggered', sourceId: 'm1', ticketId: tickets[0]!.id })
+    expect(events[0]!.idempotencyKey).toBe(`monitor:m1:triggered:${fingerprintOf('A')}`)
+  })
+
+  it('dedupes monitor_triggered per fingerprint and suppresses it in the window', async () => {
+    seedMonitor('m1')
+    const pipeline = makePipeline(fakeAssessor([{ act: true, reason: 'r' }, { act: true, reason: 'r' }]), false)
+
+    expect(await pipeline.handle(hitTrigger())).toBe('acted')
+    // The open monitor ticket dedupes the re-hit at the gate — no second event.
+    expect(await pipeline.handle(hitTrigger())).toBe('skipped')
+    const events = store.listMessages().filter((m) => m.kind === 'event' && (m.data as { code?: string })?.code === 'monitor_triggered')
+    expect(events).toHaveLength(1)
+
+    // Do-not-disturb: a hit inside the window still creates the ticket but no
+    // causality event (the situation snapshot shows the ticket by its origin).
+    store.setSetting('quietHours', { start: '22:00', end: '07:00' })
+    currentMs = Date.parse('2026-11-06T15:00:00.000Z') // 23:00 local (+08:00), inside the window
+    seedMonitor('m2')
+    const pipeline2 = makePipeline(fakeAssessor([{ act: true, reason: 'r2' }]), false)
+    expect(await pipeline2.handle(hitTrigger('m2', 'B'))).toBe('acted')
+    expect(store.listTickets()).toHaveLength(2)
+    const suppressed = store.listMessages().filter(
+      (m) => m.kind === 'event' && (m.data as { code?: string })?.code === 'monitor_triggered',
+    )
+    expect(suppressed).toHaveLength(1)
   })
 
   it('uses the configured goal override in auto mode', async () => {
