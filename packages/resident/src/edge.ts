@@ -12,7 +12,7 @@
  *   `reminderMinutes` (default 30) with no later user input. Keyed
  *   `question:<messageId>:reminder` (once per message).
  *
- * `monitor_triggered` lives in the filter (it fires exactly when a monitor hit
+ * `source_triggered` lives in the filter (it fires exactly when a monitor hit
  * becomes a ticket), not here — this detector only polls durable state.
  *
  * Every scan is guarded by the `perceptionEvents` switch and the do-not-disturb

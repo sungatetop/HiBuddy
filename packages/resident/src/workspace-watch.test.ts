@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { SourceInstance, Trigger } from './domain.ts'
-import { FilterPipeline, type Assessment, type Assessor } from './filter.ts'
+import { FilterPipeline, type Assessment, type AssessmentInput, type Assessor } from './filter.ts'
 import { fingerprintOf } from './monitor.ts'
 import { MessageService } from './messages.ts'
 import { Store } from './store.ts'
@@ -284,8 +284,8 @@ describe('watch: config validation (D2)', () => {
 })
 
 describe('watch: pipeline integration (D6)', () => {
-  function assessorWith(verdicts: Assessment[]): Assessor & { inputs: Array<{ untrusted?: boolean }> } {
-    const inputs: Array<{ untrusted?: boolean }> = []
+  function assessorWith(verdicts: Assessment[]): Assessor & { inputs: AssessmentInput[] } {
+    const inputs: AssessmentInput[] = []
     let i = 0
     return {
       inputs,
@@ -364,7 +364,7 @@ describe('watch: pipeline integration (D6)', () => {
     expect(tickets).toHaveLength(1)
     expect(tickets[0]).toMatchObject({ mandate: 'inferred', origin: 'monitor:w1', goal: '整理新文件' })
     const events = store.listMessages().filter((m) => m.kind === 'event')
-    expect(events[0]!.data).toMatchObject({ code: 'monitor_triggered', sourceId: 'w1' })
+    expect(events[0]!.data).toMatchObject({ code: 'source_triggered', sourceId: 'w1' })
     expect(events[0]!.title).toBe('目录变更并创建任务')
   })
 

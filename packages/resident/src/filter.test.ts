@@ -28,7 +28,7 @@ function fakeAssessor(verdicts: Assessment[]): Assessor & { inputs: AssessmentIn
 }
 
 function makePipeline(assessor: Assessor, observeMode = true): FilterPipeline {
-  // Fixed-clock notifier so do-not-disturb checks (B12′ D4 monitor_triggered)
+  // Fixed-clock notifier so do-not-disturb checks (B12′ D4 source_triggered)
   // are deterministic: noon, outside any window.
   const notifier = new MessageService(store, { now: () => new Date(currentMs) })
   return new FilterPipeline(store, {
@@ -169,18 +169,18 @@ describe('filter: assessment and observe mode', () => {
     // L1 causality: the butler learns which monitor + fingerprint created it.
     const events = store.listMessages().filter((m) => m.kind === 'event')
     expect(events).toHaveLength(1)
-    expect(events[0]!.data).toMatchObject({ code: 'monitor_triggered', sourceId: 'm1', ticketId: tickets[0]!.id })
+    expect(events[0]!.data).toMatchObject({ code: 'source_triggered', sourceId: 'm1', ticketId: tickets[0]!.id })
     expect(events[0]!.idempotencyKey).toBe(`monitor:m1:triggered:${fingerprintOf('A')}`)
   })
 
-  it('dedupes monitor_triggered per fingerprint and suppresses it in the window', async () => {
+  it('dedupes source_triggered per fingerprint and suppresses it in the window', async () => {
     seedMonitor('m1')
     const pipeline = makePipeline(fakeAssessor([{ act: true, reason: 'r' }, { act: true, reason: 'r' }]), false)
 
     expect(await pipeline.handle(hitTrigger())).toBe('acted')
     // The open monitor ticket dedupes the re-hit at the gate — no second event.
     expect(await pipeline.handle(hitTrigger())).toBe('skipped')
-    const events = store.listMessages().filter((m) => m.kind === 'event' && (m.data as { code?: string })?.code === 'monitor_triggered')
+    const events = store.listMessages().filter((m) => m.kind === 'event' && (m.data as { code?: string })?.code === 'source_triggered')
     expect(events).toHaveLength(1)
 
     // Do-not-disturb: a hit inside the window still creates the ticket but no
@@ -192,7 +192,7 @@ describe('filter: assessment and observe mode', () => {
     expect(await pipeline2.handle(hitTrigger('m2', 'B'))).toBe('acted')
     expect(store.listTickets()).toHaveLength(2)
     const suppressed = store.listMessages().filter(
-      (m) => m.kind === 'event' && (m.data as { code?: string })?.code === 'monitor_triggered',
+      (m) => m.kind === 'event' && (m.data as { code?: string })?.code === 'source_triggered',
     )
     expect(suppressed).toHaveLength(1)
   })

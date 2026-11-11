@@ -171,8 +171,8 @@ export class FilterPipeline {
     // "why does this ticket exist" — keyed per fingerprint so a re-hit never
     // re-fires. Do-not-disturb suppresses it (the situation snapshot still
     // shows the new ticket by its `monitor:<sourceId>` origin). The event
-    // code stays `monitor_triggered` for both shapes (ADR-012 §6.3: naming
-    // skew accepted until a third source kind unifies it).
+    // code is `source_triggered` for both shapes (unified early per the
+    // ADR-012 §6.3 note, 2026-11-11 — previously `monitor_triggered`).
     if (!this.notifier.isQuiet()) {
       this.notifier.postInbound({
         kind: 'event',
@@ -183,7 +183,7 @@ export class FilterPipeline {
           `${conditionText(monitorPayload, watchPayload)}满足条件「${condition}」。\n` +
           `检查依据：${rationale}。研判：${assessment.reason}。\n` +
           `已创建任务 ${ticketId}（来源 ${trigger.sourceId}，指纹 ${fingerprint.slice(0, 12)}…）。`,
-        data: { code: 'monitor_triggered', sourceId: trigger.sourceId, ticketId },
+        data: { code: 'source_triggered', sourceId: trigger.sourceId, ticketId },
       })
     }
     return 'acted'

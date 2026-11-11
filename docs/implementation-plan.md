@@ -205,7 +205,7 @@ date: 2026-11-11
      - **D1（已交付 2026-11-10）**：schema v5 `messages.data`（JSON 元数据）+ `renderInbound` v2 结构化入站信封（时间/title/refs/untrusted，旧数据回退）+ 回执按轮次幂等 `receipt:<ticketId>:<runId>` + `send_message_to_user` 落库失败返回 `ok:false`。
      - **D2（已交付 2026-11-11）**：每轮情境快照（`situation.ts`）+ 批内积压提示。
      - **D3（已交付 2026-11-11）**：回执富化（outcome/耗时/runId/late/recovery）+ 产出文件清单扫描 + `POST /resident/api/messages/read` 已读接线。
-     - **D4（已交付 2026-11-11）**：L1 状态边沿事件（停滞/恢复检测、监控因果 `monitor_triggered`、未答提问提醒、免打扰抑制）。
+     - **D4（已交付 2026-11-11）**：L1 状态边沿事件（停滞/恢复检测、监控因果 `source_triggered`、未答提问提醒、免打扰抑制）。
      - **D5（可选，已交付 2026-11-11，[ADR-012](decisions/ADR-012-workspace-watch.md)）**：L2 workspace-watch 首个新 SourceKind。
 4. 回归：能力面完整性回归（横切纪律 1）+ 既有 vitest/E2E 全绿 + 常驻链路新增契约测试（调度/过滤/Ticket 状态机/通知幂等）。
 

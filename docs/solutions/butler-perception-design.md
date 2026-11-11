@@ -116,7 +116,7 @@ interface ReceiptData {
 
 interface EventData {
   code: 'worker_open_failed' | 'worker_turn_failed' | 'monitor_degraded'
-      | 'monitor_suggest' | 'monitor_triggered' | 'stalled' | 'resumed'
+      | 'monitor_suggest' | 'source_triggered' | 'stalled' | 'resumed'
       | 'question_unanswered'
   sourceId?: string
   ticketId?: string
@@ -205,11 +205,11 @@ worker 发起了审批请求……
 |---|---|---|---|
 | `stalled` | working 票超过 `stallMinutes`（默认 10）无任何 session 事件 | `stall:<ticketId>:<runId>` | 每 run 一次 |
 | `resumed` | stalled 之后收到首个 session 事件 | `resume:<ticketId>:<runId>` | 每 run 一次 |
-| `monitor_triggered` | auto 模式命中建票时 | `monitor:<sourceId>:triggered:<fingerprint>` | 每指纹一次 |
+| `source_triggered` | auto 模式命中建票时 | `monitor:<sourceId>:triggered:<fingerprint>` | 每指纹一次 |
 | `question_unanswered` | `question` 出站超过 `reminderMinutes`（默认 30）仍 unread 且无后续用户输入 | `question:<messageId>:reminder` | 每消息一次 |
 
 - **停滞检测实现**：`WorkerOrchestrator` 订阅活跃 worker 会话的 `session/event`，维护内存 `Map<sessionId,{lastEventAt, ticketId, runId}>`；30s 扫描一次 working 轮次，超阈值发 `stalled`，恢复后发 `resumed`。不落库（重启即重置，可接受）；阈值走设置 `stallMinutes`。
-- **监控因果**：`filter` auto 分支建票后补发 `monitor_triggered`（含 `sourceId`/`fingerprint`/`ticketId`），让管家能回答"为什么会有这票"；执行结果仍由回执收尾。
+- **监控因果**：`filter` auto 分支建票后补发 `source_triggered`（含 `sourceId`/`fingerprint`/`ticketId`），让管家能回答"为什么会有这票"；执行结果仍由回执收尾。
 - **提醒抑制**：免打扰窗内不产生 `question_unanswered`（避免半夜唤醒管家）；管家收到后自行决定是否打扰用户。
 - **积压提示（无事件）**：`pump` 取批后计算 `remaining = countPendingInbound() - batch.length`，在 prompt 里注明"还有 N 条待处理"，防"以为处理完了"。
 - 不产生"任务开始"事件：运行态由情境快照覆盖，避免每任务多一轮 LLM 成本。
@@ -245,7 +245,7 @@ worker 发起了审批请求……
 | `src/butler-tools.ts` | `send_message_to_user` 失败返回 `ok:false` |
 | `src/api.ts` | `POST /resident/api/messages/read`；`status` 增 `quiet` |
 | `src/perception.ts`（新） | L1 事件巡检（停滞/提醒）与频控 |
-| `src/filter.ts` | auto 建票补 `monitor_triggered` 事件 |
+| `src/filter.ts` | auto 建票补 `source_triggered` 事件 |
 | `src/client/api.ts` + `chat-page.tsx` | 轮询后标记已读 |
 | `cordis.patch.yml` | persona 增"读信封/快照优先/untrusted 处理/session_id 携带"指令 |
 

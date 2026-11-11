@@ -167,7 +167,7 @@ export interface EventData {
     | 'worker_turn_failed'
     | 'monitor_degraded'
     | 'monitor_suggest'
-    | 'monitor_triggered'
+    | 'source_triggered'
     | 'stalled'
     | 'resumed'
     | 'question_unanswered'
