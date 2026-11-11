@@ -90,7 +90,7 @@ export function mimeOfExtension(extension: string): string | undefined {
 }
 
 /** Normalized comparison form for Windows paths (case-insensitive, no trailing sep). */
-function canonical(path: string): string {
+export function canonical(path: string): string {
   const normalized = normalize(resolve(path))
   return (process.platform === 'win32' ? normalized.toLowerCase() : normalized).replace(
     new RegExp(`\\${sep}+$`),
@@ -99,7 +99,7 @@ function canonical(path: string): string {
 }
 
 /** True when `target` is the root itself or sits anywhere beneath it. */
-function inside(root: string, target: string): boolean {
+export function inside(root: string, target: string): boolean {
   const base = canonical(root)
   const candidate = canonical(target)
   return candidate === base || candidate.startsWith(`${base}${sep}`)

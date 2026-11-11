@@ -46,6 +46,7 @@ import { SourceRegistry, type TriggerEmitter } from './sources.ts'
 import { resolveStateDir, type ResidentConfig } from './state-dir.ts'
 import { Store } from './store.ts'
 import { errorMessage, WorkerOrchestrator, type WorkerDeps } from './worker.ts'
+import { WorkspaceWatchSource } from './workspace-watch.ts'
 
 /** Cordis function-plugin name. */
 export const name = 'hibuddy-resident'
@@ -155,6 +156,15 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
   }
   const registry = new SourceRegistry()
   registry.register(new MonitorSource(store, checker, { notifier }))
+  // B12′ D5 (ADR-012): the workspace-watch kind — fs.watch pulls scans
+  // forward, the deterministic sweep stays the source of truth; watch paths
+  // must live under a registered dsh workspace root (lazily read via the
+  // butler's workspace registry).
+  registry.register(
+    new WorkspaceWatchSource(store, {
+      roots: () => butler?.listWorkspaces().map((workspace) => workspace.path) ?? [],
+    }),
+  )
   const started = registry.startAll(store, emit)
   sources = registry
   logger.info('event sources started (armed instances: %d)', started)

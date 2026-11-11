@@ -15,6 +15,7 @@
 
 | ADR | 摘要 |
 |---|---|
+| [ADR-012-workspace-watch.md](decisions/ADR-012-workspace-watch.md) | workspace-watch 感知源（L2 首个 SourceKind）：fs.watch(递归) 只作触发提前、事实来源始终是确定性目录扫描（指纹=sha256(path+size+mtime)），watch 路径必须落已注册工作区根下，变更聚合为单条 untrusted Trigger 走既有两级过滤（filter 仅增载荷形状分支），编排层零改动；Linux 无递归 watch 自动降级纯轮询 |
 | [ADR-011-butler-conversation-layer.md](decisions/ADR-011-butler-conversation-layer.md) | 常驻智能体形态修订：管家会话（常驻 Agent Loop、hibbuddy-butler 小工具面）直接面向用户——只经 send_message_to_user 出站、经 create_session 指派 worker（会话即 worker）；微信式对话界面只渲染 in/out 消息；审批分级代管或升级确认；事件源确定性 + 管家决策；Ticket 退化为委派账本；AG-UI 应用于管家层；取代 resident-design D1 |
 | [ADR-010-resident-proactive-agent.md](decisions/ADR-010-resident-proactive-agent.md) | 产品定位修订——个人常驻智能体：常驻运行/事件驱动/主动执行/人管目标与验收（对标 dsh Super-agent 与 OpenMuse）；实现路线混合式——S7-A 先装 dsh-superagent-prototype 真机验证 dsh 常驻机制，S7-B 自研 @hibuddy/resident 面向个人场景（首批事件源=定时/周期任务）；S6 收尾不受影响，AG-UI 桥与常驻层正交 |
 | [ADR-007-generative-ui-format.md](decisions/ADR-007-generative-ui-format.md) | 生成式 UI 产出格式定案「组件指令」：模型经自定义 render_ui 工具输出 UI 指令 JSON，@hibuddy/web-ui 预置信任组件注册表渲染（内嵌=tool.call.toolview keyed slot、画布=sidebarRight tab 跨轮驻留版本递增），交互经 conversation.send 结构化回传；否决 ui4a harness 直接写前端代码路线（同源渲染无隔离，违反 SR-02 与验收 A5），iframe 生成代码列为 P1 演进候选 |
