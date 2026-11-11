@@ -18,6 +18,7 @@ import {
 } from './api.ts'
 import { TaskDrawer } from './drawer.tsx'
 import { Markdown } from './markdown.tsx'
+import { CanvasPreview } from './preview.tsx'
 
 /** Injected shell capability: open one worker session in the main panel. */
 interface ChatInjected {
@@ -193,27 +194,7 @@ const styles = {
   } as CSSProperties,
   fileMeta: { fontSize: 11, color: '#8a8a8a', marginTop: 2 } as CSSProperties,
   fileActions: { flex: 'none', display: 'flex', gap: 8 } as CSSProperties,
-  fileAction: { fontSize: 12, color: '#07c160', textDecoration: 'none' } as CSSProperties,
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 1000,
-    background: 'rgba(0,0,0,0.76)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'zoom-out',
-  } as CSSProperties,
-  overlayImage: { maxWidth: '92vw', maxHeight: '88vh', borderRadius: 4 } as CSSProperties,
-  overlayCaption: {
-    position: 'absolute',
-    bottom: 20,
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    fontSize: 12,
-    color: '#dddddd',
-  } as CSSProperties,
+  fileAction: { fontSize: 12, color: '#07c160', textDecoration: 'none', border: 'none', background: 'none', cursor: 'pointer', padding: 0 } as CSSProperties,
 }
 
 /** Human-readable byte size. */
@@ -269,9 +250,9 @@ function AttachmentView({
         <div style={styles.fileMeta}>{sizeLabel(attachment.size) || attachment.mime || '文件'}</div>
       </div>
       <div style={styles.fileActions}>
-        <a href={src} target="_blank" rel="noreferrer noopener" style={styles.fileAction}>
+        <button type="button" style={styles.fileAction} onClick={() => onPreview(attachment)}>
           打开
-        </a>
+        </button>
         <a
           href={`${src}${src.includes('?') ? '&' : '?'}download=1`}
           download={attachment.name}
@@ -443,10 +424,7 @@ export function ChatPage({ openSession }: ChatProps): ReactNode {
       </div>
       {drawer ? <TaskDrawer onClose={() => setDrawer(false)} openSession={openSession} /> : null}
       {preview !== undefined ? (
-        <div style={styles.overlay} onClick={() => setPreview(undefined)}>
-          <img src={attachmentSrc(preview)} alt={preview.name} style={styles.overlayImage} />
-          <div style={styles.overlayCaption}>{preview.name}</div>
-        </div>
+        <CanvasPreview attachment={preview} onClose={() => setPreview(undefined)} />
       ) : null}
     </div>
   )

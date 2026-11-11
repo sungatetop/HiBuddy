@@ -455,3 +455,15 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 
 **真机证据（2026-11-10）**：注入即时到期的票（workspace `D:\HibuddyWorkspace`）→ 调度派工 → worker 真实跑完一轮（outcome=ok）→ 实测：`~/.dsh/storages/workspace.json` 中 `HibuddyWorkspace.sessionIds` **已包含** `resident-worker-tkt_attachchk`（分组表面可见）；会话投影 `identity.cwd = D:\HibuddyWorkspace`、`rows.workingDirectory.val = D:\HibuddyWorkspace\resident-work\tkt_attachchk`、`sandboxMode = workspace-write`；worker 自述工作目录为 `D:\HibuddyWorkspace\resident-work\tkt_attachchk`。测试票已置 stopped 防再触发。修复前创建的旧 worker 会话（header cwd 仍为子目录）无法 attach（cwd 校验不过），保持历史 ungrouped 分组，仅新会话生效。
 
+
+### S7-B 补：消息附件 canvas 预览（2026-11-11）
+
+设计：packages/resident/src/client/preview.tsx（统一预览器，B11 附件预览的延续）。
+
+**变更**：
+- **新模块 src/client/preview.tsx**：一个全屏 <canvas> 复用所有「打开」动作——图片 drawImage 居中、文本类文件（txt/md/json/csv/log/yml/xml/html/py/js/ts/sh/bat/ps1 等，≤2MB）按行贪心换行 + 分页绘制（滚轮/按钮翻页、页码指示、上一页/下一页）、其余类型（视频/音频仍在气泡内联播放）canvas 中央提示"不支持预览，请下载后查看"；DPR 感知的 backing store（resize 保持显示分辨率），零新依赖。
+- **chat-page.tsx 接入**：文件卡片「打开」由 <a target=_blank> 改为触发统一预览层；图片缩略图点击亦进同一预览器（原 <img> 灯箱移除）；工具栏始终含「下载 / 关闭」。
+
+**契约测试**：resident 161 例全绿；typecheck/build 通过（client.js 686→696KB，CJS 内联依赖无新增）。
+
+**真机证据（2026-11-11）**：注入带 3 附件（svg/md/bin）的测试消息 → 浏览器实测——svg：overlay 单 canvas 0 img、居中绘制、1253x807 全屏；md：第 1/4 页、下一页前进、上一页解除禁用、工具栏齐全；bin：canvas 中央 #d9923c 提示 + 下载按钮可用。测试数据（消息 + 附件行 + 三个测试文件）已清理，票无残留。
