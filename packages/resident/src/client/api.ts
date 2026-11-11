@@ -35,7 +35,7 @@ export function attachmentSrc(attachment: ChatAttachment): string {
 
 export interface ChatSnapshot {
   messages: ChatMessage[]
-  status: { sessionId: string; state: string; pendingInbound: number }
+  status: { sessionId: string; state: string; pendingInbound: number; quiet?: boolean }
   unread: number
 }
 
@@ -59,6 +59,18 @@ export async function sendChat(text: string): Promise<void> {
     body: JSON.stringify({ text }),
   })
   if (!response.ok) throw new Error(`chat API ${response.status}`)
+}
+
+/** Marks the given outbound rows read (the chat marks what it has shown). */
+export async function markRead(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+  const response = await fetch('/resident/api/messages/read', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
+  if (!response.ok) throw new Error(`read API ${response.status}`)
 }
 
 /** One delegated worker session as the drawer lists it. */

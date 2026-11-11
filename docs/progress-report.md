@@ -467,3 +467,23 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 **契约测试**：resident 161 例全绿；typecheck/build 通过（client.js 686→696KB，CJS 内联依赖无新增）。
 
 **真机证据（2026-11-11）**：① 注入带 3 附件（svg/md/bin）的测试消息 → 浏览器实测——svg：overlay 单 canvas 0 img、居中绘制、1253x807 全屏；md：第 1/4 页、下一页前进、上一页解除禁用；bin：canvas 中央 #d9923c 提示 + 下载按钮可用（第一轮，纯文本分页）。② Markdown 渲染补充（第二轮）：注入真实 md 附件（openmuse-architecture-report.md，46KB）→ 实测 overlay 内 0 canvas、白色文档区 scrollHeight 13233/可滚动、多级标题 + 22 列表 + 9 表格 + 576 处 code 样式化渲染、工具栏仅「下载/关闭」无翻页。两轮测试数据均已清理（消息 + 附件行 + 测试文件），真实文件与票无残留。
+### S7-B 补：管家感知优化 B12′ D3（2026-11-11）
+
+设计：[butler-perception-design](../docs/solutions/butler-perception-design.md) §5.3 / §5.5。
+
+**变更**：
+- **回执富化**（[worker.ts](../../packages/resident/src/worker.ts) `finalize`）：成功路径补写 `ReceiptData`——`outcome`（周期票 `periodic` / 一次性 `completed`）、`runId`、`startedAt`/`finishedAt`、`durationMs`、`late`/`recovery`（来自轮次信息，仅存在时携带）、`artifacts`。`MessageInput` 增 `data`（`messages.ts`），`postInbound` 写入。
+- **产出文件扫描**（新模块 [artifacts.ts](../../packages/resident/src/artifacts.ts)）：宿主侧确定性扫描 `<工作区>/resident-work/<ticket-short>/`——`mtime >= startedAt - 1s`、按 mtime 倒序最多 20 项；跳过隐藏/临时文件（`.`/`~$`/`*.tmp`）、跳过符号链接（防逃逸）、递归深度 <=4、扫描总量上限 200；`kind` 复用 `attachments.ts` 扩展名推断；扫描失败只告警、`artifacts: []`，绝不使回执失败。
+- **read API 与已读接线**：
+  - `POST /resident/api/messages/read`（`{ ids }` 或 `{ upTo }`）→ `{ ok, marked }`（[api.ts](../../packages/resident/src/api.ts)）；`butler.markRead`（[butler.ts](../../packages/resident/src/butler.ts)）；
+  - **unread 语义修复**：未读 = 未读的 **outbound** 行（`countUnreadMessages` / `unreadOnly` 过滤 `direction='out'`）——inbound 行是用户自己的视图，不再污染徽标；
+  - `status()` 增 `quiet`（免打扰生效中），聊天页在免打扰时显示提示；
+  - 聊天页轮询后批量标记可见 outbound 行已读（`chat-page.tsx`，去重 Set 防重复请求）。
+
+**契约测试**：resident 173 例全绿（新增 12：artifacts 扫描 5 例——mtime 过滤与倒序/扩展名分类/隐藏+符号链接跳过/深度与总量上限/缺失根吞错；worker 回执富化 3 例——enrich 全字段 + periodic outcome + recovery；messages 已读 1 例；butler read API + status.quiet 2 例；store 批量已读与 upTo 游标 1 例）；typecheck/build 通过。
+
+**真机证据（2026-11-11）**：
+- **read API**：注入 2 out + 1 in 行 → curl 实测 `unread before: 25` → `mark ids`（1）→ `mark upTo`（24）→ `unread after: 0`；空 body 返回 400；`status.quiet=false` 正确。
+- **场景 3 完整闭环**：注入即时到期票（目标=在工作目录创建 task-report.md）→ worker 真实跑 38.6s → 回执 `data` 完整：`{outcome: completed, runId: 25, startedAt/finishedAt, durationMs: 38574, artifacts: [{name: task-report.md, path: D:\HibuddyWorkspace\resident-work\tkt_d3scan2\task-report.md, size: 392, kind: file}]}`；解码但ler 会话确认回执信封进入模型上下文——`【任务回执｜刚刚｜ticket=tkt_d3scan2｜session=resident-worker-tkt_d3scan2｜run=25｜39s｜completed】` + `（产出）task-report.md(392B,file)`；**联动闭环**：但ler 主动 `send_message_to_user` 把 task-report.md 作为附件发给用户（`att_5edaf6a7`，mime=text/markdown）。测试数据（票/回执/转发消息/工作目录文件）已全部清理。
+
+**排障发现（重要）**：dsh `apiKeyEnv`（如 `VOL_ARK_API_KEY`）声明走 `namesCredential` 机制——**实际读 `~/.dsh/.credentials.yaml` 的 `refs`，而非进程/用户环境变量**；只 setx 或进程级 env 不会生效，必须改 `.credentials.yaml` 的 ref 值（或经 dsh credential 管理流程）。本次 vol-ark 周配额 429 持续数轮，直连 API 200 而 dsh 内 429 的根因即旧 key 残留在 `.credentials.yaml`。新 key 已更新到 `.credentials.yaml` 与用户环境变量（2026-11-11，后续 D4 真机继续使用）。

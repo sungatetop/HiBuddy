@@ -300,8 +300,8 @@ worker 发起了审批请求……
 | 阶段 | 内容 | 验收 |
 |---|---|---|
 | D1 ✅（2026-11-10 交付） | schema v5 + `renderInbound` v2（信封） + 回执按轮幂等 + 工具失败反馈 | §11.1 相关用例 + 场景 1 |
-| D2 | 情境快照 + 积压提示 | 场景 2、4 |
-| D3 | 回执富化 + artifact 扫描 + read API/已读 | 场景 3；unreadCount 语义修复 |
+| D2 ✅（2026-11-10 交付） | 情境快照 + 积压提示 | 场景 2、4 |
+| D3 ✅（2026-11-11 交付） | 回执富化 + artifact 扫描 + read API/已读 | 场景 3；unreadCount 语义修复 |
 | D4 | L1：停滞检测 + 监控因果 + 未答提问提醒（设置开关 `perceptionEvents` 默认开） | 场景 5、6；事件频控单测 |
 | D5（可选） | L2 workspace-watch 首个 SourceKind | 独立 ADR 后再实施 |
 

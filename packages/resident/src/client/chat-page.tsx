@@ -12,6 +12,7 @@ import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   attachmentSrc,
   fetchChat,
+  markRead,
   sendChat,
   type ChatAttachment,
   type ChatMessage,
@@ -52,6 +53,7 @@ const styles = {
   } as CSSProperties,
   title: { fontSize: 15, fontWeight: 600 } as CSSProperties,
   subtitle: { fontSize: 12, color: '#8a8a8a' } as CSSProperties,
+  quiet: { fontSize: 11, color: '#c2803a', marginTop: 2 } as CSSProperties,
   list: {
     flex: 1,
     minHeight: 0,
@@ -282,11 +284,14 @@ function boundaryLabel(current: ChatMessage, previous: ChatMessage | undefined):
 export function ChatPage({ openSession }: ChatProps): ReactNode {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [working, setWorking] = useState(false)
+  const [quiet, setQuiet] = useState(false)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | undefined>(undefined)
   const [drawer, setDrawer] = useState(false)
   const [preview, setPreview] = useState<ChatAttachment | undefined>(undefined)
   const listRef = useRef<HTMLDivElement | null>(null)
+  /** Outbound ids already marked read, so the poll never re-sends them. */
+  const markedRef = useRef<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
     let disposed = false
@@ -296,6 +301,16 @@ export function ChatPage({ openSession }: ChatProps): ReactNode {
         if (disposed) return
         setMessages(snapshot.messages)
         setWorking(snapshot.status.state === 'working')
+        setQuiet(snapshot.status.quiet === true)
+        // Mark the visible outbound rows read (fire-and-forget). The poll is
+        // the only read source: whatever the UI has shown is "seen" (B12′ §5.5).
+        const fresh = snapshot.messages
+          .filter((message) => message.direction === 'out' && !markedRef.current.has(message.id))
+          .map((message) => message.id)
+        if (fresh.length > 0) {
+          markedRef.current = new Set([...markedRef.current, ...fresh])
+          void markRead(fresh).catch(() => undefined)
+        }
         setError(undefined)
       } catch (cause) {
         if (!disposed) setError(cause instanceof Error ? cause.message : String(cause))
@@ -338,6 +353,7 @@ export function ChatPage({ openSession }: ChatProps): ReactNode {
         <div>
           <div style={styles.title}>管家</div>
           <div style={styles.subtitle}>替你指挥任务、监控进度、汇报结果</div>
+          {quiet ? <div style={styles.quiet}>免打扰中 · 新消息仅落库不推送</div> : null}
         </div>
         <button type="button" style={styles.tasksButton} onClick={() => setDrawer(true)}>
           任务
