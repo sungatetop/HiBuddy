@@ -461,9 +461,9 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 设计：packages/resident/src/client/preview.tsx（统一预览器，B11 附件预览的延续）。
 
 **变更**：
-- **新模块 src/client/preview.tsx**：一个全屏 <canvas> 复用所有「打开」动作——图片 drawImage 居中、文本类文件（txt/md/json/csv/log/yml/xml/html/py/js/ts/sh/bat/ps1 等，≤2MB）按行贪心换行 + 分页绘制（滚轮/按钮翻页、页码指示、上一页/下一页）、其余类型（视频/音频仍在气泡内联播放）canvas 中央提示"不支持预览，请下载后查看"；DPR 感知的 backing store（resize 保持显示分辨率），零新依赖。
+- **新模块 src/client/preview.tsx**：一个全屏 overlay 复用所有「打开」动作——图片 drawImage 居中；Markdown 文件（md/markdown）渲染为可滚动的 Markdown 文档（复用 react-markdown + GFM 组件，白色阅读容器、780px 限宽，翻页控件替换为滚动）；其余文本类文件（txt/json/csv/log/yml/xml/html/py/js/ts/sh/bat/ps1 等，≤2MB）按行贪心换行 + 分页绘制（滚轮/按钮翻页、页码指示、上一页/下一页）；其余类型（视频/音频仍在气泡内联播放）canvas 中央提示"不支持预览，请下载后查看"；DPR 感知的 backing store（resize 保持显示分辨率），零新依赖。
 - **chat-page.tsx 接入**：文件卡片「打开」由 <a target=_blank> 改为触发统一预览层；图片缩略图点击亦进同一预览器（原 <img> 灯箱移除）；工具栏始终含「下载 / 关闭」。
 
 **契约测试**：resident 161 例全绿；typecheck/build 通过（client.js 686→696KB，CJS 内联依赖无新增）。
 
-**真机证据（2026-11-11）**：注入带 3 附件（svg/md/bin）的测试消息 → 浏览器实测——svg：overlay 单 canvas 0 img、居中绘制、1253x807 全屏；md：第 1/4 页、下一页前进、上一页解除禁用、工具栏齐全；bin：canvas 中央 #d9923c 提示 + 下载按钮可用。测试数据（消息 + 附件行 + 三个测试文件）已清理，票无残留。
+**真机证据（2026-11-11）**：① 注入带 3 附件（svg/md/bin）的测试消息 → 浏览器实测——svg：overlay 单 canvas 0 img、居中绘制、1253x807 全屏；md：第 1/4 页、下一页前进、上一页解除禁用；bin：canvas 中央 #d9923c 提示 + 下载按钮可用（第一轮，纯文本分页）。② Markdown 渲染补充（第二轮）：注入真实 md 附件（openmuse-architecture-report.md，46KB）→ 实测 overlay 内 0 canvas、白色文档区 scrollHeight 13233/可滚动、多级标题 + 22 列表 + 9 表格 + 576 处 code 样式化渲染、工具栏仅「下载/关闭」无翻页。两轮测试数据均已清理（消息 + 附件行 + 测试文件），真实文件与票无残留。

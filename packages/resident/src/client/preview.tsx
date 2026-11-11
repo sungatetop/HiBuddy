@@ -1,12 +1,14 @@
 /**
- * Unified canvas preview (2026-11-10) — ONE full-screen canvas reused by every
- * "open" action in the butler chat: images are drawn onto it, text files are
- * rendered as paginated text; anything else falls back to download. Videos and
- * audio stay as inline controls in the bubble (they already play in place).
+ * Unified canvas preview (2026-11-10) — ONE full-screen overlay reused by every
+ * "open" action in the butler chat: images are drawn onto the canvas, text
+ * files are rendered as paginated text, Markdown files render as a scrolling
+ * document (react-markdown), and anything else falls back to download. Videos
+ * and audio stay as inline controls in the bubble (they already play in place).
  */
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { attachmentSrc, type ChatAttachment } from './api.ts'
+import { Markdown } from './markdown.tsx'
 
 /** Source-like extensions previewable inside the canvas (paginated text). */
 const TEXT_EXTENSIONS = new Set([
@@ -32,6 +34,13 @@ export function previewKindOf(attachment: ChatAttachment): PreviewKind {
   const dot = attachment.name.lastIndexOf('.')
   const extension = dot > 0 ? attachment.name.slice(dot + 1).toLowerCase() : ''
   return TEXT_EXTENSIONS.has(extension) ? 'text' : 'unsupported'
+}
+
+/** Markdown documents render as a scrolling page instead of paginated canvas text. */
+function isMarkdownName(name: string): boolean {
+  const dot = name.lastIndexOf('.')
+  const extension = dot > 0 ? name.slice(dot + 1).toLowerCase() : ''
+  return extension === 'md' || extension === 'markdown'
 }
 
 const styles = {
@@ -90,6 +99,21 @@ const styles = {
     fontSize: 12,
     textDecoration: 'none',
     flex: 'none',
+  } as CSSProperties,
+  markdownScroll: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto',
+    background: '#ffffff',
+    color: '#191919',
+    fontFamily: 'system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
+    fontSize: 14,
+    lineHeight: 1.6,
+  } as CSSProperties,
+  markdownInner: {
+    maxWidth: 780,
+    margin: '0 auto',
+    padding: '36px 40px',
   } as CSSProperties,
 }
 
@@ -272,32 +296,44 @@ export function CanvasPreview({
     ctx.restore()
   }, [loaded, page, kind, src])
 
+  // Markdown documents render as a scrolling page (not paginated canvas text).
+  const markdown = kind === 'text' && isMarkdownName(attachment.name) && loaded?.kind === 'text'
+  const paginated = kind === 'text' && !isMarkdownName(attachment.name)
+
   return (
     <div style={styles.overlay} onClick={onClose}>
-      <canvas
-        ref={canvasRef}
-        style={styles.canvas}
-        onClick={(event) => event.stopPropagation()}
-        onWheel={(event) => {
-          if (kind !== 'text') return
-          event.stopPropagation()
-          if (event.deltaY > 0) setPage((value) => Math.min(pageCount, value + 1))
-          else setPage((value) => Math.max(1, value - 1))
-        }}
-      />
+      {markdown ? (
+        <div style={styles.markdownScroll} onClick={(event) => event.stopPropagation()}>
+          <div style={styles.markdownInner}>
+            <Markdown>{loaded?.kind === 'text' ? loaded.lines.join('\n') : ''}</Markdown>
+          </div>
+        </div>
+      ) : (
+        <canvas
+          ref={canvasRef}
+          style={styles.canvas}
+          onClick={(event) => event.stopPropagation()}
+          onWheel={(event) => {
+            if (kind !== 'text') return
+            event.stopPropagation()
+            if (event.deltaY > 0) setPage((value) => Math.min(pageCount, value + 1))
+            else setPage((value) => Math.max(1, value - 1))
+          }}
+        />
+      )}
       <div style={styles.toolbar} onClick={(event) => event.stopPropagation()}>
         <div style={styles.toolbarLeft}>
           <span style={styles.fileName} title={attachment.name}>
             {attachment.name}
           </span>
-          {kind === 'text' ? (
+          {paginated ? (
             <span style={styles.pages}>
               第 {page} / {pageCount} 页
             </span>
           ) : null}
         </div>
         <div style={styles.toolbarRight}>
-          {kind === 'text' ? (
+          {paginated ? (
             <>
               <button
                 type="button"
