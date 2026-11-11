@@ -487,3 +487,24 @@ S5 登记的「重启进程预期恢复」假设**证伪**——真机复验：U
 - **场景 3 完整闭环**：注入即时到期票（目标=在工作目录创建 task-report.md）→ worker 真实跑 38.6s → 回执 `data` 完整：`{outcome: completed, runId: 25, startedAt/finishedAt, durationMs: 38574, artifacts: [{name: task-report.md, path: D:\HibuddyWorkspace\resident-work\tkt_d3scan2\task-report.md, size: 392, kind: file}]}`；解码但ler 会话确认回执信封进入模型上下文——`【任务回执｜刚刚｜ticket=tkt_d3scan2｜session=resident-worker-tkt_d3scan2｜run=25｜39s｜completed】` + `（产出）task-report.md(392B,file)`；**联动闭环**：但ler 主动 `send_message_to_user` 把 task-report.md 作为附件发给用户（`att_5edaf6a7`，mime=text/markdown）。测试数据（票/回执/转发消息/工作目录文件）已全部清理。
 
 **排障发现（重要）**：dsh `apiKeyEnv`（如 `VOL_ARK_API_KEY`）声明走 `namesCredential` 机制——**实际读 `~/.dsh/.credentials.yaml` 的 `refs`，而非进程/用户环境变量**；只 setx 或进程级 env 不会生效，必须改 `.credentials.yaml` 的 ref 值（或经 dsh credential 管理流程）。本次 vol-ark 周配额 429 持续数轮，直连 API 200 而 dsh 内 429 的根因即旧 key 残留在 `.credentials.yaml`。新 key 已更新到 `.credentials.yaml` 与用户环境变量（2026-11-11，后续 D4 真机继续使用）。
+### S7-B 补：管家感知优化 B12′ D4（2026-11-11）
+
+设计：[butler-perception-design](../docs/solutions/butler-perception-design.md) §6 / §11.1。
+
+**变更**：
+- **新模块 [edge.ts](../../packages/resident/src/edge.ts)（EdgeDetector）**：L1 边沿事件轮询器（30s 扫描，`start()`/`stop()` 由宿主装配生命周期管理）——
+  - **stalled / resumed**：订阅宿主 `session/event` 维护内存活动表 `Map<sessionId, lastEventAt>`（不落库，重启重置）；对 `working` 票取其会话（活动缺失时回退 `ticket.updatedAt` 作为 dispatch 时刻），超过 `stallMinutes`（默认 10）无事件 → `stalled`（幂等 `stall:<ticketId>:<runId>`），之后首个事件 → `resumed`（幂等 `resume:<ticketId>:<runId>`），均每 run 一次；
+  - **question_unanswered**：扫 `out` 行 `kind='question'` 且未读且超过 `reminderMinutes`（默认 30）且其后无任何用户输入 → 事件（幂等 `question:<messageId>:reminder`，每消息一次）；
+  - **统一抑制**：`perceptionEvents` 开关（默认开）关闭或免打扰窗内，整轮 scan 不产生任何边沿事件（不唤醒管家）。
+- **监控因果**（[filter.ts](../../packages/resident/src/filter.ts)）：auto 分支建票后补发 `monitor_triggered`（`data` 含 `code/sourceId/ticketId`，幂等 `monitor:<sourceId>:triggered:<fingerprint>`；窗内抑制——情境快照按票 `origin` 兜底）。
+- **设置**（domain/butler）：`perceptionEvents`（默认 true）、`stallMinutes`（默认 10，1–120）、`reminderMinutes`（默认 30，1–1440）入 `ResidentSettings`，`settings()`/`saveSettings()` 读写与钳制。
+- **装配**（[index.ts](../../packages/resident/src/index.ts)）：`EdgeDetector(ctx, store, notifier)` 在 butler 启动后 `start()`，dispose `stop()`。
+
+**契约测试**：resident 182 例全绿（新增 9：edge 8 例——stall 触发与幂等+resumed 恢复/活跃会话不误报/免打扰抑制/开关/提问提醒与幂等/用户已答跳过/窗内抑制/定时器启停；filter 1 例——monitor_triggered 落库含 sourceId+ticketId+幂等键、重复 hit 被 gate 去重、窗内建票但事件抑制）；typecheck/build 通过。
+
+**真机证据（2026-11-11）**：
+- **question_unanswered**：注入 2 分钟前未读 `question` 出站行 + `reminderMinutes=1` → 约 52s 后 scan 落库事件 `{code: question_unanswered, key: question:msg_d4q:reminder}`（含标题「提问尚未得到答复」），链路实证。
+- **stalled**：注入 `stallMinutes=1` + 3 分钟前 `updatedAt` 的 working 票，预期 scan 触发 stalled——实测**未触发**，根因：宿主启动 reconcile 对 working 票自动 `resumeWorker`（真实创建会话并驱动轮次，`updatedAt` 被刷新为启动时刻），会话处于活动状态。**真实停滞复现需实际卡住的 worker 会话（≥stallMinutes 无事件）**；设计验收 §11.1「停滞巡检：假时钟推进」即单测覆盖（注入时钟），真机停滞场景登记为观察项（后续真实长任务卡住时自然触发）。
+- 探测数据（票/提问/事件/settings）已清理。
+
+**后续（D5）**：L2 workspace-watch 首个 SourceKind（独立 ADR 后再实施）。
