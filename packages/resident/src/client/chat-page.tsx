@@ -216,6 +216,11 @@ function fileBadge(name: string): string {
   return extension.length > 4 ? extension.slice(0, 4) : extension
 }
 
+/** Whether the message carries a generative-UI reference attachment. */
+function hasUiAttachment(message: { attachments?: ChatAttachment[] }): boolean {
+  return (message.attachments ?? []).some((attachment) => attachment.kind === 'ui')
+}
+
 /** One attachment rendered per its media kind (image/video/audio/file/ui). */
 function AttachmentView({
   attachment,
@@ -385,7 +390,9 @@ export function ChatPage({ openSession }: ChatProps): ReactNode {
                   }}
                 >
                   {message.title !== undefined && !mine ? <div style={styles.bubbleTitle}>{message.title}</div> : null}
-                  {mine || approval ? (
+                  {/* A kind='ui' attachment carries the card chrome itself — the
+                      ledger text (its summary) would duplicate the card title. */}
+                  {!mine && !approval && hasUiAttachment(message) ? null : mine || approval ? (
                     <div style={styles.plainText}>{message.text}</div>
                   ) : (
                     <Markdown>{message.text}</Markdown>

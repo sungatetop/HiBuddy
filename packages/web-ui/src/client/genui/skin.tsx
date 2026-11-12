@@ -13,7 +13,7 @@
  * an inline `--hg-accent` (from `componentAccent`); surfaces add the `hg-*`
  * classes documented below. Render `<GenuiSkin />` once per card.
  */
-import { type CSSProperties, type ReactNode } from 'react'
+import { useEffect, type CSSProperties, type ReactNode } from 'react'
 
 /**
  * Per-component accent (Okabe-Ito-adjacent, mirrors the chart palette so the
@@ -150,12 +150,17 @@ const CSS = `
 `
 
 /**
- * One-per-document style injector: the first render mounts the stylesheet,
- * later mounts are no-ops (id dedupe), so multiple cards on one page share it.
+ * One-per-document style injector. Injection happens in an effect (after the
+ * DOM flush), so multiple cards mounting in the same paint dedupe cleanly by
+ * element id — the first effect creates the tag, later ones see it exist.
  */
 export function GenuiSkin(): ReactNode {
-  if (typeof document !== 'undefined' && document.getElementById('hibuddy-genui-skin') !== null) {
-    return null
-  }
-  return <style id="hibuddy-genui-skin">{CSS}</style>
+  useEffect(() => {
+    if (document.getElementById('hibuddy-genui-skin') !== null) return
+    const tag = document.createElement('style')
+    tag.id = 'hibuddy-genui-skin'
+    tag.textContent = CSS
+    document.head.appendChild(tag)
+  }, [])
+  return null
 }
