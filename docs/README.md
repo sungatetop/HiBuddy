@@ -6,6 +6,7 @@
 
 | 类别 | 文档 | 摘要 |
 |---|---|---|
+| 模块设计 | [module-design/butler-detail-design.md](module-design/butler-detail-design.md) | 管家模块详细设计说明（整合文档）：定位与设计原则、总体架构与代码组件映射、领域模型与 schema v5、管家会话运行时（单轮泵）、8 件工具面、消息账本与附件、三层次感知体系（L0 信封/快照/回执富化、L1 边沿事件、L2 workspace-watch）、委派与 worker 编排、审批分级代管、事件源框架、微信式界面与 AG-UI 管家层、安全口径、关键参数与失败恢复；不含新决策，冲突时以 ADR-011 与 resident-design 为准 |
 | 产品文档 | [product/requirements.md](product/requirements.md) | PRD：HiBuddy（个人常驻智能体）的 P0 范围、常驻层增量范围（§3.2，FR-10）、对象模型（含常驻层对象草案）、功能需求（会话/任务/工具审批/生成式界面/共享状态/BYOK/双端一致）与共享规则；定位修订依据 ADR-010 |
 | 架构文档 | [architecture/system-architecture.md](architecture/system-architecture.md) | 技术方案：基于 deepseek-harness（dsh，npm 依赖，MIT）深度定制——hibuddy profile 装配 + @hibuddy/* 插件集（品牌/核心工具/Web UI 定制/AG-UI 桥）+ 自建 Electron 壳+宿；不 fork、不建 SPI（路线见 ADR-003） |
 | 计划与报告 | [implementation-plan.md](implementation-plan.md) | P0 实施计划：先复用后定制——S1 跑通 dsh 三端基础设施与能力面完整性（插件安装/启停）并打包，S2 起定制（品牌人设→核心工具/审批→AG-UI 桥 MVP→生成式 UI→收尾双端交付）；S6 生态接入与上游跟进，S7 常驻/主动层（ADR-010）；每阶段任务、前置 ADR 与可判定验收标准 |
