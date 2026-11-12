@@ -26,6 +26,9 @@ profile/*/workspace/
 # `dsh plugin --profile` operations against the synced junction)
 profile/*/.plugin-manager/
 
+# Local boot/runtime logs (never commit)
+dsh-boot.log
+
 # Playwright transient output
 tests/e2e/test-results/
 tests/e2e/playwright-report/

@@ -2,14 +2,14 @@
 title: 生成式 UI 与 AG-UI 优化方案（借鉴 OpenMuse，不引入 JEV）
 summary: 在 ADR-007「组件指令」路线内做增量优化——借鉴 OpenMuse 的 AG-UI 用法（REST 快照 + 事件流双通道、线程恢复序、按需拉取）与 JEV 的契约细节（revision 防过期交互、来源溯源、严格 schema），不引入 JEV 领域模型、不更换产出格式：G1 指令 schema 增 revision/严格校验/来源声明、G2 交互回传统一文本契约 + 宿主过期校验、G3 render_ui 指令持久化并按 id+revision 拉取、G4 生成式 UI 进入管家层（指令引用经附件机制入账本 + AG-UI Markdown 下发）、G5 生态前端接入序文档化；分三阶段落地，含影响文件与验收标准
 keywords: [生成式 UI, 组件指令, render_ui, AG-UI, 管家层, revision, 交互回传, 按需拉取, 附件引用, OpenMuse, 方案, solutions]
-status: draft
+status: accepted
 date: 2026-11-12
 ---
 
 # 生成式 UI 与 AG-UI 优化方案（借鉴 OpenMuse，不引入 JEV）
 
-> 依据：[OpenMuse 调研](../references/openmuse-research.md)（AG-UI 用法与可借鉴机制）、[ADR-007](../decisions/ADR-007-generative-ui-format.md)（组件指令路线，本文在其 §3.2/§3.4 基础上做增量）、[ADR-011](../decisions/ADR-011-butler-conversation-layer.md)（管家层收敛）、[butler-detail-design §11.3](../module-design/butler-detail-design.md)（AG-UI 管家层现状）。
-> 状态：draft（待评审；通过后登记 `docs/README.md` 正表并排入实施计划）。
+> 依据：[OpenMuse 调研](../references/openmuse-research.md)（AG-UI 用法与可借鉴机制）、[ADR-007](../decisions/ADR-007-generative-ui-format.md)（组件指令路线，本文在其 §3.2/§3.4 基础上做增量）、[ADR-011](../decisions/ADR-011-butler-conversation-layer.md)（管家层收敛，R1 修订记录即本文 G3/G4 的 D2/D6 增补）、[butler-detail-design §11.3](../module-design/butler-detail-design.md)（AG-UI 管家层现状）。
+> 状态：accepted（2026-11-12 实施；P1 契约强化与 P2 管家层出口已落地并测试全绿，P3 生态接入序文档进行中；真机 E2E 验收待跑）。
 
 ## 1. 目标与非目标
 
@@ -132,8 +132,8 @@ date: 2026-11-12
 
 ## 8. 开放问题
 
-1. ADR-011 D2/D6 增补形式：ADR 修订记录 vs 本方案验收即视为生效（评审定）。
-2. `revision` 校验的持久性：宿主内存态重启丢失后，旧回传是否放行（建议：以 `ui_instructions` 最新 revision 为准，持久化后天然解决）。
+1. ~~ADR-011 D2/D6 增补形式~~：已定——以 ADR 修订记录承载（ADR-011 §7 R1，2026-11-12）。
+2. ~~`revision` 校验的持久性~~：已定——以 `ui_instructions` 最新 revision 为准：泵的 gate 先读内存 registry，再兜底 store 查询（重启后 gate 仍闭合，不过不再误拒已渲染界面）。
 3. worker 产出的 UI 指令是否引用进管家账本（任务结果面板化）——涉及"worker 过程可见性"边界，首批不做。
-4. 组件注册表跨包复用方式：`resident/client` 直接 import `web-ui` 组件模块 vs 抽独立 `@hibuddy/ui-registry` 包（P2 实施时定，倾向前者，避免新包）。
+4. ~~组件注册表跨包复用方式~~：已定——`resident/client` 直接 import `@hibuddy/web-ui/client-genui`（新增的可嵌入入口：四个信任 surface + registry + 回传 seam，无 @deepseek-ai 运行时依赖；form 的 dsh Button 改为可注入 seam），不抽新包。
 5. 生态前端交互体验：CUSTOM 事件透出指令（替代 Markdown 链接）是否值得——P3 真机后再评估。

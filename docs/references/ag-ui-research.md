@@ -3,7 +3,7 @@ title: AG-UI 协议与生成式 UI 生态调研
 summary: 调研 AG-UI（Agent-User Interaction Protocol）的协议定位、事件模型、SDK 生态与应用它的热点开源项目（CopilotKit、OpenBot、openui 等），并为 HiBuddy 筛选参考项目 clone 至 thirdparty/；后补入运行时选型两仓（deepseek-harness、pi-mono）
 keywords: [AG-UI, Generative UI, CopilotKit, Agent, 事件流协议, thirdparty]
 status: accepted
-date: 2026-11-04
+date: 2026-11-12
 ---
 
 # AG-UI 协议与生成式 UI 生态调研
@@ -103,3 +103,19 @@ date: 2026-11-04
 - CopilotKit 仓库结构（showcase/integrations、examples/integrations/langgraph-fastapi）与 GitHub API 元数据
 - 社区综述：腾讯云开发者社区《研究 Agent Gen UI，发现几个值得学习的宝藏开源项目》（2026-10-19）、LibHunt generative-ui 榜单、GitCode 博客（Java SDK 解析、langgraph-fastapi 示例、OpenIntelligentUI 教程）
 - npm：dsh-generative-ui 包页（ui4a harness 说明）
+
+## 8. HiBuddy 接入序（生态前端契约，genui-agui-optimization.md G5，2026-11-12）
+
+生态前端（CopilotKit/HttpAgent 或任意 AG-UI 客户端）接入 HiBuddy 管家的文档化闭环。双通道分工与 OpenMuse §3.1 结论一致：**durable 状态走 REST 快照，对话流走 AG-UI 事件**。
+
+1. **恢复现场（快照）**：`GET /resident/api/messages` 取最近 200 条账本行（用户 text + 管家出站 text，含 `kind='ui'` 附件引用）。历史出站行**只渲染、不重复计数**（对应 OpenMuse `RUN_ERROR` 断连降噪：快照是事实来源，事件流只承载增量）。
+2. **发起 run**：`POST /agui`（`RunAgentInput`）；并发中返回 409 → 稍后重试。响应为 SSE 的 `TEXT_MESSAGE_*` 事件；管家出站消息的附件随文本下发为 Markdown（生成式 UI 引用形如 `[summary](/resident/api/ui-instruction?id=…&revision=…)`）。
+3. **拉取生成式 UI（按需）**：对 ui 引用 `GET /resident/api/ui-instruction?id=<uiId>&revision=<n>`（缺省最新）取指令 JSON，自行经信任组件渲染或静态呈现；同 id+revision 的 JSON 不可变，可缓存。
+4. **断线重连**：重新拉快照 + 以新 runId 发起 run；快照中的历史行只渲染不重放。
+5. **交互回传（G2 契约）**：对生成式 UI 的用户操作，以一条结构化文本经 `POST /agui` 发出（与自家聊天端 `conversation.send` 同一宿主校验点）：
+   ```text
+   @[ui:<id>:<revision>] {"component":"form","event":"submit","payload":{...}}
+   ```
+   宿主比对 `ui_instructions` 最新 revision——过期/未知/伪造的回传**不进模型上下文**，用户收到可见的轻提示。
+
+安全边界：`/resident/api/*` 与 `/agui` 同在 dsh 信任栅栏后（连接栅栏 403 / 启动 token 会话 cookie）；`TOOL_CALL_*` 事件不出网（指令只以引用/Markdown 透出）；`render_ui` 为 no-op 数据工具，指令 JSON 不含可执行内容。

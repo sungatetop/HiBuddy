@@ -19,7 +19,7 @@
 | ADR | 摘要 |
 |---|---|
 | [ADR-012-workspace-watch.md](decisions/ADR-012-workspace-watch.md) | workspace-watch 感知源（L2 首个 SourceKind）：fs.watch(递归) 只作触发提前、事实来源始终是确定性目录扫描（指纹=sha256(path+size+mtime)），watch 路径必须落已注册工作区根下，变更聚合为单条 untrusted Trigger 走既有两级过滤（filter 仅增载荷形状分支），编排层零改动；Linux 无递归 watch 自动降级纯轮询 |
-| [ADR-011-butler-conversation-layer.md](decisions/ADR-011-butler-conversation-layer.md) | 常驻智能体形态修订：管家会话（常驻 Agent Loop、hibbuddy-butler 小工具面）直接面向用户——只经 send_message_to_user 出站、经 create_session 指派 worker（会话即 worker）；微信式对话界面只渲染 in/out 消息；审批分级代管或升级确认；事件源确定性 + 管家决策；Ticket 退化为委派账本；AG-UI 应用于管家层；取代 resident-design D1 |
+| [ADR-011-butler-conversation-layer.md](decisions/ADR-011-butler-conversation-layer.md) | 常驻智能体形态修订：管家会话（常驻 Agent Loop、hibbuddy-butler 小工具面）直接面向用户——只经 send_message_to_user 出站、经 create_session 指派 worker（会话即 worker）；微信式对话界面只渲染 in/out 消息；审批分级代管或升级确认；事件源确定性 + 管家决策；Ticket 退化为委派账本；AG-UI 应用于管家层；取代 resident-design D1。§7 R1（2026-11-12）：D2/D6 增补——render_ui 入管家工具面（第 9 件）并以 kind='ui' 附件引用出站（依据 genui-agui-optimization.md G3/G4） |
 | [ADR-010-resident-proactive-agent.md](decisions/ADR-010-resident-proactive-agent.md) | 产品定位修订——个人常驻智能体：常驻运行/事件驱动/主动执行/人管目标与验收（对标 dsh Super-agent 与 OpenMuse）；实现路线混合式——S7-A 先装 dsh-superagent-prototype 真机验证 dsh 常驻机制，S7-B 自研 @hibuddy/resident 面向个人场景（首批事件源=定时/周期任务）；S6 收尾不受影响，AG-UI 桥与常驻层正交 |
 | [ADR-007-generative-ui-format.md](decisions/ADR-007-generative-ui-format.md) | 生成式 UI 产出格式定案「组件指令」：模型经自定义 render_ui 工具输出 UI 指令 JSON，@hibuddy/web-ui 预置信任组件注册表渲染（内嵌=tool.call.toolview keyed slot、画布=sidebarRight tab 跨轮驻留版本递增），交互经 conversation.send 结构化回传；否决 ui4a harness 直接写前端代码路线（同源渲染无隔离，违反 SR-02 与验收 A5），iframe 生成代码列为 P1 演进候选 |
 | [ADR-009-s3-rescope-agui-bridge.md](decisions/ADR-009-s3-rescope-agui-bridge.md) | S3 范围缩减与 AG-UI 桥立项：实证 dsh 已自带完整工具面（preset-standard 14+ 官方工具）与审批机制（沙箱模式×执行期升级+approval/request waterfall）后，S3 不再自研工具与审批主干，缩减为「审批 answerer 增量」（L1 免再询记忆/审批卡参数全文/L2 默认关闭）；AG-UI 桥提前为 S3b 专项——插件内 ctx.webServer 注册 /agui SSE 端点（方案 A，dsh-sdk 外挂方案因缺审批应答否决），MVP 验收=CopilotKit 接入闭环 |
@@ -41,7 +41,7 @@
 
 | 文档 | 摘要 |
 |---|---|
-| [genui-agui-optimization.md](solutions/genui-agui-optimization.md) | 生成式 UI 与 AG-UI 优化方案（借鉴 OpenMuse，不引入 JEV，draft）：ADR-007 组件指令路线内增量——指令 schema 增 revision/严格校验/provenance 来源声明、交互回传统一文本契约 + 宿主过期校验（生态前端与自家前端同契约）、render_ui 指令持久化按 id+revision 拉取、render_ui 入管家工具面并以 kind='ui' 附件引用入账本 + AG-UI Markdown 下发、生态前端接入序（快照→run→重连→回传）文档化；P1–P3 三阶段 |
+| [genui-agui-optimization.md](solutions/genui-agui-optimization.md) | 生成式 UI 与 AG-UI 优化方案（借鉴 OpenMuse，不引入 JEV，accepted 2026-11-12，P1/P2 已实施）：ADR-007 组件指令路线内增量——指令 schema 增 revision/严格校验/provenance 来源声明、交互回传统一文本契约 + 宿主过期校验（生态前端与自家前端同契约）、render_ui 指令持久化（store v6 `ui_instructions`）按 id+revision 拉取、render_ui 入管家工具面（第 9 件，ADR-011 §7 R1）并以 kind='ui' 附件引用入账本 + AG-UI Markdown 下发、生态前端接入序（快照→run→重连→回传）文档化；真机 E2E 验收待跑 |
 | [butler-perception-design.md](solutions/butler-perception-design.md) | 管家感知能力优化设计（B12′，accepted 2026-11-10）：三层次感知——L0 上下文保真（schema v5 `messages.data` 结构化入站信封 + 每轮情境快照 + 回执富化/产出文件清单 + 按轮次幂等 + 出站真实反馈/已读接线）、L1 状态边沿事件（停滞检测/监控因果/未答提问提醒/积压提示）、L2 感知面扩展（workspace-watch/网页/RSS/邮件/IM 与只读查询工具）；含接口影响、persona 契约、安全边界、测试验收与 D1–D5 分阶段落地 |
 
 ## 参考资料（docs/references/）

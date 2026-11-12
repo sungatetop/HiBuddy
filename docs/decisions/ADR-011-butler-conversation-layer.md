@@ -3,13 +3,13 @@ title: ADR-011 常驻智能体形态修订——管家会话、双向消息面�
 summary: 常驻智能体改为直接面向用户的"管家"Agent Loop——自身是一条常驻 dsh 会话，只通过 send_message_to_user 出站、通过 create_session 指派 worker（会话即 worker，非会话内子代理）；用户面由常驻面板改为微信式独立对话界面，仅渲染用户消息与管家出站消息，思考与工具执行不可见；管家替用户指挥与监控任务，审批可代管或升级请用户确认；事件源仍为确定性实现，产物以事件信封投递给管家决策；Ticket 退化为委派账本；AG-UI 桥改为应用于管家层
 keywords: [ADR, 常驻智能体, 管家会话, butler, send_message_to_user, create_session, 委派, 双向消息, 思考不可见, Agent Loop, 工具面, 审批代管, AG-UI, 微信式对话, resident]
 status: accepted
-date: 2026-11-09
+date: 2026-11-12
 ---
 
 # ADR-011 常驻智能体形态修订——管家会话、双向消息面与委派式 worker
 
 > 决策依据：用户形态指令（2026-11-09，原话见 §1.3）；关联 [ADR-010](ADR-010-resident-proactive-agent.md)（产品定位不变，本 ADR 修订其 S7-B 实现形态）、[resident-design](../module-design/resident-design.md)（D1 被本 ADR 取代）、[PRD FR-10](../product/requirements.md)、[implementation-plan §S7](../implementation-plan.md)。
-> 状态：accepted（2026-11-09 评审通过，含补充约束：微信式对话界面、审批代管与升级确认、AG-UI 应用于管家层；resident-design、implementation-plan 与 `docs/README.md` 同步修订）。
+> 状态：accepted（2026-11-09 评审通过，含补充约束：微信式对话界面、审批代管与升级确认、AG-UI 应用于管家层；resident-design、implementation-plan 与 `docs/README.md` 同步修订。修订记录见 §7：R1（2026-11-12）D2/D6 增补——生成式 UI 进入管家层）。
 
 ## 1. 背景
 
@@ -196,3 +196,13 @@ date: 2026-11-09
 5. 平台能力：`@deepseek-ai/dsh-tools` 的 `defineTool` / `ctx.tools.register`（`packages/web-ui/src/render-ui-tool.ts` 已实证）；`ctx.agents.create/resume`（`worker.ts` 已实证）；client slots 仅实证过侧栏席位（`packages/web-ui/src/client/*`）。
 6. 补充指令原话（2026-11-09，§1.3）：微信式界面、审批代管/升级确认、AG-UI 应用于管家层。
 7. AG-UI 现状：`packages/ag-ui-bridge` 以"会话"为单位暴露（S6 交付），本 ADR 将其主体上移到管家层。
+
+## 7. 修订记录
+
+### R1（2026-11-12）D2/D6 增补：生成式 UI 进入管家层
+
+依据：[genui-agui-optimization.md](../solutions/genui-agui-optimization.md)（借鉴 OpenMuse 的 AG-UI 用法与 JEV 契约细节，不引入 JEV）G3/G4，P2 实施完成。修订内容：
+
+- **D6（工具面清单）**：`hibuddy-butler` 工具面由 8 件增至 9 件，新增 `render_ui`（no-op 数据工具：纯 JSON 指令，无文件/网络/代码执行面；§2.3 "不入管家工具面"的执行类边界不变）。指令由宿主持久化（`ui_instructions` 表，schema v6）并自动以 `kind='ui'` 附件引用出站（`name=summary`，读取路由 `GET /resident/api/ui-instruction?id=&revision=`）。
+- **D2（唯一出站通道）**：增补语义——`render_ui` 落库后的账本出站引用是宿主自动写入的**派生行**（幂等键 `ui:<id>:<revision>`），不新增消息 kind；`send_message_to_user` 仍是模型唯一的主动出站通道。生态前端沿既有"附件随文本下发为 Markdown"机制拿到 `[summary](/resident/api/ui-instruction?id=…)` 引用；交互回传走 `@[ui:<id>:<revision>]` 文本契约，由管家泵统一做 revision 过期校验（过期回传不进模型上下文，用户收到可见提示）。
+- 工具面清单表与 persona 增补见 `packages/resident/cordis.patch.yml`（`hibbuddy-butler-preset` persona 段）。
