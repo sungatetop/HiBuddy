@@ -11,6 +11,8 @@
 | 架构文档 | [architecture/system-architecture.md](architecture/system-architecture.md) | 技术方案：基于 deepseek-harness（dsh，npm 依赖，MIT）深度定制——hibuddy profile 装配 + @hibuddy/* 插件集（品牌/核心工具/Web UI 定制/AG-UI 桥）+ 自建 Electron 壳+宿；不 fork、不建 SPI（路线见 ADR-003） |
 | 计划与报告 | [implementation-plan.md](implementation-plan.md) | P0 实施计划：先复用后定制——S1 跑通 dsh 三端基础设施与能力面完整性（插件安装/启停）并打包，S2 起定制（品牌人设→核心工具/审批→AG-UI 桥 MVP→生成式 UI→收尾双端交付）；S6 生态接入与上游跟进，S7 常驻/主动层（ADR-010）；每阶段任务、前置 ADR 与可判定验收标准 |
 | 计划与报告 | [progress-report.md](progress-report.md) | 各阶段验收记录与缺口清单：S0–S6 已通过（P0 交付 + S6 生态接入 2026-11-04 收官：CopilotKit 真机三场景、上游热激活缺口定界为 junction 部署 × pnpm 相对 symlink 并修复）；S7-A 原型真机验证（2026-11-05：三机制两过一缺口，profile 已还原） |
+| 参考资料 | [references/personal-agent-research.md](references/personal-agent-research.md) | 个人智能体深度调研（2024–2026）：商业产品/开源项目/设计理论三路证据，提炼"持久身份 + 私有上下文 + 受托代理权 + 常驻主动性"本质四要素论述与六条设计公理，含收编规律、可靠性数学等反面约束 |
+| 方案文档 | [solutions/butler-architecture-optimization.md](solutions/butler-architecture-optimization.md) | 管家架构优化建议：设计公理 × HiBuddy 现状逐条对照，O1–O9 建议（长期记忆内核与治理、grant 持久化与语义审计、审批可逆性维度、出站三模式契约、每日简报、MCP 评估、模型路由确定性、可靠性护栏），含排期与需立 ADR 事项 |
 
 ## 决策文档（docs/decisions/）
 
@@ -39,12 +41,14 @@
 
 | 文档 | 摘要 |
 |---|---|
+| [genui-agui-optimization.md](solutions/genui-agui-optimization.md) | 生成式 UI 与 AG-UI 优化方案（借鉴 OpenMuse，不引入 JEV，draft）：ADR-007 组件指令路线内增量——指令 schema 增 revision/严格校验/provenance 来源声明、交互回传统一文本契约 + 宿主过期校验（生态前端与自家前端同契约）、render_ui 指令持久化按 id+revision 拉取、render_ui 入管家工具面并以 kind='ui' 附件引用入账本 + AG-UI Markdown 下发、生态前端接入序（快照→run→重连→回传）文档化；P1–P3 三阶段 |
 | [butler-perception-design.md](solutions/butler-perception-design.md) | 管家感知能力优化设计（B12′，accepted 2026-11-10）：三层次感知——L0 上下文保真（schema v5 `messages.data` 结构化入站信封 + 每轮情境快照 + 回执富化/产出文件清单 + 按轮次幂等 + 出站真实反馈/已读接线）、L1 状态边沿事件（停滞检测/监控因果/未答提问提醒/积压提示）、L2 感知面扩展（workspace-watch/网页/RSS/邮件/IM 与只读查询工具）；含接口影响、persona 契约、安全边界、测试验收与 D1–D5 分阶段落地 |
 
 ## 参考资料（docs/references/）
 
 | 文档 | 摘要 |
 |---|---|
+| [openmuse-research.md](references/openmuse-research.md) | OpenMuse 调研：确认其使用 AG-UI 协议 + CopilotKit runtime（AbstractAgent/HttpAgent 双后端可切换、业务数据走 REST 快照轮询）；JEV 生成式 UI 为严格 JSON 选择面板契约（CAS revision 防过期点击、引用溯源本轮原文）；durable worker 租约、monitor 退避、审批 hash+30min 过期、工具卡只存 ID、双端同源消费等可借鉴机制与 HiBuddy 现状对照；无主动推送，HiBuddy 管家出站链路更完整 |
 | [ag-ui-research.md](references/ag-ui-research.md) | AG-UI 协议与生成式 UI 生态调研；thirdparty/ 参考仓清单（ag-ui、CopilotKit、OpenBot、OpenIntelligentUI、openui、genui-sdk + 运行时两仓 deepseek-harness、pi-mono）与克隆状态 |
 | [dsh-desktop-analysis.md](references/dsh-desktop-analysis.md) | dsh 桌面端技术方案剖析：Electron 壳 + RunAsNode 宿进程分离、dsh-app:// 协议拦截与认证转发、--port 0 端口治理、细分沙箱 preload、打包分发；HiBuddy ADR-007 的直接输入 |
 | [dsh-web-cli-analysis.md](references/dsh-web-cli-analysis.md) | dsh Web 与 CLI 技术方案剖析：apps/web 纯 dist 产物包与双注入通道、apps/cli 单 bin 四模式与 profile 分层配置、单端口单进程 serve + appReady 启动编排；产出 12 条机制级借鉴清单，技术方案 §2.2 与 ADR-006 的直接输入 |

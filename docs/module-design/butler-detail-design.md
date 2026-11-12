@@ -14,7 +14,7 @@ date: 2026-11-12
 
 ### 1.1 定位
 
-管家（butler）是 HiBuddy 常驻层中**唯一面向用户的 Agent Loop 会话**：一条常驻 dsh 会话（`resident-butler`，`hibuddy-butler` preset 小工具面），与用户对话、替用户指挥与监控任务、代管低危审批。它的执行权来自"指派"——经 `create_session` 发起普通 dsh worker 会话（**会话即 worker**），自身不持执行类工具。
+管家（butler）是 HiBuddy 常驻层中**唯一面向用户的 Agent Loop 会话**：一条常驻 dsh 会话（`resident-butler`，`hibbuddy-butler` preset 小工具面），与用户对话、替用户指挥与监控任务、代管低危审批。它的执行权来自"指派"——经 `create_session` 发起普通 dsh worker 会话（**会话即 worker**），自身不持执行类工具。
 
 ```
 用户 ⇄ 微信式对话界面 ⇄ 消息账本 ⇄ 管家会话（Agent Loop）— create_session → worker 会话（普通 dsh 会话）
@@ -77,6 +77,7 @@ worker 会话   普通 dsh 会话（agents.create/resume），standard preset
 | client | `client/markdown.tsx` | 管家消息 GFM 渲染（不启用原始 HTML） |
 | client | `client/drawer.tsx` | 任务抽屉：工作项 / 待审批 / 设置（显式保存/放弃） |
 | client | `client/api.ts`、`client/preview.tsx` | 数据面请求封装（2s/3s 轮询）与统一全屏预览层 |
+| client | `client/preview.tsx` | 统一全屏预览：图片 canvas、Markdown 文档滚动、文本分页翻页、不支持类型提示下载 |
 | host | `index.ts` | 装配：stateDir 闸 → 锁 → Store → 服务编排 → 路由注册 → 管家启动 |
 | host | `state-dir.ts`、`lock.ts` | stateDir 部署级硬闸（未配置拒启）、proper-lockfile 单实例锁 |
 | host | `store.ts` | SQLite（WAL）schema v5 与全部持久化读写 |
@@ -88,7 +89,7 @@ worker 会话   普通 dsh 会话（agents.create/resume），standard preset
 | host | `attachments.ts` | 附件解析：工作区白名单、类型/MIME 推断、远程 URL 校验 |
 | host | `artifacts.ts` | worker 产出文件确定性扫描（回执富化） |
 | host | `approvals.ts` | `approval/request` 前置 answerer；审批卡 + 审批事件；分级代管与 30min fail-closed |
-| host | `perception/edge.ts`（`edge.ts`） | L1 边沿事件巡检：停滞检测、未答提问提醒（幂等 + 频控） |
+| host | `edge.ts` | L1 边沿事件巡检：停滞检测、未答提问提醒（30s 扫描，幂等 + 频控，`perceptionEvents` 总开关） |
 | host | `api.ts` | 对话/工作项/设置/附件读取 HTTP 路由（含 Range、`POST /messages/read`） |
 | host | `agui.ts` | `/agui` 管家层 AG-UI 端点；`/agui/debug` 逐会话调试桥 |
 | host | `scheduler.ts` | 1s tick 轮询 `tickets.next_run_at`，迟到阈值 30s |
@@ -106,7 +107,7 @@ worker 会话   普通 dsh 会话（agents.create/resume），standard preset
 | D3 | `create_session` 走 `agents.create` 建普通会话，显式不用 `ctx.subagents` | ADR-011 D3 |
 | D4 | 事件源保持确定性，决策权在管家；用户显式周期任务保留"免唤醒直派"快捷路径 | ADR-011 D4 |
 | D5 | Ticket 退化为委派账本，状态只由工具驱动，避免双重记账 | ADR-011 D5 |
-| D6 | 管家 preset `hibuddy-butler` 小工具面；worker 沿用 standard + coworker 分级，不采纳 danger-full-access | ADR-011 D6 |
+| D6 | 管家 preset `hibbuddy-butler` 小工具面（`hibbuddy-butler-preset` patch 行 + `hibbuddy-butler-tools` scoped 注册）；worker 沿用 standard + coworker 分级，不采纳 danger-full-access | ADR-011 D6 |
 | D7 | 对话 UI 自绘消息账本，不复用 dsh 原生会话渲染 | ADR-011 D7 |
 | D8 | 单轮串行 + 入站队列 + 事件聚合（≤20 条/批） | ADR-011 D8 |
 | D9 | 审批分级代管：L0/L1 与免再询 grant 可代答；L2/越权写入升级用户确认；可设置关闭 | ADR-011 D9 |
@@ -149,7 +150,7 @@ pending（待办）→ working（执行中）→ awaiting_approval（待批）�
 ### 3.3 SQLite schema（v5）
 
 - 路径 = `resident.stateDir`（必配，未配置**拒启**）；建议默认 `$DSH_HOME/state/resident/orchestrator.sqlite`；WAL 模式。
-- 表：`schema_version`、`source_instances`、`triggers`、`tickets`（含 `workspace` 列）、`ticket_runs`、`worker_sessions`、`messages`（v4 起 `attachments` 列关联、v5 起 `data TEXT` JSON 列）、`butler_state`、`settings`。
+- 表：`schema_version`、`source_instances`、`triggers`、`tickets`（含 `workspace` 列）、`ticket_runs`、`worker_sessions`、`messages`（v4 起 `attachments` 关联表、v5 起 `data TEXT` JSON 列）、`butler_state`、`settings`；旧 `notifications` 表保留（B6′ 后不再写入，仅为兼容迁移路径）。
 - **留痕不进 SQLite**：审批与工具调用走 dsh 原生 session JSONL（FR-08），SQLite 只存编排状态。
 - 兼容性：v4→v5 原地迁移，历史消息 `data=NULL` 走回退渲染。
 
@@ -157,14 +158,16 @@ pending（待办）→ working（执行中）→ awaiting_approval（待批）�
 
 启动序列（详见 [butler-design-diagrams §2.1](butler-design-diagrams.md)）：
 
-1. `resident.stateDir` 硬闸（未配置 → `StateDirError` 拒启）；
+1. `resident.stateDir` 硬闸（未配置 → 拒启）；
 2. proper-lockfile 单实例锁（stale 检测已验证）；
 3. `Store.open` + schema 迁移至 v5；
-4. MessageService / WorkerOrchestrator / 调度器 / SourceRegistry 装配；
+4. MessageService 装配（`onInbound → butler.wake`）+ WorkerOrchestrator 绑定 dispatcher；
 5. **reconcile 启动重对账**：working 票 → resume worker 续跑或标记 interrupted；awaiting_approval → 保持待批 + 审批卡补投；错过的 at 一次性票补触发一次（周期票跳过错过的轮次、按下次时间继续，防雪崩）；
-6. `deliverPending` 补投未送达出站消息；离线期间完成的 worker 回执补入事件队列；
-7. ButlerRuntime 启动：工作区绑定 + create/resume `resident-butler`；
-8. 注册 `/resident/api/*` 与 `/agui`。
+6. `deliverPending` 补投未送达出站消息；
+7. Scheduler.start（首轮 tick 即启动补偿）；
+8. SessionChecker + FilterPipeline + SourceRegistry 装配并 startAll（monitor + workspace-watch，触发先落库再进过滤管线）；
+9. ApprovalBroker.install（prepend answerer）→ ButlerRuntime.start（工作区绑定 + create/resume `resident-butler`）→ EdgeDetector.start（30s 扫描）；
+10. 注册 `/resident/api/*` 与 `/agui`（同一信任栅栏）。
 
 **管家工作区绑定**：`resident.workspace` 配置（按 id/标题/路径解析）→ 缺省取首个注册工作区 → `workspaceRegistry` 最多等待 5s（web 层插件异步 init）→ 无工作区/无服务时回退 `fs.resolve('.')`；会话 header cwd = 工作区根，dsh 按 cwd 认定工作区成员关系。
 
@@ -172,15 +175,17 @@ pending（待办）→ working（执行中）→ awaiting_approval（待批）�
 
 ### 4.1 会话生命周期
 
-- 宿进程启动时 create/resume `resident-butler`（`hibuddy-butler` preset：小工具面，无 shell/fs 写/web/subagent）；resume 失败（日志缺失/损坏）→ 新建会话，**账本上的用户可见对话不受影响**。
-- 上下文随对话增长，压缩/摘要沿用 dsh 原生能力，不自研。
+- 宿进程启动时 create/resume `resident-butler`（`hibbuddy-butler` preset：小工具面，无 shell/fs 写/web/subagent）；已有活会话直接复用（`agents.get`）；resume 失败（日志缺失/损坏）→ 新建会话，**账本上的用户可见对话不受影响**。
+- 上下文随对话增长：preset 内挂 `compaction` 组（compaction-basic + command-compact + tool-result-pruner，阈值 8192 字符、保留头 4096/尾 1024），沿用 dsh 原生压缩，不自研。
+- persona（patch 行）：只经 `send_message_to_user` 说话（普通助手文本不可见）、执行类工作一律 `create_session`、先 `list_workspaces` 再指派、汇报携带 `session_id`、信封/快照优先于会话记忆、批末积压提示的处理方式。
 
 ### 4.2 入站队列与单轮串行泵
 
-- **单轮串行**：同一时刻管家只跑一轮（`pumping` 标志）；所有入站先落消息账本，再经 `onInbound` 唤醒泵。
-- **取批**：每轮最多消费 20 条入站（用户消息/事件信封/回执/审批事件混排，按序）；一次周转内最多循环 50 批；批末注入"还有 N 条待处理"积压提示。
-- **游标**：批次经 `consume(ids)` 推进 `consumed_at`；轮次失败**不消费该批**（用户输入不丢），15s 后重试，`butler_state` 保持/恢复 idle。
+- **单轮串行**：同一时刻管家只跑一轮（`pumping` 标志）；所有入站先落消息账本，再经 `onInbound` 唤醒泵；轮次完成判定 = `whenIdle` + 子代理排空（`subagents.waitForChildren`）+ seq 稳定，最后 `sessions.flush` 落盘。
+- **取批**：每轮最多消费 20 条入站（用户消息/事件信封/回执/审批事件混排，按序）；一次周转内最多循环 50 批；批末注入"（还有 N 条待处理：先处理完当前批，可继续跟进，不必逐条汇报。）"积压提示；批内的情境快照不含 await（保证快照与批同时刻）。
+- **游标**：批次经 `consume(ids)` 推进 `consumed_at`；轮次失败**不消费该批**（用户输入不丢），15s 后重试一次，`butler_state` 恢复 idle。
 - **事件聚合**：事件类入站在窗口内合并，避免每条事件一轮 LLM（成本治理，ADR-011 D8）。
+- **对话窗口**：`GET /resident/api/messages` 返回最近 200 条可见行（账本内先取 400 条 oldest-first，过滤为 out 行 + in/text 行）；`status()` 带回 `quiet`（免打扰生效中）。
 
 ### 4.3 每轮上下文组装（感知，详见 §7）
 
@@ -199,11 +204,11 @@ prompt = 【当前情境快照】（situation.ts 现算，≤1200 字符）
 | `send_message_to_user` | 出站消息：`text`（Markdown）+ `kind: text/question/report/system` + `reply_to` + 可选 `session_id` / `attachments` | 非阻塞（返回即已入账本）；`question` 表达需回复但不挂起轮次；落库失败返回 `ok:false`（可重试）；不产生任何授权效果 |
 | `create_session` | 指派 worker：`goal` + 可选 `title`、`workspace`（id/标题/路径）→ 返回 `{ticketId, sessionId, workspace}` | 内部 = `agents.create` + 委派账本落行；只写账本即返回，派工在 ≤1 个调度 tick 内发生；goal 继承信封 `untrusted` 标记 |
 | `list_workspaces` | 列出已注册 dsh 工作区（id/标题/路径） | 用户点名项目时先查询再指派 |
-| `send_to_session` | 向指定 worker 追加指令（followup） | 改目标、补约束、回答 worker 提问 |
+| `send_to_session` | 向指定 worker 追加指令（参数 `sessionId` + `message`，followup） | 改目标、补约束、回答 worker 提问；仅对活会话生效 |
 | `get_session` | 读取会话状态/最近摘要 | 只返回状态与摘要，不回灌完整日志（上下文治理） |
-| `list_sessions` | 列出委派中的 worker（状态、目标、最近摘要） | 管家"监控任务"的查询面 |
-| `cancel_session` | 停止 worker 并结束委派账本（Ticket → stopped） | 只能由管家在用户意图下调用，账本留痕 |
-| `resolve_approval` | 代答指定审批（approved/rejected + 理由） | 仅限 D9 代管范围；每次调用写入消息账本与 `approval/decided` 审计 |
+| `list_sessions` | 列出委派中的 worker（状态、目标、工作区、最近摘要） | 管家"监控任务"的查询面 |
+| `cancel_session` | 停止 worker 并结束委派账本（Ticket → stopped，可带 `reason`） | 只能由管家在用户意图下调用，账本留痕 |
+| `resolve_approval` | 代答指定审批（参数 `requestId` + `decision: approved/rejected` + 可选 `reason`） | 高危（requiresUser）时若无晚于审批卡的用户回复则调用失败；决定经原生审批链放行/拒绝并留痕 |
 
 **不入工具面**：文件写入、命令执行、网络抓取、直接 SQLite 访问——这些属于 worker；管家只"说话、指派、代批（受限）、查询"。
 
@@ -211,9 +216,9 @@ prompt = 【当前情境快照】（situation.ts 现算，≤1200 字符）
 
 ### 6.1 消息账本语义
 
-- **双向**：`in` = 用户消息（text）、事件信封（event）、worker 回执（receipt）、审批事件（event，附审批卡）；`out` = 仅管家 `send_message_to_user` 写入；审批卡（out/approval）由系统在 `approval/asked` 时写入，保证"必须被看见"。
-- **先落库再触达**；幂等键 = 来源 + 类型 + 内容指纹（默认内容 hash；回执按轮次 `receipt:<ticketId>:<runId>`——周期票同摘要每轮必达）；重复丢弃计数记 debug 日志。
-- **免打扰窗**：设置项（时段 + 按 ticket 例外）；窗内出站照常入账本（对话可见）仅推送标记 `delivered` 延后、轮次与待批不受影响（待批不挂起）；窗结束补投。
+- **双向**：`in` = 用户消息（text）、事件信封（event）、worker 回执（receipt）、审批事件（**kind=approval**，与 out 侧审批卡同 id 配对）；`out` = 仅管家 `send_message_to_user` 写入；审批卡（out/approval）由系统在 `approval/asked` 时写入，保证"必须被看见"。
+- **先落库再触达**（写库失败永不抛出，返回 `recorded:false`）；默认幂等键 = `direction:kind:owner:sha256(title+text+attachmentKey) 前 16 位`（owner 取 refs 中的 ticketId/sourceId/sessionId，缺省 global）；显式键：回执按轮次 `receipt:<ticketId>:<runId>`（周期票同摘要每轮必达）、审批卡 `approval:<id>`、审批事件 `approval-event:<id>`；**管家出站幂等键为每次调用 `butler:<uuid>`**——同一句话发两次也产生两条气泡；重复键被 store 静默丢弃。
+- **免打扰窗**：设置项（`quietHours` 时段，支持跨午夜；`quietExceptions` 按 ticket 例外）；窗内出站照常入账本（对话可见）仅推送标记 `delivered` 延后、轮次与待批不受影响（待批不挂起）；窗结束/设置变更后 `deliverPending` 补投。
 - 系统问题（来源降级、派工失败）以入站事件进管家，由管家决定是否转述——**编排层不允许绕过管家直接对用户说话**。
 
 ### 6.2 Markdown 与附件（D12）
@@ -224,7 +229,7 @@ prompt = 【当前情境快照】（situation.ts 现算，≤1200 字符）
 
 ### 6.3 附件读取路由
 
-`GET /resident/api/attachment?id=` 只认账本中已注册的附件 id（**无原始路径参数，杜绝穿越**）；媒体类型内联（Range 206 支持拖动进度），非媒体与 `download=1` 强制下载；响应带 `nosniff` 与 `CSP: sandbox`（防 SVG/HTML 直开在本源执行脚本）；文件事后被删返回 410，气泡正文与文件名仍在。
+`GET /resident/api/attachment?id=` 只认账本中已注册的附件 id（**无原始路径参数，杜绝穿越**；远程 URL 附件直接 302 到原地址）；媒体类型（image/video/audio）内联（Range 206 支持拖动进度，非法 Range 返回 416），非媒体与 `download=1` 强制下载；响应带 `nosniff` 与 `CSP: sandbox`（防 SVG/HTML 直开在本源执行脚本）及 `cache-control: private, max-age=60`；文件事后被删返回 410，气泡正文与文件名仍在。
 
 ### 6.4 已读接线
 
@@ -239,10 +244,10 @@ prompt = 【当前情境快照】（situation.ts 现算，≤1200 字符）
 `messages.data`（schema v5）承载机器元数据：`MessageData = ReceiptData | EventData | ApprovalData`——
 
 - `ReceiptData`：outcome（completed/periodic/failed/awaiting_approval）、runId、起止时间、durationMs、late/recovery、`artifacts[]`（name/path/size/kind）；
-- `EventData`：code（worker_open_failed/worker_turn_failed/monitor_degraded/monitor_suggest/source_triggered/stalled/resumed/question_unanswered）、sourceId/ticketId/sessionId、untrusted；
+- `EventData`：code、sourceId/ticketId/sessionId、untrusted。**实际置位的 code**（当前代码）：`source_triggered`（filter auto 建票，monitor/watch 两形状统一）、`stalled` / `resumed` / `question_unanswered`（edge.ts）；类型定义中另有 `monitor_degraded` / `monitor_suggest` / `worker_open_failed` / `worker_turn_failed`，但 monitor 降级、观察模式 would-act 信封与 worker 启停失败事件**暂未携带 `data`**（信封按 `code=unknown` 渲染，标题/正文仍可读）——登记为已知偏差；
 - `ApprovalData`：approvalId、toolName、requiresUser。
 
-信封渲染为固定格式（时间/ticket/session/run/耗时/outcome 一行头 + 标题 + 产出清单 + 正文截断 ≤1200 字符）；旧数据（`data=NULL`）回退为渲染 title/refs/时间。`data` 只进模型上下文，UI/AG-UI 不变。
+信封渲染为固定格式（**相对时间头**（刚刚/N分钟前/N小时前/N天前）+ refs（ticket/session/source）+ run/耗时/outcome/late/recovery 一行框头 + （标题）行 + （产出）行（≤20 项，`name(大小,kind)`）+ 正文截断 ≤1200 字符）；审批信封头含 `apr=` 编号、`tool=` 与"需用户确认/可代管"判定；事件信封头含 `source=`、`untrusted=`、`code=`。信封批前注入两句导语：事件与回执不是对话内容，需行动时用 `send_message_to_user` 告知。旧数据（`data=NULL`）回退为渲染 title/refs/相对时间。`data` 只进模型上下文，UI/AG-UI 不变。
 
 ### 7.2 L0-b 每轮情境快照（situation.ts）
 
@@ -254,7 +259,7 @@ pump 取批后、renderInbound 前现算注入 prompt 最前，全部来自 Stor
 进行中（≤10）…  待审批（≤5）…  最近完成（≤3）…
 ```
 
-上限：目标截断 40 字符、总长 ≤1200 字符、超限标注"还有 N 项"；注入时钟与固定排序保证确定性。快照是"轮次开始时刻"的事实，执行中变化由后续回执/事件纠正。
+上限：目标截断 40 字符、总长 ≤1200 字符、超限标注"（…还有 N 项）"；进行中按 working → awaiting_approval → pending（附下次到期时刻）→ failed 排序；注入时钟保证确定性。快照是"轮次开始时刻"的事实，执行中变化由后续回执/事件纠正。
 
 ### 7.3 L0-c 回执富化与产出文件清单
 
@@ -285,15 +290,15 @@ pump 取批后、renderInbound 前现算注入 prompt 最前，全部来自 Stor
 ### 8.2 调度器
 
 - 单进程 timer 轮询 + `next-run-at` 索引（个人场景无分布式）；tick 1000ms，迟到阈值 30s（迟到补触发标注"延迟触发"）。
-- **worker slots 并发闸**：默认 2（设置 0–8）；每票执行占一个 slot；用户交互唤醒不占 slot（用户永远叫得动自己的任务）。
+- **worker slots 并发闸**：默认 2（设置保存范围 0–8，运行时按 ≥1 解释，0 视为未配置回退默认 2）；每票执行占一个 slot（内存 `active` 集合记账）；用户交互唤醒不占 slot（用户永远叫得动自己的任务）；slot 满时到期票延迟派工（`deferredNoSlot`）。
 - worker 失败不自动重试：ticket → failed + 入站事件，由管家决定如何向用户交代。
 
 ### 8.3 worker 会话装配与工作目录
 
-- 每票一个 `resident-worker-<ticketId>`，走 dsh 原生 create/resume，照 web session-controller composeAgent 模式装配三要素（preset mount、agentDefaultModel → agentOptions、meta.agentPreset）。
-- **工作目录分设**：会话头 cwd = **工作区根**（dsh 工作区归属按 header cwd 精确匹配）+ `workspace.attachSession` 入账；**有效工作目录** = `<workspace>/resident-work/<ticket-short>/`（经 `workingDirectory.set` 移入，工具默认 cwd 隔离在票目录）。沙箱根跟随工作区根，L1 workspace-write 审批语义不变。
-- 工作区由 `create_session.workspace` 指定（id/标题/路径），缺省为管家绑定工作区；**工作区目录消失时该轮失败，不在别处静默重建**。
-- 长命令转后台 job、30 分钟上限、handoff 释放 slot——直接沿用 dsh 已验证机制，不自研。
+- 每票一个 `resident-worker-<shortId(ticketId)>`（确定性 id），走 dsh 原生 create/resume，照 web session-controller composeAgent 模式装配三要素（preset mount、agentDefaultModel → agentOptions、meta.agentPreset）；已有活会话复用、有持久化记录则 resume、否则 create；**句柄不 dispose**（完成的 worker 留在 registry 供下轮复用）。
+- **工作目录分设**：会话头 cwd = **工作区根**（dsh 工作区归属按 header cwd 精确匹配）+ `workspaceRegistry.resolveByPath(root).attachSession` 入账（失败仅告警不影响轮次）；**有效工作目录** = `<workspace>/resident-work/<ticket-short>/`（经 `workingDirectory.set` 移入，投影持久化、resume 重放同目录），目标 prompt 末尾显式告知工作目录。沙箱根跟随工作区根，L1 workspace-write 审批语义不变。
+- 工作区由 `create_session.workspace` 指定（id/标题/路径/前缀），缺省为管家绑定工作区；**工作区目录消失时该轮失败，不在别处静默重建**。
+- 回合判定（headless 口径）：成功 = 末次 `turn/end` reason 为 `completed` 且无未恢复的 `agent/error`（`agent/error` 在其后 `turn/end` 到达即视为已恢复）；`blocked`（待批）→ finishRun(awaiting_approval)，worker 置 awaiting_approval，票保持 working；摘要/报告截断 500 字符入账。
 
 ### 8.4 回执与结果对账
 
@@ -305,10 +310,11 @@ worker 回合完成后：对账 ticket 状态（completed / 周期回 pending / 
 
 `ApprovalBroker` 以 **prepend answerer** 挂在 `approval/request` 链头，仅接管 `resident-worker-*`（其他会话 `next()` 直通）：
 
-1. worker 发起审批 → ticket 置 `awaiting_approval` + 系统写审批卡（out/approval）+ 审批事件入站（in/event，含 approvalId/toolName/requiresUser）→ 唤醒管家；
-2. **代管路径**（D9）：L0/L1 与既有免再询 grant 命中 → 管家在轮次内 `resolve_approval`（带理由）→ 放行/拒绝，ticket 回 working，代答写入消息账本 + dsh `approval/decided` 审计；
-3. **升级路径**：L2、越权写入、危险动作或代管关闭（`approvalDelegation=false`）→ 管家发 `question` 消息 → 用户文本确认（in/text，必须晚于审批卡创建时间）→ 管家执行代答；
-4. **30 分钟未决 → fail-closed rejected**。
+1. worker 发起审批 → ticket 置 `awaiting_approval`（worker 置 awaiting_approval）+ 系统写审批卡（out/approval，`title: 需要审批：<tool>`，幂等键 `approval:<id>`）+ 审批事件入站（in/approval，幂等键 `approval-event:<id>`，正文对管家给出"高危必须先问用户/低危可代管"的指引）→ 唤醒管家；
+2. **代管路径**（D9）：非高危审批 → 管家在轮次内 `resolve_approval(requestId, approved)` → 经原生审批链放行（allowed-once）/拒绝，ticket 与 worker 回 working，留痕依赖 dsh 原生审批审计；
+3. **升级路径**：高危（requiresUser）或代管关闭（`approvalDelegation=false`）→ 管家先发 `question` 消息 → 用户文本确认后管家再 `resolve_approval`；broker 校验"最近 50 条 in 行中存在晚于审批卡创建时间的 text 行"，否则拒绝（"高危动作需要用户确认"）；
+4. **高危判定（代码实现）**：`requiresUser = approvalDelegation=false || 危险正则命中`，正则 = `/danger-full-access|escalate\s+sandbox|sandbox/i`（对 reason 与 toolName 分别匹配）；
+5. **30 分钟未决 → fail-closed rejected**（timer unref，不阻塞宿退出）。
 
 ### 9.2 安全口径（S6-2 约束保留）
 
@@ -338,7 +344,7 @@ interface SourceKind {
 
 | 层 | 内容 | 默认 |
 |---|---|---|
-| gate（确定性） | 免打扰窗、去重指纹、来源启停、同源开放票去重、载荷形状分流（monitor/watch/未知 dropped） | 用户创建 = explicit 放行；monitor/watch 命中 = inferred 候选 |
+| gate（确定性） | 来源启停、去重指纹、同源开放票去重、载荷形状分流（monitor/watch 两形状合法，未知 dropped） | 用户创建 = explicit 放行；monitor/watch 命中 = inferred 候选 |
 | assessment（LLM 研判） | 检查会话研判"是否值得行动"；`untrusted` 透传并注入外部数据指令 | **观察模式（observe）默认**：信封只带建议，管家在对话中汇报不指派；用户确认后转行动模式（auto），管家可 `create_session`（user 显式周期任务走免唤醒直派快捷路径） |
 
 ## 11. 用户界面（client 半）
@@ -353,16 +359,19 @@ interface SourceKind {
 
 ### 11.2 任务抽屉
 
-工作项（目标/状态/会话/工作区/最近简报）+ 待审批（工具/理由/审批编号）+ 设置（免打扰时段 / 并行上限 / 观察模式 / 审批代管 / perceptionEvents / stallMinutes / stateDir 只读）；3s 轮询；**设置显式保存/放弃**（本地草稿，点保存才提交）。
+工作项（目标/状态/会话/工作区/最近简报）+ 待审批（工具/理由/审批编号）+ 设置；3s 轮询（`/resident/api/sessions` + `/settings`）；**设置显式保存/放弃**（本地草稿，点保存才提交）。
+
+设置项现状：**抽屉 UI 当前暴露 4 项**——免打扰时段、并行 worker 上限、观察模式、审批代管；宿主设置 API 另支持 `quietExceptions`、`perceptionEvents`、`stallMinutes`（1–120）、`reminderMinutes`（1–1440），UI 暂未暴露（API 层可写）。
 
 ### 11.3 AG-UI（管家层）
 
-`POST /agui` 对外只暴露管家一个 agent：
+`POST /agui` 对外只暴露管家一个 agent（[agui.ts](../../packages/resident/src/agui.ts)）：
 
-- 入站：`RunAgentInput.messages` 末条 user 文本 → `postUserMessage`；并发 run → 409；单 run 上限 10min。
-- 出站：仅管家出站消息映射 `TEXT_MESSAGE_START/CONTENT/END` + `RUN_FINISHED`；工具调用与 worker 拓扑**不出网**。
+- 入站约束：仅 `POST` + `application/json`（否则 405/415）；请求体 ≤4MB（超限 400）；`threadId`/`runId` 必填非空；取末条 user 消息文本（无 → 400）；管家未就绪 → 503；**并发 run → 409**（单用户单并发）；信任栅栏（connection.requestRejection）先行。
+- 运行：SSE（`RUN_STARTED` → 出站映射 `TEXT_MESSAGE_START/CONTENT/END` → `RUN_FINISHED`，事件带 `timestamp`）；单 run 上限 10min 超时关流；客户端断连即关流但**服务端轮次继续**；出站流含审批卡（`title + text` 合并为一条文本消息）。
+- 出站边界：仅管家出站消息与审批卡；工具调用与 worker 拓扑**不出网**；`resume` 不消费（审批在对话内完成）。
 - `threadId` 只是客户端标识，所有请求进同一条管家会话（单用户单线程）。
-- 审批不在 AG-UI 层解决：前端只看到 `kind=approval` 出站气泡，决定在管家对话内完成；附件随文本下发为 Markdown（图片 `![name]`，其余 `[name]`，本地文件地址为同源 `/resident/api/attachment?id=`）。
+- 附件随文本下发为 Markdown（图片 `![name]`，其余 `[name]`；本地文件地址为同源 `/resident/api/attachment?id=`，远程 URL 原样）。
 - 逐会话调试桥保留在 `/agui/debug`（profile patch 配置），产品端点为 `/agui`。
 
 ## 12. 安全口径汇总
@@ -371,7 +380,7 @@ interface SourceKind {
 |---|---|---|
 | 1 | worker = standard 沙箱（workspace-write）+ coworker L0/L1/L2 分级（L2 禁用）+ 每票子目录；**不采纳 danger-full-access** | §8.3 |
 | 2 | 管家不持执行类工具；权力来自"指派" | §5 |
-| 3 | 审批分级代管有界（L0/L1 + 免再询 grant），代答必带理由并双重留痕；L2/越权一律升级；30min fail-closed | §9 |
+| 3 | 审批分级代管有界：高危（危险正则命中 / sandbox 相关 / 代管关闭）一律升级用户确认，低危可由管家代答（allowed-once）；决定经原生审批链留痕；30min fail-closed | §9 |
 | 4 | 无操作来源的自动 resume/resolved 一律拒绝（S6-2） | §9.2 |
 | 5 | 附件本地路径工作区白名单 + 附件读取只认注册 id（防穿越）；nosniff + CSP sandbox | §6.2/§6.3 |
 | 6 | untrusted 双层：Trigger/信封置位 + 提示词"按数据处理"；外部内容不获得任何执行效力 | §7、§10.3 |
@@ -386,18 +395,22 @@ interface SourceKind {
 |---|---|---|
 | 调度 tick / 迟到阈值 | 1000 ms / 30 s | scheduler.ts |
 | 管家单轮批次 / 周转上限 | 20 条 / 最多 50 批 | butler.ts |
-| 管家轮次失败重试 | 15 s | butler.ts |
-| worker 并行上限（slots） | 默认 2（设置 0–8） | worker.ts / 设置 |
-| 审批超时 | 30 min → rejected | approvals.ts |
-| 监控退避 | interval × 2^(n-1)，封顶 30 min，3 连败降级 | monitor.ts |
+| 管家轮次失败重试 | 15 s（重试一次） | butler.ts |
+| 用户消息长度上限 | 8000 字符（POST /messages 截断） | api.ts |
+| worker 并行上限（slots） | 默认 2（设置保存 0–8，运行时按 ≥1 解释） | worker.ts / 设置 |
+| 摘要/报告截断 | 500 字符（SQLite 行）；标题 60 字符 | worker.ts |
+| 审批超时 | 30 min → rejected（fail-closed） | approvals.ts |
+| 监控退避 | interval × 2^(n-1)，封顶 30 min，3 连败降级；畸形配置 60s 慢速重试；最小间隔 1s | monitor.ts |
 | 信封正文截断 / 快照总长 | ≤1200 字符 / ≤1200 字符 | butler.ts / situation.ts |
-| 停滞阈值 / 提问提醒 | stallMinutes 默认 10 min / 30 min | edge.ts / 设置 |
-| watch 兜底扫描 / 去抖 | 60 s / 1 s | workspace-watch.ts |
-| watch 指纹 / 明细上限 / cursor | sha256(path+size+mtime) 前 16 位 / ≤20 条 / ≤2000 条 | workspace-watch.ts |
+| 停滞阈值 / 提问提醒 / 巡检扫描 | stallMinutes 默认 10 min / 30 min / 30 s | edge.ts / 设置 |
+| watch 兜底扫描 / 去抖 | 60 s / 1 s；畸形配置 60s 慢速重试 | workspace-watch.ts |
+| watch 指纹 / 明细上限 / cursor / 扫描上限 | sha256(path+size+mtime) 前 16 位 / ≤20 条 / ≤2000 条 / 限深 4、限 5000 文件 | workspace-watch.ts |
 | artifacts 扫描 | ≤20 项、深度 ≤4、总量 ≤200 | artifacts.ts |
 | 对话页 / 抽屉轮询 | 2 s / 3 s | client |
-| AG-UI 单 run 上限 | 10 min | agui.ts |
+| 对话窗口 | 返回最近 200 条可见行（账本取 400 条） | butler.ts |
+| AG-UI 单 run 上限 / 请求体 | 10 min / ≤4MB | agui.ts |
 | 工作区 registry 等待 | 5 s | butler.ts |
+| compaction 工具结果裁剪 | 阈值 8192 字符，保留头 4096 / 尾 1024 | cordis.patch.yml |
 
 ## 14. 失败、边界与恢复
 
@@ -445,3 +458,4 @@ interface SourceKind {
 7. 信封 + 快照的 token 膨胀观测（每轮 +2–4k 字符，上线后统计，超标再压缩）。
 8. worker 会话在会话列表的隐藏方式；移动端接入（ADR-010 §6.4 推迟）。
 9. watch 的"持续观察"需求（同源去重例外）与 mtime 精度盲区（内容哈希需另立决策）。
+10. 抽屉设置 UI 补暴露 `quietExceptions` / `perceptionEvents` / `stallMinutes` / `reminderMinutes`（宿主 API 已支持，UI 未跟进）。
