@@ -192,7 +192,23 @@ star 数为 GitHub API 2026-11-12 检索值（第三方口径分歧处标注 [un
 5. **数字分身两路线分化并合流**。微调克隆（WeClone LoRA、Twin-2K-500 方法学）与画像/上下文克隆（WeClone Agent 路线、OpenSelf Context Compiler）——后者正把"分身"解构为**可审计的个人上下文层**，与记忆方向合流；印证 §7.2"与数据的关系"是个人智能体的本体论核心。Solid POD + agent 仍停留在研究原型（SocialGenPod），个人数据主权的生产级实现空白尚存。
 6. **自进化闭环出现生产级实现**。Hermes（任务沉淀 skill + GEPA 进化）、gptme（lessons 自改配置）、OpenJarvis（本地 trace 驱动改进）——Voyager"技能库终身学习"范式（§5.7）在个人智能体场景落地；程序性记忆（skills）与陈述性记忆（facts）的分层已是事实。
 
-#### 5.8.3 补充来源（101–144）
+#### 5.8.3 专项深析：OpenMuse——AG-UI 原生个人智能体的范本
+
+OpenMuse 在 §5.8.1 总表中只是一行，但它值得单独论述：**它是"个人智能体的 UI/交互层如何收敛"的最佳开源样本**——由 AG-UI 协议与 CopilotKit 的作者团队（CopilotKit）亲自出品，定位"Meta Muse 的开源平替"，与 OpenDots 同族，相当于协议作者对自己协议的个人 agent dogfood 实现[cite:145]。本项目对其做过源码级机制调研（thirdparty/OpenMuse 全仓 grep + 逐文件核对，60 处 AG-UI 命中，结论附源码路径）[cite:146]。
+
+**形态**：React Native + Web 双端 + Node server，"带浏览器、终端、文件、且工作可持续（work that keeps going）的个人 agent"——前端可关，后端任务继续跑。五个源码级机制，恰好对应本质四重关系：
+
+1. **AG-UI 原生消费，事件与业务分离**（与数据/与世界）。自研 `AbstractAgent` 本地引擎与 `HttpAgent`（任意 AG-UI 兼容后端）可切换；对话走 CopilotKit runtime 的 SSE 事件流；而线程快照、任务状态走独立 REST + 3 秒轮询——**业务对象不进事件流**。这与报告 §7.3"harness 为本体"的分工一致，也解释了为何 AG-UI 能承载生态互操作：事件流只管对话语义，确定性事实走自己的通道。
+2. **durable worker 租约模型**（与时间）。租约 + 心跳 + 并发上限 + 抢占恢复；monitor 定时抓页 + 指数退避；通知收件箱幂等键——主动性三件套（常驻 + 巡检 + 幂等通知）与 HiBuddy resident 的 scheduler/monitor/edge 设计**口径高度一致，互为独立验证**。
+3. **JEV 生成式 UI 严格契约**（代理权的交互面）。选择面板是严格 JSON（1–12 选项、comparison 必须带来源且来源必须出自本轮实际读取的邮件/网页原文）；**CAS revision 保证仅最新面板可点**（过期面板渲染只读）；选择回传是单条用户消息，server 拦截改写为 continuation 递归执行。这是"模型供数据、前端供渲染、宿主供闸门"三权分立的完整实现。
+4. **审批与执行解耦**（与用户）。`ActionProposal` 带内容 hash 绑定 + 30 分钟过期 + 账号绑定 + 状态 CAS + 不确定结果不重试——与 HiBuddy ApprovalBroker fail-closed 30min 同构。报告 §6.4 的"审批分级即人格边界"在 OpenMuse 中落为：**审批对象是带指纹的提议，而非抽象许可**。
+5. **工具卡只存 ID**（账本引用）。消息只存工具结果 ID，卡片按 ID 二次拉取——"账本存引用、详情按需拉取"的轻量实现，与 §5.8.2 第 3 条"记忆/账本可审计"同源。
+
+**诚实边界**：OpenMuse 没有真正的主动推送（APNs 未实现，通知只进收件箱）——它的"主动性"止于 monitor 巡检 + 收件箱，不及 HiBuddy 的出站链路（`send_message_to_user` + 消息账本 + 桌面系统通知）完整。这说明开源个人 agent 在"主动性最后一公里"（把事件送达用户）上普遍薄弱，恰是 §7.2 第四重关系（与世界）的差异化空间。
+
+**对 HiBuddy 的直接出处**：《GenUI/AG-UI 优化方案》（genui-agui-optimization.md，已实施并 8/8 真机验收）的 G1 严格 schema、G2 revision 闸门、G3 账本存引用、G4 管家层出口，全部以本节机制为蓝本——JEV 的 revision/来源溯源/可用性判定三点被完整吸收进 `render_ui` 交互回传契约，ADR-011 R1 修订登记。两组独立实现（OpenMuse 与 HiBuddy）在 monitor 退避、审批 fail-closed、账本引用三个机制上口径一致，构成跨项目的收敛证据。
+
+#### 5.8.4 补充来源（101–147）
 
 [101] Hermes Agent — https://github.com/NousResearch/hermes-agent
 [102] nanobot — https://github.com/HKUDS/nanobot
@@ -238,6 +254,9 @@ star 数为 GitHub API 2026-11-12 检索值（第三方口径分歧处标注 [un
 [142] hermesclaw（微信桥）— https://github.com/AaronWong1999/hermesclaw
 [143] Hermes star 口径分歧佐证（kie.ai / claws.io / 百度百科）— [unverified]
 [144] OpenSelf 之外的极简范式：mattabate/life-distributable（个人 agent 以 prompt 分发）
+[145] OpenMuse — https://github.com/CopilotKit/openmuse （与 OpenDots 同族，CopilotKit 出品）
+[146] OpenMuse 源码级机制调研（本项目）— [openmuse-research.md](openmuse-research.md)：thirdparty/OpenMuse 全仓 grep + 逐文件核对（apps/server/src/{app,agent,actions,engine/*}.ts、packages/domain/src/{agent,jev}.ts、apps/server/src/jev/*、apps/mobile/src/*）
+[147] OpenMuse 发布与 AG-UI 生态定位（CopilotKit 官方口径）— [unverified，未单独核验原始发布文]
 
 > **可信度注记（第二轮）**：star/license 元数据以 GitHub API 2026-11-12 实时核验为主；Hermes star 数存在口径分歧（262.7k API vs 第三方 64k/90k/217k），引用时建议写"数十万级"；OpenSelf/Eigin/Horizon/DayBrief 等小项目细节未逐项人工复核，标 [unverified]。nanobot 的两个 critical 安全公告与 OpenClaw CVE-2026-25253 说明"常驻 + 多渠道"形态的攻击面真实存在。
 
