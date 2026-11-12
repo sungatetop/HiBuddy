@@ -18,6 +18,7 @@ import { openGenuiCanvas } from './canvas-open.ts'
 import { recordCanvasVersion } from './canvas-store.ts'
 import { readInstruction } from './instruction.ts'
 import { GenuiSurfaceCard } from './render-ui-card.tsx'
+import { recordClientRevision } from './revision-store.ts'
 import { recordSharedStateToolWrite } from './shared-state-store.ts'
 import { revealSharedState } from './shared-state-open.ts'
 
@@ -79,11 +80,16 @@ export function GenuiTurnTail(props: GenuiTurnTailProps): ReactNode {
       // wrong snapshot would stick forever (S4-6 E2E finding).
       const instruction = readInstruction(call.args)
       if (!call.args.closed()) continue
+      // Revision tracker (G2, client half of the staleness gate): every
+      // settled render_ui call feeds session → id → latest revision, so
+      // surfaces older than the newest version render read-only. Reload-safe:
+      // the tail rebuilds from durable nodes, replaying max-wins records.
+      if (instruction.id !== undefined) recordClientRevision(sessionId, instruction.id, instruction.revision)
       if (instruction.target !== 'canvas' || instruction.id === undefined) continue
       const fresh = recordCanvasVersion(instruction, call.callId, turn.turn)
       if (fresh) openGenuiCanvas(instruction.id)
     }
-  }, [calls, turn.turn])
+  }, [calls, turn.turn, sessionId])
   // Shared-state feed (FR-05): settled `op:"set"` calls are the authoritative
   // writes — value/source from the call arguments, time from the result event.
   // Replays on page reload re-merge idempotently (newest-at-wins).

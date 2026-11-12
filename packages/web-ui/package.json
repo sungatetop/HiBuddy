@@ -8,7 +8,9 @@
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
+    "./genui-schema": "./lib/genui-schema.js",
     "./client": "./lib/client.js",
+    "./client-genui": "./lib/client-genui.js",
     "./package.json": "./package.json"
   },
   "files": [

@@ -13,11 +13,11 @@
  * markup (SR-02).
  */
 import { useState, type CSSProperties, type ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { formatGenuiInteraction, sendGenuiText } from './conversation-send.ts'
 import { recordCanvasInteraction } from './canvas-store.ts'
 import { asArray, asRecord, asString, optionalString } from './guards.ts'
 import type { UiSurfaceProps } from './registry.ts'
+import { SubmitButton } from './submit-button.tsx'
 
 interface FieldSpec {
   id: string
@@ -168,6 +168,7 @@ export function FormSurface(props: UiSurfaceProps): ReactNode {
                           <select
                             id={commonId}
                             style={styles.control}
+                            className="hg-control"
                             value={typeof value === 'string' ? value : ''}
                             onChange={(event) => set(field.id, event.target.value)}
                           >
@@ -181,6 +182,7 @@ export function FormSurface(props: UiSurfaceProps): ReactNode {
                           <input
                             id={commonId}
                             style={styles.control}
+                            className="hg-control"
                             type={field.type === 'number' ? 'number' : 'text'}
                             placeholder={field.placeholder}
                             value={typeof value === 'string' ? value : ''}
@@ -194,7 +196,7 @@ export function FormSurface(props: UiSurfaceProps): ReactNode {
       })}
       {requiredNote && <p style={styles.note}>{t('formRequired')}</p>}
       <div style={styles.actions}>
-        <Button variant="primary" onClick={onSubmit}>{submitLabel}</Button>
+        <SubmitButton onClick={onSubmit}>{submitLabel}</SubmitButton>
       </div>
       {submitted !== undefined && (
         <div style={{ display: 'grid', gap: 4 }}>

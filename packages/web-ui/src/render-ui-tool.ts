@@ -13,9 +13,16 @@
  * the instruction format until a skill/prompt section proves necessary.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import {
+  COMPONENT_KEYS,
+  INSTRUCTION_CAPS,
+  RevisionRegistry,
+  normalizeRevision,
+  validateInstruction,
+} from './genui-schema.ts'
 
 /** Component keys of the P0 registry (client `genui/registry.tsx` mirrors this). */
-const COMPONENT_ENUM = ['chart', 'form', 'table', 'metrics'] as const
+const COMPONENT_ENUM = COMPONENT_KEYS
 
 /** Component inventory + per-component prop/data shapes, model-facing. */
 const COMPONENT_SPECS = [
@@ -26,16 +33,65 @@ const COMPONENT_SPECS = [
 ].join('\n')
 
 /** Model-facing description: when to reach for this tool and how to fill it. */
-const TOOL_DESCRIPTION = [
+export const RENDER_UI_DESCRIPTION = [
   'Render an interactive UI panel (chart, form, table, or metrics row) for the user, inside the chat or as a side canvas.',
   'Use it whenever the answer is better shown than told: comparisons and trends → chart; structured rows → table; KPIs → metrics;',
   'and whenever you need structured user input back → form (the user\'s submission returns to you as their next message).',
   'Do NOT emit UI code or markdown code fences for this — call this tool once with the complete instruction.',
   'JSON shape is strict: every array MUST be a plain JSON array written `[...]` — never wrap it in an object like {"item": [...]}.',
-  'Order the JSON keys as listed (id, target, title, component, props, data, summary) so lightweight fields arrive first during streaming.',
+  'Order the JSON keys as listed (id, revision, target, title, component, props, data, summary) so lightweight fields arrive first during streaming.',
+  `Quantity caps: form ≤ ${INSTRUCTION_CAPS.formFields} fields, table ≤ ${INSTRUCTION_CAPS.tableRows} rows, chart ≤ ${INSTRUCTION_CAPS.chartSeries} series, metrics ≤ ${INSTRUCTION_CAPS.metricsItems} items — paginate or summarize beyond that.`,
+  'Re-emitting an instruction with the SAME id updates that surface: increment revision by 1 each time (first render may omit it).',
+  'Data discipline: `data` must come from THIS turn\'s tool results, and `provenance` (one sentence, e.g. "来源：本轮读取的 sales.csv（工具 get_file）") names that source.',
   'Components available:',
   COMPONENT_SPECS,
 ].join('\n')
+
+/** Model-facing parameter schema (shared by the regular-session and butler faces). */
+export const RENDER_UI_PARAMETERS = {
+  id: {
+    type: 'string',
+    required: true,
+    description: 'Stable instance id, lowercase-kebab (e.g. "sales-2026-chart"). Calling again with the same id updates that surface (a canvas bumps its version); a new id creates a new one.',
+  },
+  revision: {
+    type: 'integer',
+    description: 'Update counter of this instance id: omit it (or pass 1) on the FIRST render, and pass the previous revision + 1 on every re-emit of the same id. Surfaces older than the latest revision stop accepting user interactions.',
+  },
+  target: {
+    type: 'string',
+    enum: ['inline', 'canvas'],
+    required: true,
+    description: '"inline" renders inside the chat flow (single-use charts/forms); "canvas" opens a persistent side panel that survives later turns (tools the user keeps operating).',
+  },
+  title: {
+    type: 'string',
+    description: 'Human-readable surface title. Required for canvas (it names the panel tab); optional for inline.',
+  },
+  component: {
+    type: 'string',
+    enum: [...COMPONENT_ENUM],
+    required: true,
+    description: 'Which trusted component renders the instruction. Pick per COMPONENT_SPECS below.',
+  },
+  props: {
+    type: 'json',
+    description: 'Component configuration per COMPONENT_SPECS (chartType/series, form fields, table columns, metric items).',
+  },
+  data: {
+    type: 'json',
+    description: 'The data the component consumes, per COMPONENT_SPECS. Inline it from the current task context; never reference files or external resources.',
+  },
+  provenance: {
+    type: 'string',
+    description: 'One sentence naming where `data` came from (tool + file), e.g. "来源：本轮读取的 sales.csv（工具 get_file）". Shown with the surface and in degradation/history views.',
+  },
+  summary: {
+    type: 'string',
+    required: true,
+    description: 'One-sentence human-readable summary of what the surface shows — the accessible fallback and audit line.',
+  },
+} as const
 
 /**
  * Per-component fields that MUST be plain JSON arrays, as `[container, key]`
@@ -88,70 +144,54 @@ export function assertPlainArrays(component: string, props: unknown, data: unkno
   }
 }
 
-/** Registry-ready definition; registered per agent scope in the host half. */
-export const renderUiTool = defineTool({
-  name: 'render_ui',
-  description: TOOL_DESCRIPTION,
-  parameters: {
-    id: {
-      type: 'string',
-      required: true,
-      description: 'Stable instance id, lowercase-kebab (e.g. "sales-2026-chart"). Calling again with the same id updates that surface (a canvas bumps its version); a new id creates a new one.',
-    },
-    target: {
-      type: 'string',
-      enum: ['inline', 'canvas'],
-      required: true,
-      description: '"inline" renders inside the chat flow (single-use charts/forms); "canvas" opens a persistent side panel that survives later turns (tools the user keeps operating).',
-    },
-    title: {
-      type: 'string',
-      description: 'Human-readable surface title. Required for canvas (it names the panel tab); optional for inline.',
-    },
-    component: {
-      type: 'string',
-      enum: [...COMPONENT_ENUM],
-      required: true,
-      description: 'Which trusted component renders the instruction. Pick per COMPONENT_SPECS below.',
-    },
-    props: {
-      type: 'json',
-      description: 'Component configuration per COMPONENT_SPECS (chartType/series, form fields, table columns, metric items).',
-    },
-    data: {
-      type: 'json',
-      description: 'The data the component consumes, per COMPONENT_SPECS. Inline it from the current task context; never reference files or external resources.',
-    },
-    summary: {
-      type: 'string',
-      required: true,
-      description: 'One-sentence human-readable summary of what the surface shows — the accessible fallback and audit line.',
-    },
-  },
-  output: {
-    schema: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        ok: { type: 'boolean', enum: [true], required: true, description: 'The instruction was accepted for rendering.' },
-        id: { type: 'string', required: true, description: 'Echo of the instruction id.' },
-        note: { type: 'string', description: 'Optional delivery note (e.g. canvas opened).' },
+/** Registry-ready definition factory; registered per agent scope in the host half. */
+export function createRenderUiTool(revisions: RevisionRegistry) {
+  return defineTool({
+    name: 'render_ui',
+    description: RENDER_UI_DESCRIPTION,
+    parameters: RENDER_UI_PARAMETERS,
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          ok: { type: 'boolean', enum: [true], required: true, description: 'The instruction was accepted for rendering.' },
+          id: { type: 'string', required: true, description: 'Echo of the instruction id.' },
+          revision: { type: 'integer', required: true, description: 'The revision recorded for this instruction.' },
+          note: { type: 'string', description: 'Optional delivery note (e.g. canvas opened).' },
+        },
       },
+      render: (args, value) => [
+        {
+          type: 'text' as const,
+          text: `UI "${value.id}" (${args.component}, revision ${value.revision}) accepted${value.note !== undefined ? ` — ${value.note}` : ''}.`,
+        },
+      ],
     },
-    render: (args, value) => [
-      {
-        type: 'text' as const,
-        text: `UI "${value.id}" (${args.component}) accepted${value.note !== undefined ? ` — ${value.note}` : ''}.`,
-      },
-    ],
-  },
-  async execute(args) {
-    // Host-side shape gate first (see ARRAY_FIELDS): a wrapped-array emission
-    // settles as a tool error the model reads and retries from, instead of
-    // reaching the client and silently degrading the surface (SR-02).
-    assertPlainArrays(args.component, args.props, args.data)
-    // No-op by design (ADR-007 §3.2): rendering is a client-side effect keyed
-    // by the tool call; the canonical value only confirms acceptance.
-    return { ok: true as const, id: args.id }
-  },
-})
+    async execute(args, exec) {
+      // Host-side shape gate first (see ARRAY_FIELDS): a wrapped-array emission
+      // settles as a tool error the model reads and retries from, instead of
+      // reaching the client and silently degrading the surface (SR-02).
+      assertPlainArrays(args.component, args.props, args.data)
+      // Strict contract gate (G1): unknown components, over-cap arrays, and
+      // malformed optional fields settle as a teaching tool error. Absent
+      // optional fields stay legal (client degrades per-field).
+      const errors = validateInstruction(args)
+      if (errors.length > 0) {
+        throw new TypeError(
+          `render_ui validation failed: ${errors.join('; ')}. Fix the listed fields and re-emit the complete instruction.`,
+        )
+      }
+      // Revision registration (G1/G2): the host records id → latest revision
+      // per session; the butler pump reads the same registry to reject stale
+      // `@[ui:…]` send-backs before they reach the model. Session-scoped: a
+      // sessionless execution has no send-back gate to serve.
+      const revision = normalizeRevision(args.revision)
+      const sessionId = exec.agent?.session.id
+      if (sessionId !== undefined) revisions.record(sessionId, args.id, revision)
+      // No-op by design (ADR-007 §3.2): rendering is a client-side effect keyed
+      // by the tool call; the canonical value only confirms acceptance.
+      return { ok: true as const, id: args.id, revision }
+    },
+  })
+}

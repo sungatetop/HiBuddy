@@ -75,7 +75,7 @@ export function TableSurface(props: UiSurfaceProps): ReactNode {
   return (
     <div data-hibuddy-genui-surface="table">
       <div style={styles.wrap}>
-        <table style={styles.table}>
+        <table style={styles.table} className="hg-table">
           <thead>
             <tr>
               {columns.map((column) => (

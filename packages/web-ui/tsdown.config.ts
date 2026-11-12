@@ -24,13 +24,24 @@ const clientDshExternal = [/^@deepseek-ai\/(?!dsh-typert-protocol\/remote-info)/
  */
 export default defineConfig([
   {
-    entry: ['src/index.ts'],
+    // Node entries: the plugin (lib/index.js), the pure instruction contract
+    // (lib/genui-schema.js) and the embeddable trusted surfaces
+    // (lib/client-genui.js) — the latter two are imported cross-package by
+    // @hibuddy/resident (the butler send-back gate / the chat-bubble Genui
+    // surfaces). The contract functions are pure, so per-entry copies would
+    // stay correct; rolldown normally shares the module as a common chunk
+    // anyway. react/jsx-runtime stays external so the embedder's single react
+    // instance is preserved.
+    entry: ['src/index.ts', 'src/genui-schema.ts', 'src/client-genui.ts'],
     outDir: 'lib',
     format: 'esm',
     platform: 'node',
     fixedExtension: false,
-    deps: { neverBundle: dshExternal },
-    dts: false,
+    deps: { neverBundle: [...dshExternal, 'react', 'react/jsx-runtime'] },
+    // The contract + surfaces entries are imported cross-package by
+    // @hibuddy/resident, so the node face ships declarations (the browser
+    // face stays type-only).
+    dts: { build: false },
     sourcemap: false,
   },
   {

@@ -111,7 +111,7 @@ function BarChart({ spec, items }: { spec: ChartSpec, items: ReadonlyArray<Recor
             const x = padL + band * i + (band - barW * m) / 2 + j * barW
             const height = Math.max(0, plotH * (value / max))
             return (
-              <rect key={entry.key} x={x} y={y(value)} width={barW} height={height} fill={PALETTE[j % PALETTE.length]}>
+              <rect key={entry.key} data-hg-mark="" x={x} y={y(value)} width={barW} height={height} fill={PALETTE[j % PALETTE.length]}>
                 <title>{`${entry.label} · ${labelOf(item, spec.xKey, i)}: ${formatNumber(value)}`}</title>
               </rect>
             )
@@ -165,7 +165,7 @@ function LineChart({ spec, items }: { spec: ChartSpec, items: ReadonlyArray<Reco
             {items.map((item, i) => {
               const value = valueOf(item, entry.key)
               return (
-                <circle key={i} cx={x(i)} cy={y(value)} r={3} fill={PALETTE[j % PALETTE.length]}>
+                <circle key={i} data-hg-mark="" cx={x(i)} cy={y(value)} r={3} fill={PALETTE[j % PALETTE.length]}>
                   <title>{`${entry.label} · ${labelOf(item, spec.xKey, i)}: ${formatNumber(value)}`}</title>
                 </circle>
               )
@@ -210,7 +210,7 @@ function PieChart({ spec, items }: { spec: ChartSpec, items: ReadonlyArray<Recor
         {total > 0
           ? slices.map((slice) => (
             <g key={slice.index}>
-              <path d={slice.path} fill={PALETTE[slice.index % PALETTE.length]} stroke="var(--dsw-specific-input-major)" strokeWidth={1}>
+              <path d={slice.path} data-hg-mark="" fill={PALETTE[slice.index % PALETTE.length]} stroke="var(--dsw-specific-input-major)" strokeWidth={1}>
                 <title>{`${entry.label} · ${slice.label}: ${formatNumber(slice.value)} (${Math.round(slice.pct * 100)}%)`}</title>
               </path>
               {slice.pct >= 0.05 && (
@@ -242,7 +242,7 @@ export function ChartSurface(props: UiSurfaceProps): ReactNode {
   const { spec, items } = parseChart(props)
   const shown = items.slice(0, MAX_ITEMS)
   return (
-    <div data-hibuddy-genui-surface="chart" style={{ display: 'grid', gap: 4 }}>
+    <div className="hg-chart" style={{ display: 'grid', gap: 4 }}>
       {spec.chartType === 'bar' && <BarChart spec={spec} items={shown} />}
       {spec.chartType === 'line' && <LineChart spec={spec} items={shown} />}
       {spec.chartType === 'pie' && <PieChart spec={spec} items={shown} />}

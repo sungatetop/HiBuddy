@@ -19,23 +19,25 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { openGenuiCanvas } from './canvas-open.ts'
 import { instructionReady, readInstruction, type RenderUiInstruction } from './instruction.ts'
 import { uiSurfaceOf, type SurfaceTranslate, type UiSurfaceProps } from './registry.ts'
+import { useSurfaceStale } from './revision-store.ts'
+import { accentStyle, GenuiSkin } from './skin.tsx'
 
 /** Full props of the registered toolview: phase owner seat + our locale. */
 export type RenderUiCardProps = ToolCallViewProps & PropsLocale<'hibuddy-genui'>
 
-/** Card surface reusing the dsh theme tokens. */
+/** Card surface reusing the dsh theme tokens (states/depth live in skin.tsx). */
 const styles = {
   root: {
     border: '1px solid var(--dsw-specific-input-major)',
     borderRadius: 'var(--dsw-radius-xl)',
-    padding: '12px 14px',
+    padding: '12px 16px',
     display: 'grid',
-    gap: 8,
+    gap: 10,
   } satisfies CSSProperties,
   head: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
   badge: {
     flex: 'none',
-    fontSize: 11,
+    fontSize: 10,
     lineHeight: '18px',
     padding: '0 8px',
     borderRadius: 999,
@@ -53,7 +55,7 @@ const styles = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
   },
-  summary: { margin: 0, fontSize: 12, lineHeight: 1.6, color: 'var(--dsw-alias-label-tertiary)' },
+  summary: { margin: 0, fontSize: 12, lineHeight: 1.6, color: 'var(--dsw-alias-label-secondary)' },
   note: { margin: 0, fontSize: 12, lineHeight: 1.6, color: 'var(--dsw-alias-state-warn-primary)' },
   canvasActions: { display: 'flex', justifyContent: 'flex-end' },
   raw: {
@@ -69,6 +71,14 @@ const styles = {
     whiteSpace: 'pre-wrap' as const,
     wordBreak: 'break-all',
   } satisfies CSSProperties,
+}
+
+/** Shared card chrome classes (skin.tsx owns their state/depth styling). */
+const chrome = {
+  card: 'hg-card',
+  badge: 'hg-badge',
+  provenance: 'hg-provenance',
+  raw: 'hg-raw',
 }
 
 /** Translate bound to our namespace. */
@@ -94,7 +104,7 @@ function FallbackSurface({ instruction, t, degraded }: UiSurfaceProps & { degrad
     <>
       {!degraded && instruction.component !== undefined && <p style={styles.note}>{t('unknown')}</p>}
       {degraded && <p style={styles.note}>{t('degraded')}</p>}
-      <pre style={styles.raw}>{pretty({ props: instruction.props, data: instruction.data })}</pre>
+      <pre style={styles.raw} className={chrome.raw}>{pretty({ props: instruction.props, data: instruction.data })}</pre>
     </>
   )
 }
@@ -111,8 +121,22 @@ class SurfaceBoundary extends Component<{ surface: UiSurfaceProps; children: Rea
   }
 }
 
-/** Settled body: registry surface when possible, static fallback otherwise. */
+/**
+ * Settled body: registry surface when possible, static fallback otherwise.
+ * Staleness gate (G2, client half): a surface older than the latest observed
+ * revision of its id renders read-only — the model already replaced it, and
+ * the host would reject its send-back anyway.
+ */
 export function SurfaceBody({ instruction, t, sessionId }: { instruction: RenderUiInstruction; t: Translate; sessionId?: string }): ReactNode {
+  const stale = useSurfaceStale(sessionId, instruction.id, instruction.revision)
+  if (stale) {
+    return (
+      <>
+        <p style={styles.note}>{t('staleNotice')}</p>
+        <pre style={styles.raw} className={chrome.raw}>{pretty({ props: instruction.props, data: instruction.data })}</pre>
+      </>
+    )
+  }
   const component = instruction.component
   if (!instructionReady(instruction) || component === undefined) {
     return <FallbackSurface instruction={instruction} t={t} degraded={false} />
@@ -143,17 +167,20 @@ export function GenuiSurfaceCard({ block, t, sessionId }: { block: StartedToolCa
   const canvasId = instruction.target === 'canvas' && instruction.id !== undefined ? instruction.id : undefined
   return (
     <div
-      style={styles.root}
+      style={{ ...styles.root, ...accentStyle(component) }}
+      className={chrome.card}
       data-hibuddy-genui=""
       data-hibuddy-genui-component={component ?? ''}
       data-hibuddy-genui-phase="result"
       {...(canvasId !== undefined ? { 'data-hibuddy-genui-canvas': canvasId } : {})}
     >
+      <GenuiSkin />
       <div style={styles.head}>
-        <span style={styles.badge}>{canvasId !== undefined ? 'canvas' : component}</span>
+        <span style={styles.badge} className={chrome.badge}>{canvasId !== undefined ? 'canvas' : component}</span>
         <span style={styles.title}>{title}</span>
       </div>
       {instruction.summary !== undefined && <p style={styles.summary}>{instruction.summary}</p>}
+      {instruction.provenance !== undefined && <p style={styles.summary} className={chrome.provenance}>{instruction.provenance}</p>}
       {canvasId !== undefined
         ? (
             <div style={styles.canvasActions}>
@@ -180,13 +207,15 @@ export function RenderUiCard(props: RenderUiCardProps): ReactNode {
   const title = instruction.title || component || t('preparing')
   return (
     <div
-      style={styles.root}
+      style={{ ...styles.root, ...accentStyle(component) }}
+      className={chrome.card}
       data-hibuddy-genui=""
       data-hibuddy-genui-component={component ?? ''}
       data-hibuddy-genui-phase="preparing"
     >
+      <GenuiSkin />
       <div style={styles.head}>
-        {component !== undefined && <span style={styles.badge}>{component}</span>}
+        {component !== undefined && <span style={styles.badge} className={chrome.badge}>{component}</span>}
         <span style={styles.title}>{title}</span>
         <StateDot state="ongoing" />
       </div>

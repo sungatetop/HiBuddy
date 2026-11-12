@@ -16,10 +16,19 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { renderUiTool } from './render-ui-tool.ts'
+import { RevisionRegistry } from './genui-schema.ts'
+import { createRenderUiTool } from './render-ui-tool.ts'
 import { createSharedStateTool } from './shared-state-tool.ts'
 import { SharedStateStore } from './shared-state.ts'
 import { HibuddyVerifyService } from './verify-provider.ts'
+
+/**
+ * Cross-package exports (consumed by @hibuddy/resident's butler tool face,
+ * genui-agui-optimization.md G4): the shared parameter schema/description plus
+ * the host-side shape gate — the butler face re-declares render_ui with the
+ * same contract and adds ledger persistence + announcement.
+ */
+export { assertPlainArrays, RENDER_UI_DESCRIPTION, RENDER_UI_PARAMETERS } from './render-ui-tool.ts'
 
 /** Cordis function-plugin name. */
 export const name = 'hibuddy-web-ui'
@@ -27,9 +36,24 @@ export const name = 'hibuddy-web-ui'
 /** Required host services. */
 export const inject = ['tools', 'llm']
 
+/**
+ * Cordis service name of the instruction revision registry (genui-schema G2):
+ * provided here, read lazily (non-strict) by the resident butler pump to
+ * reject stale `@[ui:…]` send-backs before they reach the model.
+ */
+export const GENUI_REVISIONS_SERVICE = 'hibuddy-genui-revisions'
+
 /** Register the generative-UI instruction tool and the shared-state tool. */
 export function apply(ctx: Context): void {
-  ctx.tools.register(renderUiTool)
+  // Session-scoped instruction revision registry (G1/G2): render_ui.execute
+  // records id → latest revision; the butler pump consumes the same registry
+  // through the cordis service below. Disposed sessions drop their entries.
+  const revisions = new RevisionRegistry()
+  ctx.provide(GENUI_REVISIONS_SERVICE, revisions)
+  ctx.on('session/disposed', (session) => {
+    revisions.dropSession(session.id)
+  })
+  ctx.tools.register(createRenderUiTool(revisions))
   // Session-scoped, in-memory shared state: the durable trail stays in the
   // native tool/call + tool/result session events (FR-08); disposal drops it.
   const sharedState = new SharedStateStore()

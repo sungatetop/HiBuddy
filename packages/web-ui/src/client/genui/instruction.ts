@@ -25,11 +25,15 @@ export type UiTarget = 'inline' | 'canvas'
 export interface RenderUiInstruction {
   /** Streaming text so far, or the complete value once closed. */
   readonly id: string | undefined
+  /** Update counter (G1): absent/invalid reads as undefined (host normalizes to 1). */
+  readonly revision: number | undefined
   readonly target: UiTarget | undefined
   readonly title: string | undefined
   readonly component: UiComponentKey | undefined
   readonly props: unknown
   readonly data: unknown
+  /** One-sentence data-source declaration (G1, soft contract). */
+  readonly provenance: string | undefined
   readonly summary: string | undefined
 }
 
@@ -49,8 +53,18 @@ function argValue(args: ToolArgs, key: string): unknown {
 export function readInstruction(args: ToolArgs): RenderUiInstruction {
   const target = argText(args, 'target')
   const component = argText(args, 'component')
+  // `text` reads string values, `value` reads non-string ones (the other
+  // reader returns undefined) — an integer-typed argument arrives as text
+  // while streaming and as a number once closed.
+  const rawRevision = argText(args, 'revision') ?? (args.complete('revision') ? args.value('revision') : undefined)
+  const revision = typeof rawRevision === 'number' && Number.isInteger(rawRevision) && rawRevision >= 1
+    ? rawRevision
+    : typeof rawRevision === 'string' && /^\d+$/.test(rawRevision) && Number(rawRevision) >= 1
+      ? Number(rawRevision)
+      : undefined
   return {
     id: argText(args, 'id'),
+    revision,
     target: target === 'canvas' || target === 'inline' ? target : undefined,
     title: argText(args, 'title'),
     component: component === 'chart' || component === 'form' || component === 'table' || component === 'metrics'
@@ -58,6 +72,7 @@ export function readInstruction(args: ToolArgs): RenderUiInstruction {
       : undefined,
     props: argValue(args, 'props'),
     data: argValue(args, 'data'),
+    provenance: argText(args, 'provenance'),
     summary: argText(args, 'summary'),
   }
 }

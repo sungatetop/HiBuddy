@@ -52,7 +52,7 @@ describe('instruction gate', () => {
   })
 
   it('gates on identity, component, and props', () => {
-    const base = { id: 'ui-x', target: 'inline' as const, component: 'form' as const, title: undefined }
+    const base = { id: 'ui-x', revision: undefined, target: 'inline' as const, component: 'form' as const, title: undefined, provenance: undefined }
     expect(instructionReady({ ...base, props: undefined, data: undefined, summary: undefined })).toBe(false)
     expect(instructionReady({ ...base, id: undefined, props: {}, data: undefined, summary: undefined })).toBe(false)
     expect(instructionReady({ ...base, props: {}, data: undefined, summary: undefined })).toBe(true)
@@ -81,7 +81,7 @@ describe('payload boundary', () => {
   it('rejects an oversized payload into the static fallback', () => {
     const big = { blob: 'x'.repeat(INSTRUCTION_PAYLOAD_CAP + 1) }
     expect(payloadWithinCap(big, undefined)).toBe(false)
-    expect(instructionReady({ id: 'ui-x', target: 'inline', component: 'table', title: undefined, props: big, data: undefined, summary: undefined })).toBe(false)
+    expect(instructionReady({ id: 'ui-x', revision: undefined, target: 'inline', component: 'table', title: undefined, provenance: undefined, props: big, data: undefined, summary: undefined })).toBe(false)
   })
 
   it('rejects a non-serializable payload', () => {

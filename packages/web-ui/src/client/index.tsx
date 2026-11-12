@@ -66,7 +66,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
-import { IconClockOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconClockOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { HibuddyApprovalCard } from './approval-card.tsx'
 import { en as byokEn, zh as byokZh, type ByokLocaleKey } from './byok/locales.ts'
 import { RecommendCard } from './byok/recommend-card.tsx'
@@ -79,6 +79,7 @@ import { setConversationSender } from './genui/conversation-send.ts'
 import { en as genuiEn, zh as genuiZh, type GenuiLocaleKey } from './genui/locales.ts'
 import { RenderUiCard } from './genui/render-ui-card.tsx'
 import { registerGenuiSurfaces } from './genui/surfaces.ts'
+import { setSubmitButton } from './genui/submit-button.tsx'
 import { setSharedStateOpener } from './genui/shared-state-open.ts'
 import { GenuiSharedStateTab } from './genui/shared-state-tab.tsx'
 import { GenuiTurnTail } from './genui/turn-tail.tsx'
@@ -155,6 +156,11 @@ declare module '@deepseek-ai/dsh-client-ui-sidebar-right/client' {
  */
 export async function apply(ctx: ClientContext): Promise<void> {
   registerGenuiSurfaces()
+  // Themed submit button for the form surface (the embedder face keeps a
+  // plain fallback when this apply never runs).
+  setSubmitButton((props) => (
+    <Button variant="primary" onClick={props.onClick}>{props.children}</Button>
+  ))
   // One-shot service capture (cordis discipline): callbacks registered here run
   // outside the plugin's injection scope, so they use the captured references.
   const locale = ctx.locale

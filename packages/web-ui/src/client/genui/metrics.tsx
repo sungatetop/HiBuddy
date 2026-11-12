@@ -56,7 +56,7 @@ export function MetricsSurface(props: UiSurfaceProps): ReactNode {
         const value = values[item.key]
         const text = typeof value === 'number' && Number.isFinite(value) ? formatNumber(value) : '—'
         return (
-          <div key={item.key} style={styles.card}>
+          <div key={item.key} style={styles.card} className="hg-metric">
             <span style={styles.value}>
               {text}
               {item.unit !== undefined && <span style={{ fontSize: 12, fontWeight: 500, marginLeft: 2, color: 'var(--dsw-alias-label-secondary)' }}>{item.unit}</span>}

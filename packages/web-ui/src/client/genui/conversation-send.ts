@@ -41,16 +41,26 @@ export interface GenuiInteraction {
 
 /**
  * Wrap one interaction into the structured text the model reads next turn
- * (ADR-007 §3.4 envelope: surface id, component, interaction kind, payload JSON).
+ * (G2 contract, genui-agui-optimization.md): one line, `@[ui:<id>:<revision>]`
+ * followed by one JSON object {component, event, payload}. The revision lets
+ * the host reject stale surfaces' submissions (the butler pump compares it to
+ * the latest registered revision); surfaces older than the latest revision
+ * render read-only client-side, so this is the belt over the suspenders.
  */
 export function formatGenuiInteraction(instruction: RenderUiInstruction, event: GenuiInteraction): string {
-  return [
-    '[generative-ui interaction]',
-    `surface: ${instruction.id ?? '(inline)'}`,
-    `component: ${event.component}`,
-    `interaction: ${event.interaction}`,
-    `payload: ${safeJson(event.payload)}`,
-  ].join('\n')
+  const payload = safeJson({ component: event.component, event: event.interaction, payload: event.payload })
+  if (instruction.id === undefined) {
+    // Defensive: ready surfaces always carry an id (instructionReady gates
+    // rendering); the legacy multi-line envelope keeps such a stray readable.
+    return [
+      '[generative-ui interaction]',
+      `surface: (inline)`,
+      `component: ${event.component}`,
+      `interaction: ${event.interaction}`,
+      `payload: ${payload}`,
+    ].join('\n')
+  }
+  return `@[ui:${instruction.id}:${instruction.revision ?? 1}] ${payload}`
 }
 
 /** JSON-encode a payload that is already closed JSON data. */
