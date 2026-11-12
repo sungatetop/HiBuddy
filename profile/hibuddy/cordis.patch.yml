@@ -43,7 +43,6 @@
     retryPolicy:
       mode: normal
       maxRetries: 1
-    models: []
 
 - id: ui-settings-general
   name: "@deepseek-ai/dsh-client-ui-settings-general"
@@ -306,6 +305,11 @@
   name: "@deepseek-ai/dsh-llm-pi-ai"
   config:
     providers:
+      # vol-ark GLM retained as a selectable BYOK route (weekly quota resets
+      # 2026-11-16); the product DEFAULT was switched back to the built-in
+      # deepseek-official route on 2026-11-12 (user instruction: DeepSeek
+      # account topped up; DEEPSEEK_API_KEY lives in repo .env, load it into
+      # the process env before launching).
       vol-ark:
         apiKeyEnv: VOL_ARK_API_KEY
         api: openai-completions
@@ -316,8 +320,8 @@
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
   config:
-    provider: vol-ark
-    model: glm-5.3-flash
+    provider: deepseek-official
+    model: deepseek-flash
 
 # ---------------------------------------------------------------------------
 # Resident layer persistence root (S7-B1, resident-design.md §8 / decision D3):

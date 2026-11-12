@@ -25,6 +25,11 @@ import type { AgentDefaultModelConfig } from '@deepseek-ai/dsh-agent-default-mod
 import type { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import {
+  evaluateUiSendBack,
+  normalizeRevision,
+  type RevisionRegistry,
+} from '@hibuddy/web-ui/genui-schema'
 import type { ApprovalBrokerFace, PendingApproval } from './approvals.ts'
 import { prepareAttachments, type AttachmentRequest } from './attachments.ts'
 import type {
@@ -35,6 +40,7 @@ import type {
   ReceiptData,
   ResidentSettings,
   Ticket,
+  UiInstruction,
 } from './domain.ts'
 import { parseQuietWindow, type MessageService } from './messages.ts'
 import { renderSituation } from './situation.ts'
@@ -87,6 +93,18 @@ export interface CreatedSession {
   workspace?: string
 }
 
+/** One render_ui instruction the butler face accepted (G4; args as the tool received them). */
+export interface RenderedUiInstruction {
+  id: string
+  revision?: number
+  target?: string
+  component: string
+  props?: unknown
+  data?: unknown
+  provenance?: string
+  summary: string
+}
+
 /**
  * The service the butler tools consume (provided on the root context as
  * `resident`; the tools plugin mounts inside the preset's agent scope).
@@ -129,6 +147,24 @@ export interface ResidentButler {
   messages(limit?: number): Message[]
   /** One attachment row by id (the host's file-serving route). */
   attachment(id: string): (MessageAttachment & { messageId: string }) | undefined
+  /** One persisted generative-UI instruction by id (latest, or a given revision). */
+  uiInstruction(id: string, revision?: number): UiInstruction | undefined
+  /**
+   * The generative-UI revision registry (G2 gate / render_ui registration), or
+   * undefined when the web-ui plugin is absent (headless compositions).
+   */
+  genuiRevisions(): RevisionRegistry | undefined
+  /**
+   * Persists one butler-face render_ui instruction and announces it in the
+   * ledger as a kind='ui' attachment reference (G4). Same (id, revision)
+   * re-emit is deduplicated by the idempotency key.
+   */
+  renderUi(instruction: RenderedUiInstruction): {
+    id: string
+    revision: number
+    messageId: string
+    recorded: boolean
+  }
   unreadCount(): number
   /** Observe outbound rows (butler messages + approval cards) as they are recorded. */
   onOutbound(listener: (message: Message) => void): () => void
@@ -398,6 +434,57 @@ export class ButlerRuntime implements ResidentButler {
     return this.store.getAttachment(id)
   }
 
+  uiInstruction(id: string, revision?: number): UiInstruction | undefined {
+    return this.store.getUiInstruction(id, revision)
+  }
+
+  genuiRevisions(): RevisionRegistry | undefined {
+    return this.revisionRegistry()
+  }
+
+  renderUi(instruction: RenderedUiInstruction): {
+    id: string
+    revision: number
+    messageId: string
+    recorded: boolean
+  } {
+    const revision = normalizeRevision(instruction.revision)
+    const now = new Date().toISOString()
+    this.store.saveUiInstruction({
+      id: instruction.id,
+      revision,
+      component: instruction.component,
+      ...(instruction.props !== undefined ? { props: instruction.props } : {}),
+      ...(instruction.data !== undefined ? { data: instruction.data } : {}),
+      ...(instruction.provenance !== undefined ? { provenance: instruction.provenance } : {}),
+      summary: instruction.summary,
+      sessionId: this.sessionId,
+      createdAt: now,
+    })
+    // Same registration the regular-session render_ui face performs (G1/G2):
+    // the butler pump's send-back gate reads it, with the store as fallback.
+    this.revisionRegistry()?.record(this.sessionId, instruction.id, revision)
+    // Ledger announcement (G4): reference only, never the inline JSON. The
+    // attachment carries the ui-instruction URL as its remote `url`, so the
+    // existing AG-UI attachment→Markdown mechanism emits
+    // [summary](/resident/api/ui-instruction?id=…&revision=…) unchanged, and
+    // the chat bubble renders kind='ui' inline via the trusted registry.
+    const outcome = this.ledger.postOutbound({
+      kind: 'text',
+      text: instruction.summary,
+      attachments: [
+        {
+          id: `att_${randomUUID()}`,
+          kind: 'ui',
+          name: instruction.summary,
+          url: `/resident/api/ui-instruction?id=${encodeURIComponent(instruction.id)}&revision=${revision}`,
+        },
+      ],
+      idempotencyKey: `ui:${instruction.id}:${revision}`,
+    })
+    return { id: instruction.id, revision, messageId: outcome.message?.id ?? '', recorded: outcome.recorded }
+  }
+
   unreadCount(): number {
     return this.ledger.unreadCount()
   }
@@ -635,6 +722,54 @@ export class ButlerRuntime implements ResidentButler {
 
   // ── turn pump ─────────────────────────────────────────────────────────────
 
+  /**
+   * The instruction revision registry provided by @hibuddy/web-ui (cordis
+   * service `hibuddy-genui-revisions`, G2 send-back gate). Optional: the
+   * web-ui plugin may be absent (headless compositions) or not yet applied.
+   */
+  private revisionRegistry(): RevisionRegistry | undefined {
+    return this.deps.ctx.get('hibuddy-genui-revisions') as RevisionRegistry | undefined
+  }
+
+  /**
+   * UI send-back gate (genui-agui-optimization.md G2): inbound rows shaped
+   * `@[ui:<id>:<revision>] {…}` must match the latest revision registered by
+   * `render_ui` for that id in this session — stale, unknown, future, or
+   * malformed ones are rejected WITHOUT reaching the model (防旧面板误操作 /
+   * 伪造回传), and the user gets a visible notice instead. Everything else
+   * passes through untouched.
+   */
+  private gateUiSendBacks(batch: readonly Message[]): Message[] {
+    const registry = this.revisionRegistry()
+    const deliverable: Message[] = []
+    const rejected: Array<{ id: string; stale: boolean }> = []
+    for (const message of batch) {
+      if (message.kind !== 'text') {
+        deliverable.push(message)
+        continue
+      }
+      const verdict = evaluateUiSendBack(message.text, (uiId) =>
+        // Memory registry first (live render_ui calls), persisted instructions
+        // as the fallback (G3, 开放问题 #2): after a restart the registry is
+        // empty and the store keeps the gate closed instead of fail-closed-
+        // unknown for every previously rendered surface.
+        registry?.latest(this.sessionId, uiId) ?? this.store.latestUiInstructionRevision(uiId))
+      if (verdict.action === 'deliver') {
+        deliverable.push(message)
+      } else {
+        rejected.push({ id: message.id, stale: verdict.reason !== 'malformed' })
+      }
+    }
+    for (const { id, stale } of rejected) {
+      this.ledger.postOutbound({
+        kind: 'system',
+        text: stale ? '该界面已更新或已不存在，刚才的操作未生效。' : '界面回传格式无效，操作未生效。',
+        idempotencyKey: `ui-reject:${id}`,
+      })
+    }
+    return deliverable
+  }
+
   private async pump(): Promise<void> {
     this.pumping = true
     this.store.upsertButlerState({
@@ -655,6 +790,12 @@ export class ButlerRuntime implements ResidentButler {
         if (batch.length === 0) break
         const agent = this.agent
         if (agent === undefined) break
+        // UI send-back gate (G2) first: rejected rows never enter the turn.
+        const deliverable = this.gateUiSendBacks(batch)
+        if (deliverable.length === 0) {
+          this.ledger.consume(batch.map((message) => message.id))
+          continue
+        }
         const now = new Date()
         // Deterministic context (perception B12′ §5.2 / §6): a fresh situation
         // snapshot first, then the framed inbound envelope, then — when more
@@ -667,7 +808,7 @@ export class ButlerRuntime implements ResidentButler {
         const remaining = this.store.countPendingInbound() - batch.length
         const backlog =
           remaining > 0 ? `\n（还有 ${remaining} 条待处理：先处理完当前批，可继续跟进，不必逐条汇报。）` : ''
-        await this.runTurn(agent, `${situation}\n\n${renderInbound(batch, now)}${backlog}`)
+        await this.runTurn(agent, `${situation}\n\n${renderInbound(deliverable, now)}${backlog}`)
         this.ledger.consume(batch.map((message) => message.id))
       }
     } catch (error) {

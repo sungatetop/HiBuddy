@@ -19,7 +19,8 @@
         "@hibuddy/coworker",
         "@hibuddy/resident",
         "@hibuddy/web-ui",
-        "@hibuddy/ag-ui-bridge"
+        "@hibuddy/ag-ui-bridge",
+        "@deepseek-ai/dsh-experimental-agent-team-profile"
       ]
     }
   }

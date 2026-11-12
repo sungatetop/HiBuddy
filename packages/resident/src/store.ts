@@ -28,11 +28,12 @@ import type {
   TicketRun,
   TicketState,
   Trigger,
+  UiInstruction,
   WorkerSession,
 } from './domain.ts'
 
 /** Current schema version; bump and add a migration step for every change. */
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 
 /** Name of the SQLite file inside the stateDir. */
 export const DB_FILENAME = 'orchestrator.sqlite'
@@ -214,6 +215,29 @@ CREATE INDEX IF NOT EXISTS attachments_message ON attachments(message_id);
  */
 const MIGRATE_V5 = `ALTER TABLE messages ADD COLUMN data TEXT;`
 
+/**
+ * v6 (generative UI in the butler layer, genui-agui-optimization.md G3):
+ * persisted render_ui instructions. The same id keeps every revision
+ * (PRIMARY KEY (id, revision)) so canvas history snapshots survive restarts;
+ * the read-only `/resident/api/ui-instruction` route serves one row.
+ */
+const MIGRATE_V6 = `
+CREATE TABLE IF NOT EXISTS ui_instructions (
+  id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  component TEXT NOT NULL,
+  props TEXT,
+  data TEXT,
+  provenance TEXT,
+  summary TEXT,
+  session_id TEXT,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (id, revision)
+);
+CREATE INDEX IF NOT EXISTS ui_instructions_session
+  ON ui_instructions(session_id, created_at);
+`
+
 interface TicketRow {
   id: string
   goal: string
@@ -351,6 +375,7 @@ export class Store {
         if (version < 3) this.db.exec(MIGRATE_V3)
         if (version < 4) this.db.exec(MIGRATE_V4)
         if (version < 5) this.db.exec(MIGRATE_V5)
+        if (version < 6) this.db.exec(MIGRATE_V6)
         this.db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)')
         const existing = this.db.prepare('SELECT COUNT(*) AS n FROM schema_version').get() as {
           n: number
@@ -821,6 +846,71 @@ export class Store {
       this.db.prepare('UPDATE messages SET delivered = 0 WHERE id = ?').run(message.id)
     }
     return pending.length
+  }
+
+  // ── ui_instructions (generative UI, genui-agui-optimization.md G3) ───────
+
+  /**
+   * Persists one render_ui instruction revision. The same id keeps its
+   * history (one row per revision); re-writing the same (id, revision) is an
+   * idempotent update (instruction content is deterministic per call).
+   */
+  saveUiInstruction(instruction: UiInstruction): void {
+    this.db
+      .prepare(
+        `INSERT INTO ui_instructions (id, revision, component, props, data, provenance, summary, session_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id, revision) DO UPDATE SET component=excluded.component, props=excluded.props,
+           data=excluded.data, provenance=excluded.provenance, summary=excluded.summary,
+           session_id=excluded.session_id, created_at=excluded.created_at`,
+      )
+      .run(
+        instruction.id,
+        instruction.revision,
+        instruction.component,
+        instruction.props === undefined ? null : JSON.stringify(instruction.props),
+        instruction.data === undefined ? null : JSON.stringify(instruction.data),
+        instruction.provenance ?? null,
+        instruction.summary ?? null,
+        instruction.sessionId ?? null,
+        instruction.createdAt,
+      )
+  }
+
+  /**
+   * One instruction revision; revision omitted → the latest known one. This
+   * lookup is also the persistent half of the send-back revision gate
+   * (genui-agui-optimization.md 开放问题 #2): after a restart, the in-memory
+   * registry is empty and the store keeps the gate closed.
+   */
+  getUiInstruction(id: string, revision?: number): UiInstruction | undefined {
+    const row = (revision === undefined
+      ? this.db
+          .prepare('SELECT * FROM ui_instructions WHERE id = ? ORDER BY revision DESC LIMIT 1')
+          .get(id)
+      : this.db
+          .prepare('SELECT * FROM ui_instructions WHERE id = ? AND revision = ?')
+          .get(id, revision)) as Record<string, SQLInputValue> | undefined
+    if (row === undefined) return undefined
+    return {
+      id: String(row.id),
+      revision: Number(row.revision),
+      component: String(row.component),
+      ...(row.props !== null ? { props: JSON.parse(String(row.props)) } : {}),
+      ...(row.data !== null ? { data: JSON.parse(String(row.data)) } : {}),
+      ...(row.provenance !== null ? { provenance: String(row.provenance) } : {}),
+      ...(row.summary !== null ? { summary: String(row.summary) } : {}),
+      ...(row.session_id !== null ? { sessionId: String(row.session_id) } : {}),
+      createdAt: String(row.created_at),
+    }
+  }
+
+  /** Latest persisted revision of one id (undefined = never persisted). */
+  latestUiInstructionRevision(id: string): number | undefined {
+    const row = this.db
+      .prepare('SELECT MAX(revision) AS n FROM ui_instructions WHERE id = ?')
+      .get(id) as { n: number | null }
+    return row.n === null ? undefined : Number(row.n)
   }
 
   // ── butler_state ────────────────────────────────────────────────────────

@@ -7,6 +7,9 @@
  * - `POST /resident/api/messages` `{ text }` → `202 { ok: true }`
  * - `POST /resident/api/messages/read` `{ ids | upTo }` → `{ ok, marked }`
  * - `GET  /resident/api/attachment?id=` → bytes (Range-capable media stream)
+ * - `GET  /resident/api/ui-instruction?id=&revision=` → one persisted render_ui
+ *   instruction (generative UI, genui-agui-optimization.md G3; revision
+ *   defaults to the latest)
  * - `GET  /resident/api/sessions` → `{ sessions, approvals }` (task drawer)
  * - `GET  /resident/api/settings` → settings snapshot
  * - `POST /resident/api/settings` `{ patch }` → saved snapshot (explicit save)
@@ -250,6 +253,31 @@ export function registerResidentApi(ctx: Context, current: () => ResidentButler 
     // Task drawer: delegated worker sessions + approvals waiting on a decision.
     route('/resident/api/sessions', 'GET', (_req, res, butler) => {
       json(res, 200, { sessions: butler.listSessions(), approvals: butler.pendingApprovals() })
+    })
+
+    // Generative-UI instruction route (G3): serves one persisted render_ui
+    // instruction by id (revision defaults to the latest). Read-only and
+    // behind the same trust fence; only ids present in the ledger table are
+    // reachable, so there is nothing to traverse. The chat bubble and AG-UI
+    // Markdown references point here — the JSON never rides in the message.
+    route('/resident/api/ui-instruction', 'GET', (req, res, butler) => {
+      const url = new URL(req.url ?? '/', 'http://localhost')
+      const id = url.searchParams.get('id')
+      if (id === null || id === '') {
+        json(res, 400, { error: 'id is required' })
+        return
+      }
+      const revisionParam = url.searchParams.get('revision')
+      const revision =
+        revisionParam !== null && revisionParam !== '' && /^\d+$/.test(revisionParam)
+          ? Number(revisionParam)
+          : undefined
+      const instruction = butler.uiInstruction(id, revision)
+      if (instruction === undefined) {
+        json(res, 404, { error: 'ui instruction not found' })
+        return
+      }
+      json(res, 200, instruction)
     })
 
     // Settings page: read the snapshot; POST saves the patch explicitly.

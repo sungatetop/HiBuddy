@@ -18,6 +18,7 @@ import {
   type ChatMessage,
 } from './api.ts'
 import { TaskDrawer } from './drawer.tsx'
+import { GenuiBubble } from './genui-bubble.tsx'
 import { Markdown } from './markdown.tsx'
 import { CanvasPreview } from './preview.tsx'
 
@@ -215,7 +216,7 @@ function fileBadge(name: string): string {
   return extension.length > 4 ? extension.slice(0, 4) : extension
 }
 
-/** One attachment rendered per its media kind (image/video/audio/file). */
+/** One attachment rendered per its media kind (image/video/audio/file/ui). */
 function AttachmentView({
   attachment,
   onPreview,
@@ -224,6 +225,11 @@ function AttachmentView({
   onPreview: (attachment: ChatAttachment) => void
 }): ReactNode {
   const src = attachmentSrc(attachment)
+  // Generative-UI reference (G4): the interactive surface renders inline; the
+  // instruction JSON is fetched from the ui-instruction route it points at.
+  if (attachment.kind === 'ui') {
+    return <GenuiBubble src={src} name={attachment.name} />
+  }
   if (attachment.kind === 'image') {
     return (
       <img

@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { RevisionRegistry } from '@hibuddy/web-ui/genui-schema'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { ResidentButler } from './butler.ts'
 import { createButlerTools } from './butler-tools.ts'
@@ -77,5 +78,53 @@ describe('listing tools', () => {
     expect(text).toContain('resident-worker-t1')
     expect(text).toContain('working')
     expect(text).toContain('D:\\ProjectA')
+  })
+})
+
+describe('render_ui butler face (genui-agui-optimization.md G4)', () => {
+  it('persists via the service and answers with the ledger reference', async () => {
+    const renderUi = vi.fn().mockReturnValue({ id: 'sales-chart', revision: 1, messageId: 'msg_9', recorded: true })
+    const genuiRevisions = vi.fn().mockReturnValue(undefined)
+    setResidentService({ renderUi, genuiRevisions } as unknown as ResidentButler)
+    const value = await tool('render_ui').execute(
+      {
+        id: 'sales-chart',
+        component: 'chart',
+        target: 'inline',
+        summary: '近六月营收趋势',
+        props: { chartType: 'line', xKey: 'month', series: [{ key: 'revenue' }] },
+        data: { items: [{ month: '1月', revenue: 120 }] },
+      } as never,
+      { agent: { session: { id: 'resident-butler' } } } as never,
+    )
+    expect(value).toMatchObject({ ok: true, id: 'sales-chart', revision: 1, messageId: 'msg_9' })
+    expect(renderUi).toHaveBeenCalledTimes(1)
+    expect(renderUi).toHaveBeenCalledWith(expect.objectContaining({ id: 'sales-chart', component: 'chart', summary: '近六月营收趋势' }))
+    expect(rendered('render_ui', value)).toContain('sales-chart')
+  })
+
+  it('registers the revision in the live registry (G2 gate source)', async () => {
+    const registry = new RevisionRegistry()
+    setResidentService({
+      renderUi: () => ({ id: 'f', revision: 3, messageId: 'm', recorded: true }),
+      genuiRevisions: () => registry,
+    } as unknown as ResidentButler)
+    await tool('render_ui').execute(
+      { id: 'f', component: 'form', target: 'inline', revision: 3, summary: '表单', props: { fields: [{ id: 'a', label: 'A', type: 'text' }] } } as never,
+      { agent: { session: { id: 'resident-butler' } } } as never,
+    )
+    expect(registry.latest('resident-butler', 'f')).toBe(3)
+  })
+
+  it('rejects over-cap instructions with a teaching error before touching the service', async () => {
+    const renderUi = vi.fn()
+    setResidentService({ renderUi, genuiRevisions: () => undefined } as unknown as ResidentButler)
+    // 21 form fields exceed the strict cap of 20 (framework enum checks pass;
+    // the strict validator rejects, teaching the model to paginate).
+    const fields = Array.from({ length: 21 }, (_, index) => ({ id: `f${index}`, label: `F${index}`, type: 'text' }))
+    await expect(
+      tool('render_ui').execute({ id: 'x', component: 'form', target: 'inline', summary: 's', props: { fields } } as never, {} as never),
+    ).rejects.toThrow(/validation failed/)
+    expect(renderUi).not.toHaveBeenCalled()
   })
 })

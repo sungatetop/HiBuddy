@@ -41,6 +41,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.0",
+    "@hibuddy/web-ui": "workspace:*",
     "@deepseek-ai/dsh-agent": "0.2.1-rc.5",
     "@deepseek-ai/dsh-agent-default-model": "0.2.1-rc.5",
     "@deepseek-ai/dsh-agent-preset-registry": "0.2.1-rc.5",

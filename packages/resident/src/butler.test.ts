@@ -7,6 +7,7 @@ import type { Agent, AgentHandle, AgentRegistry, CreateAgentOptions } from '@dee
 import type { AgentDefaultModelConfig } from '@deepseek-ai/dsh-agent-default-model'
 import type { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry'
 import { BUTLER_PRESET_ID, BUTLER_SESSION_ID, ButlerRuntime, renderInbound, type ButlerDeps } from './butler.ts'
+import { RevisionRegistry } from '@hibuddy/web-ui/genui-schema'
 import type { Message } from './domain.ts'
 import { MessageService } from './messages.ts'
 import { Store } from './store.ts'
@@ -30,7 +31,12 @@ function fakeAgent(options: { live?: boolean } = {}) {
   return { agent, followups }
 }
 
-function fakeDeps(options: { live?: boolean; events?: () => void; workspaces?: Array<{ id: string; path: string; title: string }> } = {}): ButlerDeps & {
+function fakeDeps(options: {
+  live?: boolean
+  events?: () => void
+  workspaces?: Array<{ id: string; path: string; title: string }>
+  revisions?: RevisionRegistry
+} = {}): ButlerDeps & {
   created: CreateAgentOptions[]
   liveAgent?: Agent
   liveFollowups: string[]
@@ -42,7 +48,9 @@ function fakeDeps(options: { live?: boolean; events?: () => void; workspaces?: A
     get: (name: string) =>
       name === 'workspaceRegistry'
         ? { list: () => options.workspaces ?? [] }
-        : undefined,
+        : name === 'hibuddy-genui-revisions'
+          ? options.revisions
+          : undefined,
   } as unknown as Context
   const agents = {
     get: (id: string) =>
@@ -150,6 +158,96 @@ describe('turn pump', () => {
     expect(deps.liveFollowups[0]).toContain('还有 5 条待处理')
     expect(deps.liveFollowups[0]).toContain('msg 0')
     await vi.waitFor(() => expect(service.pendingInbound()).toHaveLength(0))
+  })
+})
+
+describe('ui send-back gate (genui-agui-optimization.md G2)', () => {
+  /** Well-formed send-back envelope per the G2 contract. */
+  const envelope = (id: string, revision: number): string =>
+    `@[ui:${id}:${revision}] ${JSON.stringify({ component: 'form', event: 'submit', payload: { city: '杭州' } })}`
+
+  function depsWithRegistry(revision: number): ButlerDeps & { liveFollowups: string[] } {
+    const registry = new RevisionRegistry()
+    registry.record(BUTLER_SESSION_ID, 'sales-form', revision)
+    return fakeDeps({ live: true, revisions: registry })
+  }
+
+  it('delivers a current-revision send-back to the model', async () => {
+    const deps = depsWithRegistry(3)
+    const { runtime, service } = makeRuntime(deps)
+    await runtime.start()
+
+    runtime.postUserMessage(envelope('sales-form', 3))
+    await vi.waitFor(() => expect(deps.liveFollowups).toHaveLength(1))
+    expect(deps.liveFollowups[0]).toContain('sales-form')
+    expect(deps.liveFollowups[0]).toContain('杭州')
+    await vi.waitFor(() => expect(service.pendingInbound()).toHaveLength(0))
+    expect(service.list({ direction: 'out' })).toHaveLength(0)
+  })
+
+  it('rejects a stale revision: never feeds the model, posts a visible notice', async () => {
+    const deps = depsWithRegistry(3)
+    const { runtime, service } = makeRuntime(deps)
+    await runtime.start()
+
+    runtime.postUserMessage(envelope('sales-form', 2))
+    await vi.waitFor(() => expect(service.pendingInbound()).toHaveLength(0))
+    expect(deps.liveFollowups).toHaveLength(0)
+    const out = service.list({ direction: 'out' })
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ kind: 'system' })
+    expect(out[0]!.text).toContain('未生效')
+  })
+
+  it('rejects unknown ids and malformed envelopes the same way', async () => {
+    const deps = depsWithRegistry(3)
+    const { runtime, service } = makeRuntime(deps)
+    await runtime.start()
+
+    runtime.postUserMessage(envelope('never-rendered', 1))
+    runtime.postUserMessage('@[ui:sales-form:notanumber] {}')
+    await vi.waitFor(() => expect(service.pendingInbound()).toHaveLength(0))
+    expect(deps.liveFollowups).toHaveLength(0)
+    expect(service.list({ direction: 'out' })).toHaveLength(2)
+  })
+
+  it('passes ordinary user text through untouched when no registry exists', async () => {
+    const deps = fakeDeps({ live: true })
+    const { runtime, service } = makeRuntime(deps)
+    await runtime.start()
+
+    runtime.postUserMessage('@[ui:sales-form:1] {"component":"form","event":"submit","payload":{}}')
+    runtime.postUserMessage('普通消息')
+    await vi.waitFor(() => expect(deps.liveFollowups).toHaveLength(1))
+    // No registry → every send-back-shaped row is rejected (fail closed), so
+    // only the ordinary text reaches the model.
+    expect(deps.liveFollowups[0]).toContain('普通消息')
+    expect(deps.liveFollowups[0]).not.toContain('sales-form')
+    await vi.waitFor(() => expect(service.pendingInbound()).toHaveLength(0))
+  })
+
+  it('falls back to the persisted ui_instructions revision after a restart (G3)', async () => {
+    // No live registry (web-ui plugin absent / fresh process): the persisted
+    // instruction keeps the gate open for the surface it recorded.
+    const deps = fakeDeps({ live: true })
+    const { runtime, service } = makeRuntime(deps)
+    await runtime.start()
+    store.saveUiInstruction({
+      id: 'sales-form',
+      revision: 2,
+      component: 'form',
+      props: { fields: [{ id: 'city', label: '城市', type: 'text' }] },
+      summary: '城市表单',
+      sessionId: BUTLER_SESSION_ID,
+      createdAt: new Date().toISOString(),
+    })
+
+    runtime.postUserMessage(envelope('sales-form', 2)) // current → delivers
+    runtime.postUserMessage(envelope('sales-form', 1)) // stale → rejected
+    await vi.waitFor(() => expect(deps.liveFollowups).toHaveLength(1))
+    expect(deps.liveFollowups[0]).toContain('sales-form')
+    await vi.waitFor(() => expect(service.pendingInbound()).toHaveLength(0))
+    expect(service.list({ direction: 'out' })).toHaveLength(1)
   })
 })
 
@@ -409,6 +507,56 @@ describe('sendMessage', () => {
     expect(() =>
       runtime.sendMessage({ text: 'x', kind: 'text', attachments: [{ path: 'C:\\Windows\\win.ini' }] }),
     ).toThrow(/不在任何工作区/)
+  })
+})
+
+describe('renderUi (genui-agui-optimization.md G4)', () => {
+  it('persists the instruction and announces it as a kind=ui attachment reference', async () => {
+    const registry = new RevisionRegistry()
+    const deps = fakeDeps({ live: true, revisions: registry })
+    const { runtime, service } = makeRuntime(deps)
+    await runtime.start()
+
+    const outcome = runtime.renderUi({
+      id: 'sales-chart',
+      component: 'chart',
+      summary: '近六月营收趋势',
+      props: { chartType: 'line' },
+      data: { items: [] },
+      provenance: '来源：本轮读取的 sales.csv',
+    })
+    expect(outcome).toMatchObject({ recorded: true, revision: 1 })
+
+    // Persisted (the send-back gate's post-restart fallback).
+    expect(store.getUiInstruction('sales-chart')).toMatchObject({
+      revision: 1,
+      component: 'chart',
+      summary: '近六月营收趋势',
+      sessionId: BUTLER_SESSION_ID,
+    })
+    // Registry recorded for the live gate.
+    expect(registry.latest(BUTLER_SESSION_ID, 'sales-chart')).toBe(1)
+
+    // Announced: one outbound text bubble with one kind='ui' reference — the
+    // JSON itself never rides in the message.
+    const out = service.list({ direction: 'out' })
+    expect(out).toHaveLength(1)
+    expect(out[0]!.kind).toBe('text')
+    expect(out[0]!.text).toBe('近六月营收趋势')
+    const [attachment] = out[0]!.attachments ?? []
+    expect(attachment).toMatchObject({ kind: 'ui', name: '近六月营收趋势' })
+    expect(attachment!.url).toBe('/resident/api/ui-instruction?id=sales-chart&revision=1')
+
+    // Re-emit with revision 2: new persisted revision + new announcement.
+    runtime.renderUi({ id: 'sales-chart', revision: 2, component: 'chart', summary: '近六月营收趋势（更新）' })
+    expect(store.latestUiInstructionRevision('sales-chart')).toBe(2)
+    expect(registry.latest(BUTLER_SESSION_ID, 'sales-chart')).toBe(2)
+    expect(service.list({ direction: 'out' })).toHaveLength(2)
+
+    // Same (id, revision) re-emit is deduplicated by the idempotency key.
+    const again = runtime.renderUi({ id: 'sales-chart', revision: 2, component: 'chart', summary: '近六月营收趋势（更新）' })
+    expect(again.recorded).toBe(false)
+    expect(service.list({ direction: 'out' })).toHaveLength(2)
   })
 })
 

@@ -1,8 +1,10 @@
 /**
- * Butler tool face (ADR-011 §2.3) — the SMALL tool set the resident butler
- * runs with. It deliberately contains no filesystem, shell or web tool:
- * the butler talks, delegates and monitors; all execution belongs to worker
- * sessions.
+ * Butler tool face (ADR-011 §2.3, D6 as amended by genui-agui-optimization.md
+ * G4) — the SMALL tool set the resident butler runs with. It deliberately
+ * contains no filesystem, shell or web tool: the butler talks, delegates and
+ * monitors; all execution belongs to worker sessions. The exception is the
+ * no-op data tool `render_ui` (generative UI): pure-JSON instructions, no
+ * execution surface, persisted and announced in the ledger by the host.
  *
  * Mounted inside the `hibbuddy-butler` preset's agent scope, so scoped
  * registration keeps these tools invisible to worker sessions and the
@@ -11,6 +13,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { assertPlainArrays, RENDER_UI_DESCRIPTION, RENDER_UI_PARAMETERS } from '@hibuddy/web-ui'
+import { normalizeRevision, validateInstruction } from '@hibuddy/web-ui/genui-schema'
 import type { ResidentButler } from './butler.ts'
 import { getResidentService } from './service-ref.ts'
 
@@ -383,6 +387,67 @@ export function createButlerTools() {
     },
   })
 
+  const renderUi = defineTool({
+    name: 'render_ui',
+    // Same contract as the regular-session face (shared schema/description);
+    // the butler face adds ledger persistence + announcement (G4).
+    description:
+      RENDER_UI_DESCRIPTION +
+      '\nBUTLER FACE: the host persists the instruction and shows it to the user as an interactive card ' +
+      'in the conversation automatically — do NOT repeat its content via send_message_to_user. ' +
+      'Always pass target "inline" (this conversation has no side canvas).',
+    parameters: RENDER_UI_PARAMETERS,
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          ok: {
+            type: 'boolean',
+            enum: [true],
+            required: true,
+            description: 'The instruction was accepted, persisted, and announced in the conversation.',
+          },
+          id: { type: 'string', required: true, description: 'Echo of the instruction id.' },
+          revision: { type: 'integer', required: true, description: 'The revision recorded for this instruction.' },
+          messageId: { type: 'string', required: true, description: 'Ledger message id the surface reference rides on.' },
+        },
+      },
+      render: (args, value) =>
+        text(`UI "${value.id}"（${args.component}，revision ${value.revision}）已出现在对话中（消息 ${value.messageId}），用户可直接交互。`),
+    },
+    async execute(args, exec) {
+      // Host-side shape gate + strict contract gate, identical to the
+      // regular-session face: violations settle as teaching tool errors.
+      assertPlainArrays(args.component, args.props, args.data)
+      const errors = validateInstruction(args)
+      if (errors.length > 0) {
+        throw new TypeError(
+          `render_ui validation failed: ${errors.join('; ')}. Fix the listed fields and re-emit the complete instruction.`,
+        )
+      }
+      const service = requireService()
+      // Revision registration (G1/G2), same as the regular-session face: the
+      // butler pump's send-back gate reads the registry, the persisted store
+      // row (written by renderUi below) is the post-restart fallback.
+      const sessionId = exec.agent?.session.id
+      if (sessionId !== undefined) {
+        service.genuiRevisions()?.record(sessionId, args.id, normalizeRevision(args.revision))
+      }
+      const outcome = service.renderUi({
+        id: args.id,
+        component: args.component,
+        summary: args.summary,
+        ...(args.revision !== undefined ? { revision: args.revision } : {}),
+        ...(args.target !== undefined ? { target: args.target } : {}),
+        ...(args.props !== undefined ? { props: args.props } : {}),
+        ...(args.data !== undefined ? { data: args.data } : {}),
+        ...(args.provenance !== undefined ? { provenance: args.provenance } : {}),
+      })
+      return { ok: true as const, id: outcome.id, revision: outcome.revision, messageId: outcome.messageId }
+    },
+  })
+
   return [
     sendMessageToUser,
     listWorkspaces,
@@ -392,6 +457,7 @@ export function createButlerTools() {
     listSessions,
     cancelSession,
     resolveApproval,
+    renderUi,
   ]
 }
 

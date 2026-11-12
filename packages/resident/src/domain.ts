@@ -135,9 +135,11 @@ export interface MessageRefs {
 
 /**
  * Media kind of an attachment, chosen so the chat panel knows how to preview
- * it (image lightbox, inline video/audio, file card).
+ * it (image lightbox, inline video/audio, file card). `'ui'` is HOST-generated
+ * only (genui-agui-optimization.md G4: a render_ui instruction reference) —
+ * the model-facing attachment surface keeps the four media kinds.
  */
-export type AttachmentKind = 'image' | 'video' | 'audio' | 'file'
+export type AttachmentKind = 'image' | 'video' | 'audio' | 'file' | 'ui'
 
 /** One output file a worker round produced (perception B12′ artifact scan). */
 export interface ArtifactRef {
@@ -232,6 +234,30 @@ export interface Message {
   delivered: boolean
   /** Inbound only: set when the butler turn consumed it (queue cursor). */
   consumedAt?: string | null
+  createdAt: string
+}
+
+/**
+ * One persisted `render_ui` instruction (genui-agui-optimization.md G3, schema
+ * v6 `ui_instructions`). The same id keeps every revision (PRIMARY KEY
+ * (id, revision)) so history snapshots stay lookable; the read-only
+ * `/resident/api/ui-instruction` route serves one row by id (+ optional
+ * revision, default latest). Message and AG-UI surfaces carry only the
+ * reference — never the inline JSON.
+ */
+export interface UiInstruction {
+  id: string
+  revision: number
+  /** Trusted component key (chart/form/table/metrics). */
+  component: string
+  props?: unknown
+  data?: unknown
+  /** One-sentence data-source declaration (G1, soft contract). */
+  provenance?: string
+  /** Human-readable summary — the accessible fallback and audit line. */
+  summary?: string
+  /** Session that rendered it (the butler session for the butler tool face). */
+  sessionId?: string | null
   createdAt: string
 }
 

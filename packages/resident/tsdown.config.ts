@@ -1,6 +1,6 @@
 import { defineConfig } from 'tsdown'
 
-const dshExternal = [/^@deepseek-ai\//, /^proper-lockfile$/]
+const dshExternal = [/^@deepseek-ai\//, /^proper-lockfile$/, /^@hibuddy\//]
 
 /**
  * Two build faces, matching the dsh client-plugin layout (same shape as
@@ -36,9 +36,13 @@ export default defineConfig([
     // without this the classic-script bundle would emit require('react-markdown')
     // and the dsh module loader cannot resolve it. `alwaysBundle` pulls the
     // Markdown stack (and its transitive deps) into the single classic script.
+    // NOTE: @hibuddy/* is deliberately NOT external here — the client face
+    // bundles @hibuddy/web-ui/client-genui (the trusted chat-bubble surfaces,
+    // G4); only the node face keeps it external. react stays external so the
+    // bundled surfaces share the shell's single react instance.
     inputOptions: { platform: 'browser' },
     deps: {
-      neverBundle: [...dshExternal, 'react', 'react/jsx-runtime'],
+      neverBundle: [/^@deepseek-ai\//, /^proper-lockfile$/, 'react', 'react/jsx-runtime'],
       alwaysBundle: [/./],
     },
     dts: false,

@@ -2,7 +2,7 @@
  * Client data access for the butler chat (same-origin, dsh fence cookie).
  */
 
-export type AttachmentKind = 'image' | 'video' | 'audio' | 'file'
+export type AttachmentKind = 'image' | 'video' | 'audio' | 'file' | 'ui'
 
 /** One file/media item riding on a chat message (mirrors the host domain type). */
 export interface ChatAttachment {
@@ -31,6 +31,28 @@ export interface ChatMessage {
 /** Same-origin source for one attachment (remote URLs bypass the host route). */
 export function attachmentSrc(attachment: ChatAttachment): string {
   return attachment.url ?? `/resident/api/attachment?id=${encodeURIComponent(attachment.id)}`
+}
+
+/** One persisted render_ui instruction (genui-agui-optimization.md G3). */
+export interface UiInstruction {
+  id: string
+  revision: number
+  component: string
+  props?: unknown
+  data?: unknown
+  provenance?: string
+  summary?: string
+  createdAt: string
+}
+
+/** Reads one generative-UI instruction by reference (kind='ui' attachment URL). */
+export async function fetchUiInstruction(src: string): Promise<UiInstruction> {
+  const response = await fetch(src, {
+    credentials: 'same-origin',
+    headers: { accept: 'application/json' },
+  })
+  if (!response.ok) throw new Error(`ui-instruction API ${response.status}`)
+  return (await response.json()) as UiInstruction
 }
 
 export interface ChatSnapshot {

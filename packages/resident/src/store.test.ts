@@ -448,3 +448,81 @@ describe('v4 → v5 migration (perception B12′)', () => {
     }
   })
 })
+
+describe('ui_instructions (genui-agui-optimization.md G3, schema v6)', () => {
+  const instruction = (revision: number, summary: string) => ({
+    id: 'sales-2026-chart',
+    revision,
+    component: 'chart',
+    props: { chartType: 'bar', xKey: 'month', series: [{ key: 'revenue' }] },
+    data: { items: [{ month: '1月', revenue: 120 }] },
+    provenance: '来源：本轮读取的 sales.csv（工具 get_file）',
+    summary,
+    sessionId: 'resident-butler',
+    createdAt: '2026-11-12T08:00:00.000Z',
+  })
+
+  it('round-trips an instruction with props/data JSON', () => {
+    const store = Store.open(dir)
+    try {
+      store.saveUiInstruction(instruction(1, '月度营收柱状图'))
+      expect(store.getUiInstruction('sales-2026-chart')).toEqual(instruction(1, '月度营收柱状图'))
+      expect(store.latestUiInstructionRevision('sales-2026-chart')).toBe(1)
+    } finally {
+      store.close()
+    }
+  })
+
+  it('keeps every revision of one id and serves history by revision', () => {
+    const store = Store.open(dir)
+    try {
+      store.saveUiInstruction(instruction(1, '第一版'))
+      store.saveUiInstruction(instruction(2, '第二版'))
+      // Same (id, revision) rewrite is idempotent, not a duplicate row.
+      store.saveUiInstruction(instruction(2, '第二版'))
+      expect(store.latestUiInstructionRevision('sales-2026-chart')).toBe(2)
+      expect(store.getUiInstruction('sales-2026-chart')).toEqual(instruction(2, '第二版'))
+      expect(store.getUiInstruction('sales-2026-chart', 1)).toEqual(instruction(1, '第一版'))
+      expect(store.getUiInstruction('sales-2026-chart', 3)).toBeUndefined()
+      expect(store.latestUiInstructionRevision('never-rendered')).toBeUndefined()
+      expect(store.getUiInstruction('never-rendered')).toBeUndefined()
+    } finally {
+      store.close()
+    }
+  })
+})
+
+describe('v5 → v6 migration (generative UI G3)', () => {
+  it('creates the ui_instructions table on an old database and round-trips new rows', () => {
+    const db = new DatabaseSync(join(dir, DB_FILENAME))
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER NOT NULL);
+      INSERT INTO schema_version (version) VALUES (5);
+      CREATE TABLE messages (
+        id TEXT PRIMARY KEY, direction TEXT NOT NULL, kind TEXT NOT NULL, title TEXT,
+        text TEXT NOT NULL, ticket_id TEXT, session_id TEXT, source_id TEXT, reply_to TEXT,
+        idempotency_key TEXT NOT NULL UNIQUE, read INTEGER NOT NULL DEFAULT 0,
+        delivered INTEGER NOT NULL DEFAULT 0, consumed_at TEXT, created_at TEXT NOT NULL, data TEXT
+      );
+    `)
+    db.close()
+
+    const store = Store.open(dir)
+    try {
+      expect(store.schemaVersion()).toBe(SCHEMA_VERSION)
+      store.saveUiInstruction({
+        id: 'sales-2026-chart',
+        revision: 1,
+        component: 'chart',
+        props: { chartType: 'bar' },
+        data: { items: [] },
+        summary: '迁移后写入',
+        createdAt: '2026-11-12T09:00:00.000Z',
+      })
+      expect(store.getUiInstruction('sales-2026-chart')).toMatchObject({ revision: 1, component: 'chart' })
+      expect(store.getUiInstruction('sales-2026-chart')!.sessionId).toBeUndefined()
+    } finally {
+      store.close()
+    }
+  })
+})
