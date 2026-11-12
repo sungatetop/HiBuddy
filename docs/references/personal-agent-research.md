@@ -1,7 +1,7 @@
 ---
 title: 个人智能体的本质：产品形态、开源实践与设计原理的深度调研
-summary: 系统调研 2024–2026 年个人智能体（personal agent）的商业产品、开源项目与设计理论，提炼出"持久身份 + 私有上下文 + 受托代理权 + 常驻主动性"的本质四要素论述，供 HiBuddy 产品设计参考。
-keywords: [个人智能体, personal agent, 记忆系统, 主动性, 权限分级, 数据主权, agent harness, 竞品调研]
+summary: 系统调研 2024–2026 年个人智能体（personal agent）的商业产品、开源项目与设计理论，提炼出"持久身份 + 私有上下文 + 受托代理权 + 常驻主动性"的本质四要素论述，供 HiBuddy 产品设计参考。2026-11-12 第二轮补充：以 "Personal Agent" 关键词专项检索开源生态（§5.8），新增约 28 个项目证据。
+keywords: [个人智能体, personal agent, 记忆系统, 主动性, 权限分级, 数据主权, agent harness, 竞品调研, 开源生态]
 status: draft
 date: 2026-11-12
 ---
@@ -131,6 +131,117 @@ MCP（Anthropic 2024-11 开源）于 2025 年获 OpenAI/Google 采纳，2025-12 
 
 - **Generative Agents / Smallville**（Stanford，2023）：25 个常驻 agent 的记忆流 + **相关性×新近性×重要性**检索打分 + reflection（反思生成高层推断）+ planning——"观察→反思→计划"循环是个人智能体主动性的直系祖先[cite:82][cite:83]。
 - **Voyager**（2023，Minecraft）：自动课程（自设目标）+ **技能库（可执行代码的终身技能积累）**——不训练权重、靠代码技能库实现终身学习，直接启发了 smolagents 与 OpenClaw 的技能系统[cite:84]。
+
+### 5.8 补充调研（2026-11-12 第二轮）："Personal Agent" 关键词专项
+
+第一轮检索按功能域采样（框架/记忆/编码 agent/常驻）；本轮以 "personal agent / personal AI / digital twin / 常驻 bot" 为关键词做专项普查（GitHub topic 检索 + API 元数据核验 + 盘点文与 Show HN），去重后新增约 28 个项目。总体结论：**第一轮从功能域推断的形态收敛（常驻 harness + 记忆 + 分级审批），在以"个人智能体"为自我定位的项目群中得到全面复现，且 2026 年新项目把权限与隐私做成默认设计而非附加功能。**
+
+#### 5.8.1 项目总表
+
+star 数为 GitHub API 2026-11-12 检索值（第三方口径分歧处标注 [unverified]）。
+
+**旗舰级（>30k stars）**
+
+| 项目 | 定位 | 技术栈 / License | 记忆 | 主动性 | 权限 |
+|---|---|---|---|---|---|
+| [Hermes Agent][101]（Nous Research，262.7k） | "The agent that grows with you"——自进化常驻个人智能体 | Python / MIT | 跨会话长期记忆 + 成功任务自动沉淀为可复用 skill（DSPy+GEPA 进化分支） | cron 调度 + 全平台通知；自我 nudge 持久化知识 | command approval + 容器隔离；支持迁移 OpenClaw 的 SOUL.md/MEMORY.md |
+| [nanobot][102]（HKUDS，49,968） | "Your lightweight open-source personal agent" | Python / MIT | "Dream" 长期记忆 | 定时自动化（日历视图）、`/goal` 长目标 | 命令沙箱 opt-in；曾有 2 个 critical 安全公告 |
+| [OpenHuman][103]（42,664） | 本地优先"500+ agents on a $10 VPS" | Rust+Tauri / GPL-3.0 | Memory Tree 三层确定性分层记忆 → SQLite + Obsidian 兼容 vault | 内置编排引擎统一调度 | 本地优先，数据不出本机 |
+| [ZeroClaw][104]（33,295） | Rust 单二进制 OpenClaw 重写（~26MB），"you own the agent/data/machine" | Rust / Apache-2.0 | SQLite/Postgres/Qdrant 可插拔 | **SOP 引擎**：MQTT/webhook/cron 事件触发标准作业程序 | 默认 supervised：中危待批准、高危阻断；OS 级沙箱 + 加密 tool receipts |
+| [NanoClaw][105]（31,110） | 安全优先的轻量 OpenClaw 替代（每会话独立容器） | TS / MIT | per-agent workspace（CLAUDE.md+memory） | scheduled tasks 可挂 script gate（无事不唤醒） | 凭据网关：agent 永不持有原始 API key |
+| [cognee][123]（33,130） | 知识图谱+向量混合的 agent 记忆平台 | Python / Apache-2.0 | GraphRAG 风格个人知识图谱 | — | self-hosted 全本地 |
+| [supermemory][124]（31,596） | 单二进制本地记忆引擎（"Memory API"） | TS / MIT | 本地嵌入、零依赖启动 | — | "nothing leaves the building" |
+
+**中量级（4k–20k）**
+
+| 项目 | 定位 | 关键设计 |
+|---|---|---|
+| [Agent Zero][106]（19,702） | 给 agent 一台自己的 Linux 电脑 | Docker 内完整桌面+浏览器+终端；项目级记忆隔离；快照回滚（"time travel"） |
+| [WeClone][119]（18,401） | 从聊天记录构建"生活画像+会说话的克隆" | 画像每条事实可溯源可复核、隐私分级（public/private/sensitive）+ 本地加密；画像可经 MCP 供外部 agent 作长期记忆 |
+| [Eigent][107]（15,809，CAMEL-AI 团队） | 开源多智能体个人工作台（桌面） | coordinator+planner 调度并行 agent；Git-backed 工作区按任务 diff；需决策时应用内询问 |
+| [OpenJarvis][125]（14,866，Stanford Hazy Research） | "Personal AI, On Personal Devices"研究框架 | 五原语可替换（模型/引擎/agent/工具与记忆/学习）；能耗与成本为一等指标；离线优先 |
+| [memU][126]（14,617） | "Personal memory across agents"——记忆即 agent 自组织的文件夹 | 记忆为可读文件而非黑盒向量库；MCP + Agent Skill 接入 |
+| [IronClaw][108]（12,716，NEAR AI） | 安全最大化个人 agent OS | 不受信工具跑 WASM 沙箱 + 端点白名单；凭据边界注入 + 泄露检测 + 提示注入防御；托管实例跑 TEE |
+| [OMI][133]（~13.6k [unverified]） | 开源 AI 项链/眼镜全栈（always-on 捕获） | 实时转写→摘要/行动项→带全量记忆对话；MCP server；全 MIT |
+| [Rakazo][109]（8,058） | 多 Bot 持续运行的个人智能体 | 每 Bot 独立记忆/例行任务/电脑环境；后端常驻（关前端仍工作） |
+| [OpenDots][110]（6,556，CopilotKit） | "always-on AI coworkers"（AG-UI 构建） | 每 Dot 独立角色与工具权限；持久化浏览器/文件/终端；草稿审核通过才保存 |
+| [OpenMuse][111]（6,340，CopilotKit） | "work that keeps going"的个人 agent | 后端常驻 + 定期巡检页面变化/价格阈值并提醒（事件触发式主动性典型） |
+
+**轻量/垂直形态**
+
+| 项目 | 定位 | 关键设计 |
+|---|---|---|
+| [gptme][112]（4,471） | 终端个人 agent，可构建持久自治 agent | 自写 "lessons"——从运行记录改写自身配置（自改进闭环） |
+| [nanoMuse][113]（3,433，arXiv 2610.08699） | 全设备单一 agent（iOS/Android/桌面/浏览器） | 手机屏幕与电脑即其"手"；记忆为用户可读文件且带 provenance；每动作经 Sentinel 审查，"asks before anything you cannot undo" |
+| [OmniAgent][115]（Go，star 未核实） | 跨渠道 AI 代表 | LLM 经 `cron_create` 工具**自建定时任务**；per-sender 工具访问策略 |
+| [Xiryn][114]（435） | 全自托管单机版（每 agent 独立 Docker 桌面） | 加密 vault；Telegram 遥控 |
+| [Project AIRI][121]（51,137） | 自托管数字生命/陪伴体（Neuro-sama 形态） | 全 Web 技术栈 + Live2D/VRM；"let you own your digital life" |
+| [Open Notebook][128]（41,839） | 自托管 NotebookLM 替代 | 全文+向量双检索；数据不出去 |
+| [Memobase][127]（2,955） | 基于用户画像的长期记忆层 | 画像即记忆单元（Big Five/兴趣/状态），区别于逐条事件记忆 |
+| [Horizon][136] / [DayBrief][137] | 自托管晨报/简报 | Horizon：多源抓取→LLM 打分→飞书/Slack 推送；DayBrief：**GitHub Actions cron 替代常驻进程**（主动性最低成本实现） |
+| [Eigin][118]（iOS，主仓自建 forge） | 本地优先无 shell 个人 AI | **closed-set tool model**：固定工具集、权限内建于执行路径（AGPL） |
+
+生态补充：[Moltworker][116]（Cloudflare 官方 OpenClaw fork，Workers 沙箱托管）、Secure-OpenClaw（Composio 凭据托管 fork）、[hermesclaw][142]（微信桥）、[VisionClaw][134]（Meta 眼镜 always-on 多模态 agent）、[SocialGenPod][129]（**Solid POD + LLM agent** 的研究原型，WWW'24）。
+
+#### 5.8.2 对本质论述的增量印证
+
+1. **"常驻 harness + 独立电脑 + 多渠道"已是开源事实标准**。本轮 28 个项目中 20+ 个采用"网关常驻 + 每实例独立容器/桌面 + WhatsApp/Telegram/邮件渠道"的同构形态（OpenClaw 谱系 + Hermes/Rakazo/OpenDots/OpenMuse/Xiryn/OmniAgent）——§7.3 的形态收敛在"自我定位为 personal agent"的群体中被完整复现，不再是功能域推断。
+2. **分级审批成为生态共识，且粒度细化**。ZeroClaw（supervised 默认 + 中危批准 + 高危阻断 + 加密 tool receipts）、NanoClaw（凭据网关，agent 永不见原始 key）、IronClaw（WASM 沙箱 + 端点白名单）、nanoMuse（Sentinel 审查，不可逆先问）、OpenDots（草稿审核落盘）、OmniAgent（per-sender 策略）——六家独立收敛；OpenClaw 生态的 CVE-2026-25253（WebSocket RCE）[cite:117] 从反面佐证。新趋势：**封闭工具集**（Eigin）把权限从"审批流"前移到"执行路径"，与报告 §6.4 的三层模型（沙箱→审批→白名单）同构但更激进。
+3. **记忆谱系补全"可审计"维度**。nanoMuse（记忆=用户可读文件+provenance）、OpenHuman（Memory Tree→Obsidian vault）、memU（记忆文件夹）、WeClone（每条事实溯源+隐私分级+人工复核）、OpenSelf（类型化记忆+Ed25519 签名回执+哈希链审计）——与 §6.1"记忆四问"（写入权/可见性/可删除性/时间建模）完全同构；2026 新项目把"加密本地存储 + 隐私分级 + 审计回执"作为默认设计。
+4. **主动性光谱向下延伸到零常驻**。DayBrief 用 GitHub Actions cron 实现"零服务器"晨报、NanoClaw 的 script gate（无事不唤醒）、ZeroClaw 的事件触发 SOP——印证公理 A3"确定性优先"不仅是省钱手段，也是独立项目在无基础设施约束下的自然选择。"晨报"是常驻 agent 的第一用例（awesome-openclaw-usecases 的 custom-morning-brief 即最热模板）[cite:138]。
+5. **数字分身两路线分化并合流**。微调克隆（WeClone LoRA、Twin-2K-500 方法学）与画像/上下文克隆（WeClone Agent 路线、OpenSelf Context Compiler）——后者正把"分身"解构为**可审计的个人上下文层**，与记忆方向合流；印证 §7.2"与数据的关系"是个人智能体的本体论核心。Solid POD + agent 仍停留在研究原型（SocialGenPod），个人数据主权的生产级实现空白尚存。
+6. **自进化闭环出现生产级实现**。Hermes（任务沉淀 skill + GEPA 进化）、gptme（lessons 自改配置）、OpenJarvis（本地 trace 驱动改进）——Voyager"技能库终身学习"范式（§5.7）在个人智能体场景落地；程序性记忆（skills）与陈述性记忆（facts）的分层已是事实。
+
+#### 5.8.3 补充来源（101–144）
+
+[101] Hermes Agent — https://github.com/NousResearch/hermes-agent
+[102] nanobot — https://github.com/HKUDS/nanobot
+[103] OpenHuman — https://github.com/tinyhumansai/openhuman （文档：https://openhumanwiki.com/docs/overview/）
+[104] ZeroClaw — https://github.com/zeroclaw-labs/zeroclaw
+[105] NanoClaw — https://github.com/nanocoai/nanoclaw （官网：https://nanoclaw.dev/）
+[106] Agent Zero — https://github.com/agent0ai/agent-zero
+[107] Eigent — https://github.com/eigent-ai/eigent
+[108] IronClaw — https://github.com/nearai/ironclaw
+[109] Rakazo — https://github.com/elie222/rakazo
+[110] OpenDots — https://github.com/CopilotKit/OpenDots
+[111] OpenMuse — https://github.com/CopilotKit/openmuse
+[112] gptme — https://github.com/gptme/gptme
+[113] nanoMuse — https://github.com/nano-muse/nanoMuse （论文：arXiv 2610.08699）
+[114] Xiryn — https://github.com/SouravBeraAkaSpeed/xiryn
+[115] OmniAgent — https://github.com/plexusone/omniagent
+[116] Moltworker — https://github.com/cloudflare/moltworker （博客：https://blog.cloudflare.com/moltworker-self-hosted-ai-agent/）
+[117] OpenClaw 生态安全 — https://shelldex.com/faq/ ；CVE-2026-25253：https://github.com/opena2a-org/hackmyagent （docs/use-cases/openclaw-security.md）
+[118] Eigin — Show HN 2026-11-10（hn.algolia.com/item/50439089），主仓 code.eigin.ai
+[119] WeClone — https://github.com/xming521/WeClone
+[120] OpenSelf — https://github.com/Open-Self/Open-Self
+[121] Project AIRI — https://github.com/moeru-ai/airi
+[122] Twin-2K-500 — https://github.com/TianyiPeng/Twin-2K-500-Mega-Study （论文：arXiv 2505.17479）
+[123] cognee — https://github.com/topoteretes/cognee
+[124] supermemory — https://github.com/supermemoryai/supermemory
+[125] OpenJarvis — https://github.com/open-jarvis/OpenJarvis （论文：arXiv 2605.17172）
+[126] memU — https://github.com/NevaMind-AI/memU
+[127] Memobase — https://github.com/memodb-io/memobase
+[128] Open Notebook — https://github.com/lfnovo/open-notebook
+[129] SocialGenPod — https://github.com/Vidminas/socialgenpod （论文：arXiv 2403.10408）
+[130] GAIA — https://github.com/theexperiencecompany/gaia
+[131] Open Assistant — https://open-assistant.org/
+[132] Iva — https://github.com/smixs/iva-agent
+[133] OMI — https://github.com/BasedHardware/omi
+[134] VisionClaw — https://github.com/Intent-Lab/VisionClaw （论文：arXiv 2604.03486）
+[135] Hermes Glasses — https://www.prasanthsasikumar.com/posts/hermes-glasses
+[136] Horizon — https://github.com/Thysrael/Horizon
+[137] DayBrief — https://yoanbernabeu.github.io/daybrief/
+[138] awesome-openclaw-usecases（custom-morning-brief）— https://github.com/hesamsheikh/awesome-openclaw-usecases
+[139] Home Assistant Assist 晨报 — https://www.home-assistant.io/voice_control/assist_daily_summary/
+[140] OpenAlternative 2026 盘点 — https://openalternative.co/blog/best-open-source-ai-agents ；OpenClaw Alternatives：https://openalternative.co/blog/best-openclaw-alternatives
+[141] 人人都是产品经理：Personal Agent 开源平替盘点 — https://www.woshipm.com/ai/6475152.html
+[142] hermesclaw（微信桥）— https://github.com/AaronWong1999/hermesclaw
+[143] Hermes star 口径分歧佐证（kie.ai / claws.io / 百度百科）— [unverified]
+[144] OpenSelf 之外的极简范式：mattabate/life-distributable（个人 agent 以 prompt 分发）
+
+> **可信度注记（第二轮）**：star/license 元数据以 GitHub API 2026-11-12 实时核验为主；Hermes star 数存在口径分歧（262.7k API vs 第三方 64k/90k/217k），引用时建议写"数十万级"；OpenSelf/Eigin/Horizon/DayBrief 等小项目细节未逐项人工复核，标 [unverified]。nanobot 的两个 critical 安全公告与 OpenClaw CVE-2026-25253 说明"常驻 + 多渠道"形态的攻击面真实存在。
+
+
 
 ## 6. 设计原理：六个维度
 
