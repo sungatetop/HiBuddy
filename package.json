@@ -1,7 +1,7 @@
 {
   "name": "hibuddy-monorepo",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "HiBuddy — personal AI coworker built on deepseek-harness (dsh). Structure per docs/architecture/system-architecture.md §10 and ADR-003.",
   "license": "MIT",
   "engines": {

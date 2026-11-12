@@ -1,7 +1,7 @@
 {
   "name": "@hibuddy/web-ui",
   "description": "HiBuddy Web UI customization: client modules + Slots injection (settings cards, workbench panels)",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "license": "MIT",
