@@ -28,6 +28,7 @@ profile/*/.plugin-manager/
 
 # Local boot/runtime logs (never commit)
 dsh-boot.log
+dsh-boot.err.log
 
 # Playwright transient output
 tests/e2e/test-results/
