@@ -9,7 +9,7 @@ date: 2026-11-12
 # 生成式 UI 与 AG-UI 优化方案（借鉴 OpenMuse，不引入 JEV）
 
 > 依据：[OpenMuse 调研](../references/openmuse-research.md)（AG-UI 用法与可借鉴机制）、[ADR-007](../decisions/ADR-007-generative-ui-format.md)（组件指令路线，本文在其 §3.2/§3.4 基础上做增量）、[ADR-011](../decisions/ADR-011-butler-conversation-layer.md)（管家层收敛，R1 修订记录即本文 G3/G4 的 D2/D6 增补）、[butler-detail-design §11.3](../module-design/butler-detail-design.md)（AG-UI 管家层现状）。
-> 状态：accepted（2026-11-12 实施；P1 契约强化与 P2 管家层出口已落地并测试全绿，P3 生态接入序文档进行中；真机 E2E 验收待跑）。
+> 状态：accepted（2026-11-12 全部实施并验收：P1 契约强化、P2 管家层出口、P3 接入序文档落地；真机 Web E2E 8/8 通过 2.5m——含新增管家层 GenUI spec。E2E 发现并修复一处 G2 集成缺陷：用户消息原按内容指纹幂等，同一表单 payload 的两次提交（含合法现行 revision 提交）会在闸门看到前被静默吞掉，已改为按发送动作幂等（sendChat 每次生成 clientId，`postUserMessage` 显式键 `user-in:<clientId>`）。另登记两点口径：① canvas 原生会话把 `@[ui:…]` 前缀 envelope 渲染为 mention 式 chip（但勒页自绘不受影响）；② 本机 dsh 工作区已注册为 `D:\HibuddyWorkspace`，跑 E2E 须设 `HIBUDDY_E2E_WORKSPACE` 覆盖，否则工作区内写入会升级出审批卡导致轮次超时）。
 
 ## 1. 目标与非目标
 

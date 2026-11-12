@@ -550,3 +550,9 @@ S5/S7 收官后遗留观察项的集中处理；LLM 凭据失效导致部分真�
 **5. 4d 评估结论**：/plugins/events SSE 重试自愈 = dsh 原生 EventSource 标准自动重连语义（浏览器内建），非 HiBuddy 定制面，真机验证信息增量有限 → 维持观察；NSIS /S 静默安装 = 需重打包并静默安装影响本机已装版，且 S5 验收已覆盖交互路径安装后文件数比对，/S 差异仅在 UI/权限层 → 维持观察。
 
 **6. 文档同步（commit c0339ed）**：implementation-plan §4 验收记录表 S7 行补登通过（S7-A 2026-11-05 / S7-B 2026-11-09 收官 / B12′ D1–D5 2026-11-11），frontmatter date 同步。
+
+**7. GenUI/AG-UI 优化（[genui-agui-optimization.md](solutions/genui-agui-optimization.md)，2026-11-12：P1/P2/P3 全部实施并真机验收通过）**：
+- **实施**：G1 strict schema 校验 + revision/provenance（`genui-schema.ts` 159 行单测锚点）；G2 单行 `@[ui:<id>:<revision>]` 回传契约 + 宿侧 revision 闸门（butler 泵，stale/unknown 拒收并出可见通知、无模型轮）+ 客户端只读降级（revision-store）；G3 `ui_instructions` 持久化（schema v6）+ 只读端点（`/resident/api/ui-instruction`，账本 id 可达、历史 revision 可回看、未知 id 404）；G4 `render_ui` 第 9 件工具进管家面 + 账本 `kind='ui'` 附件引用 + 气泡内嵌渲染（[ADR-011](decisions/ADR-011-butler-conversation-layer.md) R1 修订）；G5 生态接入序文档（[ag-ui-research.md §8](references/ag-ui-research.md)）。提交：cd01dae（docs）、accab71（G1/G2）、49c236e（G3/G4）、8c98111（docs）、dfba450（polish）。
+- **E2E 发现并修复一处 G2 集成缺陷（commit ef9ac1f）**：用户消息原按内容指纹幂等（messages.ts 默认键），同一表单 payload 的两次提交（含合法现行 revision 提交）文本逐字节相同 → `addMessage` 静默去重 → 泵不醒、闸门不跑、通知不发；单元测试未覆盖因用例文本各不相同。修复 = 用户发送改按发送动作幂等（`sendChat` 每次生成 clientId，`postUserMessage` 显式键 `user-in:<clientId>`），补 butler.test.ts 单测锚点。
+- **真机 Web E2E 8/8（2.5m，commit b78b1c0 新增管家层 spec）**：approval×3、butler-genui（气泡 chart/form 渲染 → 表单提交过闸 → 更新同 id revision=2 → 旧面提交被拒出通知且无模型轮 → 历史 revision=1 可回看 → 未知 id 404 → console 干净）、genui（canvas 基本流）、recovery×2、run-timeline。
+- **两点口径登记**：① canvas 原生会话把 `@[ui:…]` 前缀 envelope 渲染为 mention 式 chip（按钮以 id 命名；但勒页自绘账本不受影响）——canvas spec 断言改为按 id 正则匹配；② 本机 dsh 工作区已注册为 `D:\HibuddyWorkspace`，跑 E2E 须设 `HIBUDDY_E2E_WORKSPACE` 覆盖，否则 spec 内"工作区内"写入实际落在沙箱根外 → 升级审批卡 → 轮次超时（genui/recovery/run-timeline 三例失败的根因，非代码回归；helpers.ts 预留的覆盖口生效）。
