@@ -43,12 +43,16 @@ test('generative UI basic flow: canvas form, send-back, shared state', async ({ 
   await awaitTurns(page, 1)
 
   // --- A4: fill + submit → structured envelope → model acknowledgment. -----
+  // G2 contract (genui-agui-optimization.md): the send-back is one
+  // `@[ui:<id>:<revision>]` line (the legacy multi-line marker is gone).
   await form.locator('input[type="text"]').fill('王五')
   await form.locator('select').selectOption('5 星')
   await form.locator('input[type="checkbox"]').check()
   await form.locator('button').click()
   await expect(form.locator('pre')).toContainText('王五', { timeout: 15_000 })
-  await expect(page.getByText('[generative-ui interaction]').first()).toBeVisible({ timeout: 30_000 })
+  // Native transcript renders the `@[ui:…]`-prefixed envelope as a mention-
+  // style chip (a button named from the id), so match by id, not exact text.
+  await expect(page.getByText(/ui:feedback-e2e:1/).first()).toBeVisible({ timeout: 30_000 })
   // The model reads the queued envelope next round; the second turn's tail is
   // the only signal that it actually answered (the envelope text alone would
   // match immediately and prove nothing). Citing 王五 in the reply is model
