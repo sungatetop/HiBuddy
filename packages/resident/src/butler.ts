@@ -111,8 +111,14 @@ export interface RenderedUiInstruction {
  */
 export interface ResidentButler {
   readonly sessionId: string
-  /** User text from the chat UI; records the inbound row and wakes the pump. */
-  postUserMessage(text: string): void
+  /**
+   * User text from the chat UI; records the inbound row and wakes the pump.
+   * `clientId` makes the send idempotent per SEND ACTION, not per content
+   * (genui-agui-optimization.md G2 E2E finding): two submits of the same form
+   * payload are byte-identical texts, and the content-fingerprint default
+   * would silently swallow the second before the send-back gate ever saw it.
+   */
+  postUserMessage(text: string, clientId?: string): void
   /** Event envelope / receipt / approval event from the host. */
   postEvent(input: {
     kind: 'event' | 'receipt' | 'approval'
@@ -380,8 +386,15 @@ export class ButlerRuntime implements ResidentButler {
   }
 
   /** Records the user's chat message and lets the pump pick it up. */
-  postUserMessage(text: string): void {
-    this.ledger.postInbound({ kind: 'text', text })
+  postUserMessage(text: string, clientId?: string): void {
+    // Per-send idempotency when the client supplies a clientId (the chat page
+    // generates one per send); without one the content-fingerprint default
+    // applies (host-side callers never send duplicates).
+    this.ledger.postInbound({
+      kind: 'text',
+      text,
+      ...(clientId !== undefined ? { idempotencyKey: `user-in:${clientId}` } : {}),
+    })
     this.wake()
   }
 

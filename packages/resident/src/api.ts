@@ -4,7 +4,7 @@
  *
  * Routes (all behind dsh's trust fence, same as the AG-UI bridge):
  * - `GET  /resident/api/messages` → `{ messages, status, unread }`
- * - `POST /resident/api/messages` `{ text }` → `202 { ok: true }`
+ * - `POST /resident/api/messages` `{ text, clientId? }` → `202 { ok: true }`
  * - `POST /resident/api/messages/read` `{ ids | upTo }` → `{ ok, marked }`
  * - `GET  /resident/api/attachment?id=` → bytes (Range-capable media stream)
  * - `GET  /resident/api/ui-instruction?id=&revision=` → one persisted render_ui
@@ -141,12 +141,19 @@ export function registerResidentApi(ctx: Context, current: () => ResidentButler 
         return
       }
       const body = await readJson(req)
-      const text = typeof body === 'object' && body !== null ? (body as { text?: unknown }).text : undefined
+      const payload = typeof body === 'object' && body !== null ? (body as { text?: unknown; clientId?: unknown }) : undefined
+      const text = payload?.text
       if (typeof text !== 'string' || text.trim() === '') {
         json(res, 400, { error: 'text is required' })
         return
       }
-      butler.postUserMessage(text.trim().slice(0, MAX_TEXT))
+      // Optional per-send idempotency key (the chat page generates one per
+      // send): identical texts (e.g. a form re-submitting the same payload)
+      // must still record, or the G2 gate never sees the second send.
+      const clientId = typeof payload?.clientId === 'string' && payload.clientId.trim() !== ''
+        ? payload.clientId.trim().slice(0, 100)
+        : undefined
+      butler.postUserMessage(text.trim().slice(0, MAX_TEXT), clientId)
       json(res, 202, { ok: true })
     })
 

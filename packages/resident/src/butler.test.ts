@@ -211,6 +211,23 @@ describe('ui send-back gate (genui-agui-optimization.md G2)', () => {
     expect(service.list({ direction: 'out' })).toHaveLength(2)
   })
 
+  it('records identical send-back texts per send action (clientId idempotency)', async () => {
+    const deps = depsWithRegistry(3)
+    const { runtime, service } = makeRuntime(deps)
+    await runtime.start()
+
+    // Two submits of the same stale payload are byte-identical texts (the
+    // user refilled the same fields) — the content-fingerprint default
+    // idempotency would swallow the second one before the gate ever saw it
+    // (found by the P2 E2E). A per-send clientId keeps both rows, so the
+    // gate rejects each with its own visible notice and no model turn.
+    runtime.postUserMessage(envelope('sales-form', 2), 'client-1')
+    runtime.postUserMessage(envelope('sales-form', 2), 'client-2')
+    await vi.waitFor(() => expect(service.pendingInbound()).toHaveLength(0))
+    expect(deps.liveFollowups).toHaveLength(0)
+    expect(service.list({ direction: 'out' })).toHaveLength(2)
+  })
+
   it('passes ordinary user text through untouched when no registry exists', async () => {
     const deps = fakeDeps({ live: true })
     const { runtime, service } = makeRuntime(deps)

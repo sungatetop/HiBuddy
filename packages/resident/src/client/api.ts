@@ -72,13 +72,19 @@ export async function fetchChat(): Promise<ChatSnapshot> {
   return (await response.json()) as ChatSnapshot
 }
 
-/** Sends one user message; the transcript poll picks up the reply. */
+/** Sends one user message; the transcript poll picks up the reply.
+ *
+ * Every send carries a fresh `clientId` so the host's idempotency keys on the
+ * SEND ACTION, not the content — identical texts (a form re-submitting the
+ * same payload) must still record, or the G2 send-back gate never sees the
+ * second send (genui-agui-optimization.md G2 E2E finding).
+ */
 export async function sendChat(text: string): Promise<void> {
   const response = await fetch('/resident/api/messages', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, clientId: crypto.randomUUID() }),
   })
   if (!response.ok) throw new Error(`chat API ${response.status}`)
 }
