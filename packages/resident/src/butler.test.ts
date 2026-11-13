@@ -118,6 +118,83 @@ describe('start', () => {
   })
 })
 
+describe('transcript paging', () => {
+  const row = (id: string, kind: Message['kind'], direction: Message['direction'], minute: number): Message => ({
+    id,
+    direction,
+    kind,
+    title: kind === 'event' ? undefined : '标题',
+    text: `内容 ${id}`,
+    idempotencyKey: `k-${id}`,
+    read: false,
+    delivered: false,
+    createdAt: `2026-11-05T00:${String(minute).padStart(2, '0')}:00.000Z`,
+  })
+
+  it('pages visible rows backwards with hasMore, probing past hidden event rows', async () => {
+    const deps = fakeDeps()
+    const { runtime } = makeRuntime(deps)
+    await runtime.start()
+
+    // Four visible rows with one hidden event row between v2 and v3.
+    store.addMessage(row('v1', 'text', 'in', 0))
+    store.addMessage(row('v2', 'report', 'out', 1))
+    store.addMessage(row('e1', 'event', 'in', 2))
+    store.addMessage(row('v3', 'approval', 'out', 3))
+    store.addMessage(row('v4', 'text', 'in', 4))
+
+    // Limit-1 windows force the probe to cross the hidden event row: each
+    // page must answer hasMore from *visible* rows, not raw ledger rows.
+    const page1 = runtime.messages(1)
+    expect(page1.messages.map((m) => m.id)).toEqual(['v4'])
+    expect(page1.hasMore).toBe(true)
+
+    const page2 = runtime.messages(1, page1.messages[0]!.id)
+    expect(page2.messages.map((m) => m.id)).toEqual(['v3'])
+    expect(page2.hasMore).toBe(true)
+
+    const page3 = runtime.messages(1, page2.messages[0]!.id)
+    expect(page3.messages.map((m) => m.id)).toEqual(['v2'])
+    expect(page3.hasMore).toBe(true)
+
+    const page4 = runtime.messages(1, page3.messages[0]!.id)
+    expect(page4.messages.map((m) => m.id)).toEqual(['v1'])
+    expect(page4.hasMore).toBe(false)
+  })
+
+  it('keeps pages disjoint when the walk crosses the raw 400-row page boundary', async () => {
+    const deps = fakeDeps()
+    const { runtime } = makeRuntime(deps)
+    await runtime.start()
+
+    // 402 hidden event rows older than four visible rows: the newest raw
+    // page cannot hold every visible row, so the walk must continue from
+    // the page's OLDEST row (regression: cursoring from the newest row
+    // re-read the page and duplicated rows).
+    const bulk = store.db.prepare(
+      `INSERT INTO messages (id, direction, kind, text, idempotency_key, read, delivered, created_at)
+       VALUES (?, 'in', 'event', 'e', ?, 1, 1, ?)`,
+    )
+    store.transaction(() => {
+      for (let i = 0; i < 402; i++) {
+        bulk.run(`e${String(i).padStart(4, '0')}`, `k-e${i}`, `2026-11-05T00:00:${String(i % 60).padStart(2, '0')}.000Z`)
+      }
+    })
+    store.addMessage(row('v1', 'text', 'in', 0))
+    store.addMessage(row('v2', 'report', 'out', 1))
+    store.addMessage(row('v3', 'approval', 'out', 2))
+    store.addMessage(row('v4', 'text', 'in', 3))
+
+    const page1 = runtime.messages(2)
+    expect(page1.messages.map((m) => m.id)).toEqual(['v3', 'v4'])
+    expect(page1.hasMore).toBe(true)
+
+    const page2 = runtime.messages(2, page1.messages[0]!.id)
+    expect(page2.messages.map((m) => m.id)).toEqual(['v1', 'v2'])
+    expect(page2.hasMore).toBe(false)
+  })
+})
+
 describe('turn pump', () => {
   it('consumes inbound rows one batch per turn and wakes only when work exists', async () => {
     const deps = fakeDeps({ live: true })

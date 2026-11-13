@@ -266,7 +266,13 @@ export class MessageService {
 
   /** Newest-first list (inbox) or oldest-first replay (chat). */
   list(
-    options: { direction?: MessageDirection; unreadOnly?: boolean; oldestFirst?: boolean; limit?: number } = {},
+    options: {
+      direction?: MessageDirection
+      unreadOnly?: boolean
+      oldestFirst?: boolean
+      limit?: number
+      beforeId?: string
+    } = {},
   ): Message[] {
     return this.store.listMessages(options)
   }

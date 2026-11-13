@@ -65,6 +65,16 @@ const styles = {
     gap: 8,
   } as CSSProperties,
   time: { alignSelf: 'center', fontSize: 11, color: '#9a9a9a', margin: '6px 0' } as CSSProperties,
+  loadEarlier: {
+    alignSelf: 'center',
+    padding: '4px 14px',
+    borderRadius: 12,
+    border: '1px solid #dcdcdc',
+    background: '#ffffff',
+    color: '#576b95',
+    fontSize: 12,
+    cursor: 'pointer',
+  } as CSSProperties,
   rowLeft: { display: 'flex', justifyContent: 'flex-start' } as CSSProperties,
   rowRight: { display: 'flex', justifyContent: 'flex-end' } as CSSProperties,
   bubble: {
@@ -291,6 +301,35 @@ function boundaryLabel(current: ChatMessage, previous: ChatMessage | undefined):
   return undefined
 }
 
+/** Size of one "load earlier" history page. */
+const EARLIER_PAGE = 60
+/** Distance from the list bottom (px) that still counts as "at the bottom". */
+const AT_BOTTOM_PX = 64
+
+/** Merges the poll's newest window with the history pages the user loaded.
+ *
+ * Dedupe by id (a row lands in both the older pages and the poll window once
+ * new traffic pushes it out of the window's edge), keeps not-yet-landed
+ * optimistic rows (`local-*` ids whose direction+text has no durable twin
+ * yet), and sorts oldest-first for rendering.
+ */
+function mergeTranscript(
+  windowMessages: ChatMessage[],
+  older: ChatMessage[],
+  current: ChatMessage[],
+): ChatMessage[] {
+  const byId = new Map<string, ChatMessage>()
+  for (const message of older) byId.set(message.id, message)
+  for (const message of windowMessages) byId.set(message.id, message)
+  const landed = new Set(windowMessages.map((message) => `${message.direction}\u0000${message.text}`))
+  const merged: ChatMessage[] = []
+  for (const message of byId.values()) {
+    if (message.id.startsWith('local-') && landed.has(`${message.direction}\u0000${message.text}`)) continue
+    merged.push(message)
+  }
+  return merged.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+}
+
 /** Renders the chat page into the layout's keyed `main` panel. */
 export function ChatPage({ openSession }: ChatProps): ReactNode {
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -300,9 +339,21 @@ export function ChatPage({ openSession }: ChatProps): ReactNode {
   const [error, setError] = useState<string | undefined>(undefined)
   const [drawer, setDrawer] = useState(false)
   const [preview, setPreview] = useState<ChatAttachment | undefined>(undefined)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingEarlier, setLoadingEarlier] = useState(false)
   const listRef = useRef<HTMLDivElement | null>(null)
   /** Outbound ids already marked read, so the poll never re-sends them. */
   const markedRef = useRef<ReadonlySet<string>>(new Set())
+  /** The poll's newest-window rows (older history lives in `olderRef`). */
+  const windowRef = useRef<ChatMessage[]>([])
+  /** History pages the user loaded via "load earlier" (kept newest-last). */
+  const olderRef = useRef<ChatMessage[]>([])
+  /** Whether the viewport hugs the list bottom — only then the poll follows it. */
+  const atBottomRef = useRef(true)
+  /** Set on an explicit send: the next layout pass scrolls to bottom regardless. */
+  const forceBottomRef = useRef(false)
+  /** Previous scrollHeight during a prepend; the next layout pass restores the anchor. */
+  const anchorRef = useRef<number | null>(null)
 
   useEffect(() => {
     let disposed = false
@@ -310,12 +361,15 @@ export function ChatPage({ openSession }: ChatProps): ReactNode {
       try {
         const snapshot = await fetchChat()
         if (disposed) return
-        setMessages(snapshot.messages)
+        windowRef.current = snapshot.messages
+        setHasMore(snapshot.hasMore)
+        setMessages((current) => mergeTranscript(snapshot.messages, olderRef.current, current))
         setWorking(snapshot.status.state === 'working')
         setQuiet(snapshot.status.quiet === true)
         // Mark the visible outbound rows read (fire-and-forget). The poll is
         // the only read source: whatever the UI has shown is "seen" (B12′ §5.5).
-        const fresh = snapshot.messages
+        const visible = [...olderRef.current, ...snapshot.messages]
+        const fresh = visible
           .filter((message) => message.direction === 'out' && !markedRef.current.has(message.id))
           .map((message) => message.id)
         if (fresh.length > 0) {
@@ -335,15 +389,51 @@ export function ChatPage({ openSession }: ChatProps): ReactNode {
     }
   }, [])
 
+  /** Fetches one older page; the layout pass keeps the viewport anchored. */
+  const loadEarlier = async (): Promise<void> => {
+    if (loadingEarlier) return
+    const oldest = messages.find((message) => !message.id.startsWith('local-'))
+    if (oldest === undefined) return
+    setLoadingEarlier(true)
+    try {
+      const page = await fetchChat({ limit: EARLIER_PAGE, before: oldest.id })
+      if (page.messages.length === 0) {
+        setHasMore(false)
+        return
+      }
+      anchorRef.current = listRef.current?.scrollHeight ?? null
+      olderRef.current = [...page.messages, ...olderRef.current]
+      setHasMore(page.hasMore)
+      setMessages((current) => mergeTranscript(windowRef.current, olderRef.current, current))
+      setError(undefined)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setLoadingEarlier(false)
+    }
+  }
+
   useEffect(() => {
     const node = listRef.current
-    if (node !== null) node.scrollTop = node.scrollHeight
+    if (node === null) return
+    if (anchorRef.current !== null) {
+      // Prepend (history page): grow kept at the top — hold the viewport.
+      node.scrollTop += node.scrollHeight - anchorRef.current
+      anchorRef.current = null
+      return
+    }
+    if (forceBottomRef.current || atBottomRef.current) {
+      node.scrollTop = node.scrollHeight
+      forceBottomRef.current = false
+    }
   }, [messages, working])
 
   const submit = async (): Promise<void> => {
     const text = draft.trim()
     if (text === '') return
     setDraft('')
+    // An explicit send always brings the viewport back to the bottom.
+    forceBottomRef.current = true
     // Optimistic bubble; the next poll replaces it with the durable row.
     setMessages((current) => [
       ...current,
@@ -371,7 +461,25 @@ export function ChatPage({ openSession }: ChatProps): ReactNode {
         </button>
       </div>
 
-      <div ref={listRef} style={styles.list}>
+      <div
+        ref={listRef}
+        style={styles.list}
+        onScroll={() => {
+          const node = listRef.current
+          if (node === null) return
+          atBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < AT_BOTTOM_PX
+        }}
+      >
+        {hasMore ? (
+          <button
+            type="button"
+            style={styles.loadEarlier}
+            disabled={loadingEarlier}
+            onClick={() => void loadEarlier()}
+          >
+            {loadingEarlier ? '加载中…' : '加载更早消息'}
+          </button>
+        ) : null}
         {messages.length === 0 ? <div style={styles.empty}>{GREETING}</div> : null}
         {messages.map((message, index) => {
           const label = boundaryLabel(message, messages[index - 1])

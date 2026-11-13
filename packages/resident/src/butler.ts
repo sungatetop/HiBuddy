@@ -150,7 +150,7 @@ export interface ResidentButler {
   /** Butler decision on one pending approval (dangerous ones need a user reply first). */
   resolveApproval(id: string, approved: boolean): { ok: boolean; error?: string }
   /** Chat transcript for the UI: user text + butler outbound (events/receipts hidden). */
-  messages(limit?: number): Message[]
+  messages(limit?: number, beforeId?: string): { messages: Message[]; hasMore: boolean }
   /** One attachment row by id (the host's file-serving route). */
   attachment(id: string): (MessageAttachment & { messageId: string }) | undefined
   /** One persisted generative-UI instruction by id (latest, or a given revision). */
@@ -435,12 +435,30 @@ export class ButlerRuntime implements ResidentButler {
   /**
    * The user-facing transcript: user text and every outbound row. Event
    * envelopes and worker receipts are internal inputs and stay invisible.
+   *
+   * Backward cursor paging: the window holds the newest `limit` visible rows
+   * (strictly before `beforeId` when given) plus a `hasMore` probe — true iff
+   * at least one more visible row exists beyond the window. Raw ledger pages
+   * are walked until the probe is answered, so an event-heavy stretch never
+   * produces a false "no earlier messages".
    */
-  messages(limit = 200): Message[] {
-    return this.ledger
-      .list({ oldestFirst: true, limit: 400 })
-      .filter((message) => message.direction === 'out' || message.kind === 'text')
-      .slice(-limit)
+  messages(limit = 200, beforeId?: string): { messages: Message[]; hasMore: boolean } {
+    const visible: Message[] = []
+    let cursor = beforeId
+    let exhausted = false
+    while (visible.length <= limit && !exhausted) {
+      const page = this.ledger.list({ oldestFirst: false, limit: 400, beforeId: cursor })
+      if (page.length < 400) exhausted = true
+      // The page is newest-first: continue from its oldest row so pages
+      // never overlap.
+      if (page.length > 0) cursor = page[page.length - 1]!.id
+      for (const message of page) {
+        if (message.direction === 'out' || message.kind === 'text') visible.push(message)
+      }
+    }
+    // Newest-first walk; reverse into the chat's oldest-first order.
+    const hasMore = visible.length > limit
+    return { messages: visible.slice(0, limit).reverse(), hasMore }
   }
 
   attachment(id: string): (MessageAttachment & { messageId: string }) | undefined {

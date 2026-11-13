@@ -729,21 +729,29 @@ export class Store {
       /** Oldest-first when true (chat replay); newest-first by default (inbox). */
       oldestFirst?: boolean
       limit?: number
+      /** Backward cursor: only rows strictly before this message id (chat "load earlier"). */
+      beforeId?: string
     } = {},
   ): Message[] {
     const { direction, unreadOnly = false, undeliveredOnly = false, oldestFirst = false } = options
     const limit = options.limit ?? 200
-    const filters = [
-      direction ? 'direction = ?' : undefined,
-      // Unread is an OUTBOUND concept: the butler's messages the user has not
-      // seen yet. Inbound rows (user text, events) are the user's own view.
-      unreadOnly ? "read = 0 AND direction = 'out'" : undefined,
-      undeliveredOnly ? 'delivered = 0' : undefined,
-    ].filter(Boolean)
+    const filters: string[] = []
+    const params: SQLInputValue[] = []
+    if (direction) {
+      filters.push('direction = ?')
+      params.push(direction)
+    }
+    // Unread is an OUTBOUND concept: the butler's messages the user has not
+    // seen yet. Inbound rows (user text, events) are the user's own view.
+    if (unreadOnly) filters.push("read = 0 AND direction = 'out'")
+    if (undeliveredOnly) filters.push('delivered = 0')
+    if (options.beforeId !== undefined) {
+      // Rowid comparison against the cursor row: unknown ids yield no rows.
+      filters.push('rowid < (SELECT rowid FROM messages WHERE id = ?)')
+      params.push(options.beforeId)
+    }
     const where = filters.length > 0 ? ` WHERE ${filters.join(' AND ')}` : ''
     const order = oldestFirst ? 'ASC' : 'DESC'
-    const params: SQLInputValue[] = []
-    if (direction) params.push(direction)
     params.push(limit)
     const rows = this.db
       .prepare(`SELECT * FROM messages${where} ORDER BY rowid ${order} LIMIT ?`)

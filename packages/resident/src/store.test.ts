@@ -282,6 +282,66 @@ describe('messages', () => {
   })
 })
 
+describe('message cursor paging (chat "load earlier")', () => {
+  const base = {
+    id: 'c1',
+    direction: 'out' as const,
+    kind: 'report' as const,
+    idempotencyKey: 'k-c1',
+    title: '任务完成',
+    text: '整理完成',
+    read: false,
+    delivered: false,
+    createdAt: '2026-11-05T00:00:00.000Z',
+  }
+
+  const seed = (store: Store): void => {
+    for (const [index, id] of ['c1', 'c2', 'c3', 'c4', 'c5'].entries()) {
+      store.addMessage({ ...base, id, idempotencyKey: `k-${id}`, createdAt: `2026-11-05T00:0${index}:00.000Z` })
+    }
+  }
+
+  it('returns rows strictly before the cursor, honoring the order flag', () => {
+    const store = Store.open(dir)
+    try {
+      seed(store)
+      // Default is newest-first (the backward walk).
+      expect(store.listMessages({ limit: 2, beforeId: 'c3' }).map((m) => m.id)).toEqual(['c2', 'c1'])
+      expect(store.listMessages({ oldestFirst: true, limit: 2, beforeId: 'c3' }).map((m) => m.id)).toEqual(['c1', 'c2'])
+      expect(store.listMessages({ oldestFirst: true, limit: 10 }).map((m) => m.id)).toEqual([
+        'c1',
+        'c2',
+        'c3',
+        'c4',
+        'c5',
+      ])
+    } finally {
+      store.close()
+    }
+  })
+
+  it('yields no rows for an unknown cursor and walks the whole ledger backwards', () => {
+    const store = Store.open(dir)
+    try {
+      seed(store)
+      expect(store.listMessages({ limit: 10, beforeId: 'missing' })).toEqual([])
+      // Backward walk: each page is newest-first, continue from its oldest
+      // row; pages stay disjoint and cover every row before the cursor.
+      const walked: string[] = []
+      let cursor: string | undefined = 'c5'
+      while (cursor !== undefined) {
+        const page = store.listMessages({ limit: 2, beforeId: cursor })
+        if (page.length === 0) break
+        walked.unshift(...page.map((m) => m.id).reverse())
+        cursor = page[page.length - 1]!.id
+      }
+      expect(walked).toEqual(['c1', 'c2', 'c3', 'c4'])
+    } finally {
+      store.close()
+    }
+  })
+})
+
 describe('worker sessions and settings', () => {
   it('upserts one worker session per ticket', () => {
     const store = Store.open(dir)

@@ -57,13 +57,24 @@ export async function fetchUiInstruction(src: string): Promise<UiInstruction> {
 
 export interface ChatSnapshot {
   messages: ChatMessage[]
+  /** True when older messages exist beyond this window ("load earlier" affordance). */
+  hasMore: boolean
   status: { sessionId: string; state: string; pendingInbound: number; quiet?: boolean }
   unread: number
 }
 
-/** Reads the transcript + butler status. */
-export async function fetchChat(): Promise<ChatSnapshot> {
-  const response = await fetch('/resident/api/messages', {
+/** Reads the transcript + butler status.
+ *
+ * Backward cursor paging: omit `before` for the newest window; pass the
+ * oldest loaded id to fetch the next page of earlier messages (`limit`
+ * window size, host caps at 500).
+ */
+export async function fetchChat(params?: { limit?: number; before?: string }): Promise<ChatSnapshot> {
+  const search = new URLSearchParams()
+  if (params?.limit !== undefined) search.set('limit', String(params.limit))
+  if (params?.before !== undefined) search.set('before', params.before)
+  const query = search.toString()
+  const response = await fetch(`/resident/api/messages${query === '' ? '' : `?${query}`}`, {
     method: 'GET',
     credentials: 'same-origin',
     headers: { accept: 'application/json' },

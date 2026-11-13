@@ -128,8 +128,18 @@ export function registerResidentApi(ctx: Context, current: () => ResidentButler 
 
     route('/resident/api/messages', 'GET, POST', async (req, res, butler) => {
       if (req.method === 'GET' || req.method === 'HEAD') {
+        // Backward cursor paging for the chat transcript: `limit` window size
+        // (1..500, default 200), `before` = return rows strictly older than
+        // that message id. The newest window omits both params.
+        const url = new URL(req.url ?? '/', 'http://localhost')
+        const parsedLimit = Number.parseInt(url.searchParams.get('limit') ?? '', 10)
+        const limit = Number.isInteger(parsedLimit) && parsedLimit >= 1 ? Math.min(parsedLimit, 500) : 200
+        const before = url.searchParams.get('before') ?? undefined
+        const beforeId = before !== undefined && before !== '' ? before : undefined
+        const page = butler.messages(limit, beforeId)
         json(res, 200, {
-          messages: butler.messages(),
+          messages: page.messages,
+          hasMore: page.hasMore,
           status: butler.status(),
           unread: butler.unreadCount(),
         })
