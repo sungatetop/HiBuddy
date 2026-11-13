@@ -35,6 +35,7 @@ import { prepareAttachments, type AttachmentRequest } from './attachments.ts'
 import {
   CHANNEL_IDS,
   CHANNEL_SESSION_PREFIXES,
+  discoverDingtalkSessions,
   parseChannelConfig,
   type ChannelConfig,
   type ChannelId,
@@ -795,13 +796,23 @@ export class ButlerRuntime implements ResidentButler {
   }): { ok: boolean; sourceId?: string; error?: string } {
     if (!CHANNEL_IDS.includes(input.channel)) return { ok: false, error: `未知渠道 ${input.channel}` }
     let sessionId = input.sessionId?.trim()
-    if (sessionId === undefined || sessionId === '') sessionId = this.discoverChannelSession(input.channel)
+    if (sessionId === undefined || sessionId === '') {
+      const candidates = this.discoverChannelSession(input.channel)
+      if (candidates.length === 1) sessionId = candidates[0]
+      else if (candidates.length > 1) {
+        return {
+          ok: false,
+          error:
+            `该渠道发现 ${candidates.length} 个候选会话：${candidates.join('、')}。` +
+            '请确认要订阅哪一个，显式提供 session_id 后重试。',
+        }
+      }
+    }
     if (sessionId === undefined || sessionId === '') {
       return {
         ok: false,
         error:
-          '无法定位渠道会话：先在渠道里发一条消息让插件建会话，或显式提供 session_id' +
-          (CHANNEL_SESSION_PREFIXES[input.channel] === undefined ? '（该渠道无会话 id 前缀，必须显式提供）。' : '。'),
+          '无法定位渠道会话：先在渠道里发一条消息让插件建会话（钉钉则需先完成过一次对话以写入绑定），或显式提供 session_id。',
       }
     }
     if (this.listChannelSources().some((source) => source.sessionId === sessionId)) {
@@ -836,20 +847,22 @@ export class ButlerRuntime implements ResidentButler {
   }
 
   /**
-   * Finds the channel plugin's agent session by the channel's session-id
-   * prefix (most recent match wins). Channels without a prefix (dingtalk)
-   * need an explicit session id.
+   * Candidates for the channel plugin's agent session. Prefixed channels
+   * scan live sessions by id prefix (creation order — the last is the most
+   * recently created chat). dingtalk has no prefix: its sessions come from
+   * the plugin's persisted bindings stores (discoverDingtalkSessions), which
+   * works even when the session is not live.
    */
-  private discoverChannelSession(channel: ChannelId): string | undefined {
+  private discoverChannelSession(channel: ChannelId): string[] {
+    if (channel === 'dingtalk') return discoverDingtalkSessions()
     const prefix = CHANNEL_SESSION_PREFIXES[channel]
-    if (prefix === undefined) return undefined
+    if (prefix === undefined) return []
     const sessions = this.deps.ctx.get('sessions') as { list(): Array<{ id: unknown }> } | undefined
-    if (sessions === undefined) return undefined
-    const matches = sessions
+    if (sessions === undefined) return []
+    return sessions
       .list()
       .map((session) => String(session.id))
       .filter((id) => id.startsWith(prefix))
-    return matches.at(-1)
   }
 
   resolveApproval(id: string, approved: boolean): { ok: boolean; error?: string } {

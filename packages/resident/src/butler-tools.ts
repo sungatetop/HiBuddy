@@ -458,9 +458,10 @@ export function createButlerTools() {
       'send_message_to_user, delegate with create_session, or ignore. Nothing arrives from unsubscribed chats. ' +
       'add: give channel and optionally condition (a "when to care" hint shown to you on every message), name, ' +
       'and session_id — omit session_id and the channel plugin\'s agent session is discovered automatically ' +
-      '(requires the chat to have at least one message already; DingTalk sessions have no discoverable id prefix, ' +
-      'so always pass session_id there). Subscribing never replays history — only messages sent AFTER subscribing ' +
-      'reach you. list/remove/enable/disable act on subscription ids.',
+      '(wechat/lark/onebot: the chat must have messaged recently so its session is live; dingtalk: discovered ' +
+      'from the plugin\'s persisted bindings, i.e. the conversation must have completed at least one exchange). ' +
+      'When SEVERAL candidate sessions exist the action fails and lists them — pick one and pass session_id. ' +
+      'Subscribing never replays history — only messages sent AFTER subscribing reach you. list/remove/enable/disable act on subscription ids.',
     parameters: {
       action: {
         type: 'string',

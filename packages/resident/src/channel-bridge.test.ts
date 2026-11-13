@@ -5,12 +5,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import {
   ChannelBridge,
+  discoverDingtalkSessions,
   extractInboundMessages,
   parseChannelConfig,
   parseChannelCursor,
@@ -266,7 +267,8 @@ describe('reconcile sweep', () => {
     expect(store.getSource(id)!.cursor).toBeUndefined() // never baselined either
   })
 
-  it('caps each pass at the reconcile window and continues next pass', () => {
+  // 500+ ledger inserts per pass — slow on real disks, give it room.
+  it('caps each pass at the reconcile window and continues next pass', { timeout: 30_000 }, () => {
     const { ctx } = fakeCtx()
     const sessions = new FakeSessions()
     sessions.add('channel-wechat-1')
@@ -322,6 +324,39 @@ describe('start / stop', () => {
       expect(channelEvents()).toHaveLength(1)
     } finally {
       vi.useRealTimers()
+    }
+  })
+})
+
+describe('dingtalk discovery (bindings stores)', () => {
+  const UUID = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
+
+  it('collects session ids from default robot, extra robots, and digital employees', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dingtalk-state-'))
+    try {
+      mkdirSync(dir, { recursive: true })
+      mkdirSync(join(dir, 'accounts', 'sales'), { recursive: true })
+      mkdirSync(join(dir, 'digital-employees', 'emp-1'), { recursive: true })
+      writeFileSync(join(dir, 'bindings.json'), JSON.stringify({ 'cid:a': UUID(1) }))
+      writeFileSync(join(dir, 'accounts', 'sales', 'bindings.json'), JSON.stringify({ 'cid:b': UUID(2) }))
+      writeFileSync(
+        join(dir, 'digital-employees', 'emp-1', 'bindings.json'),
+        JSON.stringify({ 'cid:c': UUID(3), 'cid:d': 'not-a-session-id', 'cid:e': UUID(1) }),
+      )
+      expect(discoverDingtalkSessions(dir)).toEqual([UUID(1), UUID(2), UUID(3)]) // deduped, uuid-format only
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('returns empty for a missing or malformed state dir', () => {
+    expect(discoverDingtalkSessions(join(tmpdir(), 'dingtalk-state-absent'))).toEqual([])
+    const dir = mkdtempSync(join(tmpdir(), 'dingtalk-state-'))
+    try {
+      writeFileSync(join(dir, 'bindings.json'), '{broken json')
+      expect(discoverDingtalkSessions(dir)).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
     }
   })
 })

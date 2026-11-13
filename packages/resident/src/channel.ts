@@ -32,6 +32,9 @@
  * design §6) — the butler's envelope frames it as data, never instructions.
  */
 
+import { readdirSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { SourceInstance } from './domain.ts'
@@ -54,13 +57,58 @@ export type ChannelId = (typeof CHANNEL_IDS)[number]
 /**
  * Session-id prefix per channel (used by the butler's discovery when adding a
  * subscription without an explicit session id). dingtalk sessions carry a
- * bare randomUUID — no prefix, explicit session id required.
+ * bare randomUUID — no prefix; discovery reads the plugin's bindings stores
+ * instead (discoverDingtalkSessions).
  */
 export const CHANNEL_SESSION_PREFIXES: Record<ChannelId, string | undefined> = {
   wechat: 'channel-wechat-',
   lark: 'lark-',
   onebot: 'onebot-',
   dingtalk: undefined,
+}
+
+/** The dingtalk plugin's own state dir (its paths.js: env override or ~/.dsh-dingtalk). */
+export function dingtalkStateDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.DSH_DINGTALK_STATE_DIR ?? join(homedir(), '.dsh-dingtalk')
+}
+
+/** dingtalk session ids are bare randomUUIDs (bridge.js: sessionId(randomUUID())). */
+const DINGTALK_SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Discovers dingtalk agent sessions from the plugin's persisted bindings
+ * stores (dsh-dingtalk 0.10.2): each conversation→session binding lives as a
+ * plain `{conversationId: sessionId}` JSON map at `bindings.json` under the
+ * default robot's state dir, each extra robot's `accounts/<id>/`, and each
+ * digital employee's `digital-employees/<uuid>/`. Values are bare UUIDs —
+ * format-checked so foreign keys never leak in; duplicates dedupe. Unreadable
+ * or missing files are skipped (a robot without credentials has no bindings).
+ */
+export function discoverDingtalkSessions(stateDir: string = dingtalkStateDir()): string[] {
+  const found = new Set<string>()
+  const files: string[] = [join(stateDir, 'bindings.json')]
+  for (const sub of ['accounts', 'digital-employees']) {
+    try {
+      for (const entry of readdirSync(join(stateDir, sub), { withFileTypes: true })) {
+        if (entry.isDirectory()) files.push(join(stateDir, sub, entry.name, 'bindings.json'))
+      }
+    } catch {
+      // Subtree absent — nothing to add.
+    }
+  }
+  for (const file of files) {
+    let map: unknown
+    try {
+      map = JSON.parse(readFileSync(file, 'utf8'))
+    } catch {
+      continue // unreadable — skip
+    }
+    if (typeof map !== 'object' || map === null) continue
+    for (const value of Object.values(map as Record<string, unknown>)) {
+      if (typeof value === 'string' && DINGTALK_SESSION_ID_RE.test(value)) found.add(value)
+    }
+  }
+  return [...found]
 }
 
 /** Live dsh session the bridge reads from (host `sessions` service face). */

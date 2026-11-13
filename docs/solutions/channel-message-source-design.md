@@ -35,7 +35,7 @@ date: 2026-11-13
 | wechat | `channel-wechat-<escapedPeerId>[~g<N>]`（`~g` 为会话代次，`/new` 递增；index.js:4588/4666） | `channel-wechat-` | 配置项 `cwd` 在会话创建时写入 header 且不可变 |
 | lark | `lark-<key>`（`SESSION_PREFIX = "lark-"`，key 按 chat/topic/workspace scope 派生；index.js:3250/3288） | `lark-` | 群聊 `requireMention` gating（默认 true） |
 | onebot | `onebot-<chatId>`（仅保留 `[A-Za-z0-9-]`；chat.js sessionIdForChat） | `onebot-` | `agentPreset`/`workspacePath` 可配；admin/member 分档 |
-| dingtalk | `sessionId(randomUUID())` + conversationId→session resume 映射（bridge.js:94-116） | **无稳定前缀** | 订阅须显式提供 session id（工具提示已声明） |
+| dingtalk | `sessionId(randomUUID())` + conversationId→session resume 映射（bridge.js:94-116） | **无稳定前缀** | 绑定持久化于 `~/.dsh-dingtalk{,/accounts/<id>,/digital-employees/<uuid>}/bindings.json`（朴素 `{conversationId: sessionId}` JSON，值为裸 UUID）；会话 header.cwd = `config.workspace || ~/dsh-dingtalk-workspace`（live 备用锚点） |
 
 **入站消息辨认**（dsh-session / dsh-llm 已核实）：渠道插件把平台消息经 `createUserMessage` 投进自己的会话，落为 `user/message` 事件，其 data（UserMessage）含 `{ id, content, source: { kind: 'user' } }`；合成注入（文件通知、skill 内容等）的 source.kind 是其他值。**入站判定 = `type === 'user/message'` 且 `source.kind === 'user'`**——管家不会把渠道 agent 的内部合成内容当成"人类说了话"。
 
@@ -77,7 +77,7 @@ date: 2026-11-13
 
 - `source_instances` 行：`{kind: 'channel', enabled, config: {channel, sessionId, name?, condition?}, cursor: {lastSeq?, lastScanAt?}}`。
 - **默认零订阅**：不自动监听全部聊天（隐私 + 注入风险面最小化）。
-- **管家经 `manage_channel_sources` 工具管理**（v3 新工具，挂 butler 工具集）：`list/add/remove/enable/disable`。add 不带 session_id 时按渠道前缀自动发现渠道插件会话（dingtalk 无前缀必须显式给）；add 可带 `condition`（"何时需要关注"的自然语言提示，随每条消息一起给到管家）。
+- **管家经 `manage_channel_sources` 工具管理**（v3 新工具，挂 butler 工具集）：`list/add/remove/enable/disable`。add 不带 session_id 时自动发现：三前缀渠道按 live 会话 id 前缀匹配（wechat/lark/onebot），**dingtalk 读插件持久化绑定文件**（`discoverDingtalkSessions`，扫 `~/.dsh-dingtalk` 下全部 bindings.json，值按 UUID 格式过滤去重——不依赖会话在线）；发现多个候选时报错列出全部、要求显式选择（不静默取最新），唯一候选自动采用。add 可带 `condition`（"何时需要关注"的自然语言提示，随每条消息一起给到管家）。
 - 订阅变更即时生效：桥每次投递都从 store 现读订阅行，无缓存失效问题。
 
 ## 6. 安全口径
@@ -89,8 +89,8 @@ date: 2026-11-13
 
 ## 7. 分期
 
-- **C1（已实施，2026-11-13）**：ChannelBridge（`packages/resident/src/channel.ts`，session/event 推送 + 60s 对账兜底）+ EventData `channel_message` + `manage_channel_sources` 管家工具 + store `deleteSource`。三前缀发现（wechat/lark/onebot）；dingtalk 需显式 session id。
-- **C2**：dingtalk 会话识别适配——会话 id 为 randomUUID 无稳定前缀，候选方案：(a) 读插件状态文件的 conversationId→session 映射；(b) 真机核实其会话 header 的 cwd/preset 锚点可用性后按锚点识别。实施前真机定界。
+- **C1（已实施，2026-11-13）**：ChannelBridge（`packages/resident/src/channel.ts`，session/event 推送 + 60s 对账兜底）+ EventData `channel_message` + `manage_channel_sources` 管家工具 + store `deleteSource`。三前缀发现（wechat/lark/onebot）。
+- **C2（已实施，2026-11-13）**：dingtalk 会话识别——`discoverDingtalkSessions` 扫插件自有绑定存储（`$DSH_DINGTALK_STATE_DIR || ~/.dsh-dingtalk` 下 `bindings.json`、`accounts/<id>/bindings.json`、`digital-employees/<uuid>/bindings.json`，朴素 `{conversationId: sessionId}` 映射，值裸 UUID 格式过滤），不依赖会话在线；多候选报错列出、唯一候选自动采用。风险登记：bindings.json 是插件私有文件，dsh-dingtalk 版本钉死 0.10.2（ADR-005），插件升级时需核对该文件格式。
 - **C3（可选 P1，需先立 ADR）**：管家经渠道出站 API 代答/代发（推翻渠道回写裁剪，涉及身份与审批语义，本设计不做）。
 - **C4（可选）**：面板可视化订阅管理（现仅管家工具管理）；"仅私聊"订阅粒度开关。
 
@@ -103,6 +103,7 @@ date: 2026-11-13
 5. 监听不可用（停机/异常）期间的消息由对账兜底补齐（窗口每轮 ≤500 事件，逐轮追平）。
 6. `manage_channel_sources` 五个动作可用；停用订阅双路零投递且游标保留；移除订阅连游标一起删除。
 7. onebot 保持 disabled 时不产生任何投递活动。
+8. dingtalk 订阅发现：绑定存储中恰好一个会话时自动采用；多个时列出全部并要求显式 session_id；非 UUID 值与坏文件不致污染候选。
 
 ## 9. 开放问题
 

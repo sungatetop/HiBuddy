@@ -13,13 +13,13 @@
 | 计划与报告 | [progress-report.md](progress-report.md) | 各阶段验收记录与缺口清单：S0–S6 已通过（P0 交付 + S6 生态接入 2026-11-04 收官：CopilotKit 真机三场景、上游热激活缺口定界为 junction 部署 × pnpm 相对 symlink 并修复）；S7-A 原型真机验证（2026-11-05：三机制两过一缺口，profile 已还原） |
 | 参考资料 | [references/personal-agent-research.md](references/personal-agent-research.md) | 个人智能体深度调研（2024–2026）：商业产品/开源项目/设计理论三路证据，提炼"持久身份 + 私有上下文 + 受托代理权 + 常驻主动性"本质四要素论述与六条设计公理，含收编规律、可靠性数学等反面约束 |
 | 方案文档 | [solutions/butler-architecture-optimization.md](solutions/butler-architecture-optimization.md) | 管家架构优化建议：设计公理 × HiBuddy 现状逐条对照，O1–O9 建议（长期记忆内核与治理、grant 持久化与语义审计、审批可逆性维度、出站三模式契约、每日简报、MCP 评估、模型路由确定性、可靠性护栏），含排期与需立 ADR 事项 |
-| 方案文档 | [solutions/channel-message-source-design.md](solutions/channel-message-source-design.md) | 渠道消息事件源接入管家设计（draft v3 2026-11-13，推送架构）：四渠道插件（飞书/钉钉/微信/QQ，版本钉死、boot 验证过）入 profile 装配的机制事实（含各插件会话 id 派生实测、junction×相对 symlink 与 autoInstallPeers 纪律）；渠道消息直进管家轮次——宿监听 session/event 抽取入站消息（source.kind='user'）落消息账本唤醒管家泵，管家轮次自行研判（转告/create_session/忽略），60s 低频对账兜底；幂等键 channel:<sessionId>:<messageId> 三路收敛、游标仅为效率优化、首扫基线不回放；manage_channel_sources 管家工具管理订阅；不经 Trigger/FilterPipeline/独立研判层；C1 已实施（229 测试全绿）、C2/C3/C4 分期与验收标准 |
+| 方案文档 | [solutions/channel-message-source-design.md](solutions/channel-message-source-design.md) | 渠道消息事件源接入管家设计（draft v3 2026-11-13，推送架构）：四渠道插件（飞书/钉钉/微信/QQ，版本钉死、boot 验证过）入 profile 装配的机制事实（含各插件会话 id 派生实测、junction×相对 symlink 与 autoInstallPeers 纪律）；渠道消息直进管家轮次——宿监听 session/event 抽取入站消息（source.kind='user'）落消息账本唤醒管家泵，管家轮次自行研判（转告/create_session/忽略），60s 低频对账兜底；幂等键 channel:<sessionId>:<messageId> 三路收敛、游标仅为效率优化、首扫基线不回放；manage_channel_sources 管家工具管理订阅（多候选报错列出、唯一候选自动采用）；不经 Trigger/FilterPipeline/独立研判层；C1+C2 已实施（231 测试全绿，dingtalk 经插件 bindings 存储发现）、C3/C4 分期与验收标准 |
 
 ## 产品文档（docs/product/）
 
 | 文档 | 摘要 |
 |---|---|
-| [agent-butler-deep-thinking.md](product/agent-butler-deep-thinking.md) | 社区分享深度文章（配 assets/ 三张 SVG 示意图）：从"百会话困境"出发——会话即任务聚焦 worker、用户注意力即瓶颈，给出管家层四层架构、六条关键设计决策（会话即 worker / 管家是常驻 Agent Loop / 确定性层不决策 / 消息账本唯一用户面 / Ticket 委派账本 / 审批分级代管）、三层次感知管线与委派生命周期时序，以及确定性与智能分工、注意力 O(会话数)→O(目标数) 降维、主动即信任负债等反思 |
+| [agent-butler-deep-thinking.md](product/agent-butler-deep-thinking.md) | 社区分享深度文章（配 assets/ 三张 SVG 示意图）：从 AI Coding 工具与各类智能体平台的共同形态——"会话管理"——出发——会话即任务聚焦 worker、用户注意力即瓶颈，给出管家层四层架构、六条关键设计决策（会话即 worker / 管家是常驻 Agent Loop / 确定性层不决策 / 消息账本唯一用户面 / Ticket 委派账本 / 审批分级代管）、三层次感知管线与委派生命周期时序，以及确定性与智能分工、注意力 O(会话数)→O(目标数) 降维、主动即信任负债等反思 |
 
 ## 决策文档（docs/decisions/）
 
