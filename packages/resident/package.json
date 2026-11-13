@@ -1,7 +1,7 @@
 {
   "name": "@hibuddy/resident",
   "description": "HiBuddy resident layer: proactive orchestration above worker sessions (event sources, tickets, notifications) per resident-design.md",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "license": "MIT",

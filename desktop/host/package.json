@@ -1,7 +1,7 @@
 {
   "name": "@hibuddy/desktop-host",
   "description": "HiBuddy desktop host: RunAsNode process booting the hibuddy profile through dsh's runProfile",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "license": "MIT",

@@ -1,7 +1,7 @@
 {
   "name": "@hibuddy/ag-ui-bridge",
   "description": "HiBuddy AG-UI protocol bridge: exposes dsh sessions as an AG-UI HTTP+SSE endpoint (POST /agui)",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "license": "MIT",
