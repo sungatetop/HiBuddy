@@ -33,6 +33,7 @@ import { registerResidentAgui } from './agui.ts'
 import { registerResidentApi } from './api.ts'
 import { ApprovalBroker } from './approvals.ts'
 import { ButlerRuntime } from './butler.ts'
+import { ChannelBridge, RECONCILE_INTERVAL_MS } from './channel.ts'
 import { EdgeDetector } from './edge.ts'
 import { FilterPipeline } from './filter.ts'
 import { MonitorSource } from './monitor.ts'
@@ -185,6 +186,13 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
   const edge = new EdgeDetector(ctx, store, notifier)
   edge.start()
   logger.info('edge detector started (scan %ds, stall %dm, reminder %dm)', 30, 10, 30)
+  // Channel bridge (channel-message-source-design.md v3): channel messages are
+  // PUSHED into the butler conversation — session/event listener delivers
+  // immediately, a %ds reconcile sweep is the correctness safety net; the
+  // ledger's onInbound wakes the butler pump automatically.
+  const channelBridge = new ChannelBridge(ctx, store, notifier)
+  channelBridge.start()
+  logger.info('channel bridge started (push live, reconcile every %dms)', RECONCILE_INTERVAL_MS)
   // Chat data routes for the WeChat-style client panel (same trust fence as
   // dsh's own routes; headless compositions never register them).
   registerResidentApi(ctx, () => butler)
@@ -198,6 +206,7 @@ export async function apply(ctx: Context, config?: ResidentConfig): Promise<() =
   )
 
   return () => {
+    channelBridge.stop()
     edge.stop()
     butler?.stop()
     butler = undefined

@@ -170,6 +170,7 @@ export interface EventData {
     | 'monitor_degraded'
     | 'monitor_suggest'
     | 'source_triggered'
+    | 'channel_message'
     | 'stalled'
     | 'resumed'
     | 'question_unanswered'

@@ -16,6 +16,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { assertPlainArrays, RENDER_UI_DESCRIPTION, RENDER_UI_PARAMETERS } from '@hibuddy/web-ui'
 import { normalizeRevision, validateInstruction } from '@hibuddy/web-ui/genui-schema'
 import type { ResidentButler } from './butler.ts'
+import { CHANNEL_IDS } from './channel.ts'
 import { getResidentService } from './service-ref.ts'
 
 /** Cordis function-plugin name. */
@@ -448,6 +449,112 @@ export function createButlerTools() {
     },
   })
 
+  const manageChannelSources = defineTool({
+    name: 'manage_channel_sources',
+    description:
+      'Manage IM channel message subscriptions (WeChat / Lark / OneBot-QQ / DingTalk). ' +
+      'Messages from a SUBSCRIBED channel conversation are pushed into YOUR conversation as inbound ' +
+      '【事件】 envelopes (untrusted external data) — you then judge each one: relay it to the user via ' +
+      'send_message_to_user, delegate with create_session, or ignore. Nothing arrives from unsubscribed chats. ' +
+      'add: give channel and optionally condition (a "when to care" hint shown to you on every message), name, ' +
+      'and session_id — omit session_id and the channel plugin\'s agent session is discovered automatically ' +
+      '(requires the chat to have at least one message already; DingTalk sessions have no discoverable id prefix, ' +
+      'so always pass session_id there). Subscribing never replays history — only messages sent AFTER subscribing ' +
+      'reach you. list/remove/enable/disable act on subscription ids.',
+    parameters: {
+      action: {
+        type: 'string',
+        enum: ['list', 'add', 'remove', 'enable', 'disable'],
+        required: true,
+        description: 'What to do with channel subscriptions.',
+      },
+      channel: {
+        type: 'string',
+        enum: [...CHANNEL_IDS],
+        description: 'Which channel (add only).',
+      },
+      session_id: {
+        type: 'string',
+        description: 'The channel plugin\'s agent session id (add only; omitted = auto-discover by channel prefix).',
+      },
+      name: { type: 'string', description: 'Display name of the subscription (add only).' },
+      condition: {
+        type: 'string',
+        description: '"When to care" hint in natural language, shown to you with every message (add only).',
+      },
+      source_id: { type: 'string', description: 'Subscription id (remove/enable/disable only).' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          ok: { type: 'boolean', required: true, description: 'Whether the action succeeded.' },
+          error: { type: 'string', description: 'Reason when ok=false.' },
+          sourceId: { type: 'string', description: 'Subscription id (add returns the new one).' },
+          sources: {
+            type: 'json',
+            description: 'Array of {id, channel, sessionId, enabled, name?, condition?} (list only).',
+          },
+        },
+      },
+      render: (_args, value) => {
+        if (!value.ok) return text(`操作未生效：${value.error ?? '未知原因'}`)
+        if (value.sources !== undefined) {
+          const sources = value.sources as Array<{
+            id: string
+            channel: string
+            sessionId: string
+            enabled: boolean
+            name?: string
+            condition?: string
+          }>
+          if (sources.length === 0) return text('当前没有渠道订阅。用 add 订阅一个渠道会话后，该会话的新消息会推送到你们的对话中。')
+          return text(
+            [
+              `共 ${sources.length} 个渠道订阅：`,
+              ...sources.map(
+                (source) =>
+                  `- ${source.id}｜${source.channel}｜${source.sessionId}｜${source.enabled ? '启用' : '停用'}` +
+                  `${source.condition !== undefined ? `｜关注点：${source.condition}` : ''}`,
+              ),
+            ].join('\n'),
+          )
+        }
+        if (value.sourceId !== undefined) return text(`操作完成（订阅 ${value.sourceId}）。`)
+        return text('操作完成。')
+      },
+    },
+    async execute(args) {
+      const service = requireService()
+      switch (args.action) {
+        case 'list':
+          return { ok: true as const, sources: service.listChannelSources() }
+        case 'add': {
+          if (args.channel === undefined) return { ok: false as const, error: 'add 需要 channel 参数' }
+          const result = service.addChannelSource({
+            channel: args.channel,
+            ...(args.session_id !== undefined ? { sessionId: args.session_id } : {}),
+            ...(args.name !== undefined ? { name: args.name } : {}),
+            ...(args.condition !== undefined ? { condition: args.condition } : {}),
+          })
+          return result.ok ? { ok: true as const, sourceId: result.sourceId! } : { ok: false as const, error: result.error }
+        }
+        case 'remove': {
+          if (args.source_id === undefined) return { ok: false as const, error: 'remove 需要 source_id 参数' }
+          const result = service.removeChannelSource(args.source_id)
+          return result.ok ? { ok: true as const } : { ok: false as const, error: result.error }
+        }
+        case 'enable':
+        case 'disable': {
+          if (args.source_id === undefined) return { ok: false as const, error: `${args.action} 需要 source_id 参数` }
+          const result = service.setChannelSourceEnabled(args.source_id, args.action === 'enable')
+          return result.ok ? { ok: true as const } : { ok: false as const, error: result.error }
+        }
+      }
+    },
+  })
+
   return [
     sendMessageToUser,
     listWorkspaces,
@@ -457,6 +564,7 @@ export function createButlerTools() {
     listSessions,
     cancelSession,
     resolveApproval,
+    manageChannelSources,
     renderUi,
   ]
 }

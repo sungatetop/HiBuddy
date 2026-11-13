@@ -13,7 +13,7 @@
 | 计划与报告 | [progress-report.md](progress-report.md) | 各阶段验收记录与缺口清单：S0–S6 已通过（P0 交付 + S6 生态接入 2026-11-04 收官：CopilotKit 真机三场景、上游热激活缺口定界为 junction 部署 × pnpm 相对 symlink 并修复）；S7-A 原型真机验证（2026-11-05：三机制两过一缺口，profile 已还原） |
 | 参考资料 | [references/personal-agent-research.md](references/personal-agent-research.md) | 个人智能体深度调研（2024–2026）：商业产品/开源项目/设计理论三路证据，提炼"持久身份 + 私有上下文 + 受托代理权 + 常驻主动性"本质四要素论述与六条设计公理，含收编规律、可靠性数学等反面约束 |
 | 方案文档 | [solutions/butler-architecture-optimization.md](solutions/butler-architecture-optimization.md) | 管家架构优化建议：设计公理 × HiBuddy 现状逐条对照，O1–O9 建议（长期记忆内核与治理、grant 持久化与语义审计、审批可逆性维度、出站三模式契约、每日简报、MCP 评估、模型路由确定性、可靠性护栏），含排期与需立 ADR 事项 |
-| 方案文档 | [solutions/channel-message-source-design.md](solutions/channel-message-source-design.md) | 渠道消息事件源接入管家设计（draft v2 2026-11-13）：四渠道插件（飞书/钉钉/微信/QQ，版本钉死、boot 验证过）入 profile 装配的机制事实（含各插件会话 id 派生实测、junction×相对 symlink 与 autoInstallPeers 纪律）；channel SourceKind 三通道同构（dsh-superagent-prototype 飞书源为机制权威）——①session/event 事件拉前（秒级）②确定性扫描保底③活跃会话高频档，确定性指纹收敛三路幂等，untrusted 两级过滤、observe 默认；不接管渠道直聊、不回写渠道；C1/C1.5/C2/C3 分期与验收标准 |
+| 方案文档 | [solutions/channel-message-source-design.md](solutions/channel-message-source-design.md) | 渠道消息事件源接入管家设计（draft v3 2026-11-13，推送架构）：四渠道插件（飞书/钉钉/微信/QQ，版本钉死、boot 验证过）入 profile 装配的机制事实（含各插件会话 id 派生实测、junction×相对 symlink 与 autoInstallPeers 纪律）；渠道消息直进管家轮次——宿监听 session/event 抽取入站消息（source.kind='user'）落消息账本唤醒管家泵，管家轮次自行研判（转告/create_session/忽略），60s 低频对账兜底；幂等键 channel:<sessionId>:<messageId> 三路收敛、游标仅为效率优化、首扫基线不回放；manage_channel_sources 管家工具管理订阅；不经 Trigger/FilterPipeline/独立研判层；C1 已实施（229 测试全绿）、C2/C3/C4 分期与验收标准 |
 
 ## 产品文档（docs/product/）
 

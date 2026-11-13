@@ -32,6 +32,14 @@ import {
 } from '@hibuddy/web-ui/genui-schema'
 import type { ApprovalBrokerFace, PendingApproval } from './approvals.ts'
 import { prepareAttachments, type AttachmentRequest } from './attachments.ts'
+import {
+  CHANNEL_IDS,
+  CHANNEL_SESSION_PREFIXES,
+  parseChannelConfig,
+  type ChannelConfig,
+  type ChannelId,
+  type ChannelSourceInfo,
+} from './channel.ts'
 import type {
   ApprovalData,
   EventData,
@@ -184,6 +192,20 @@ export interface ResidentButler {
   status(): { sessionId: string; state: string; pendingInbound: number; quiet: boolean }
   /** Marks outbound rows read: a set of ids, or everything up to `upTo`. */
   markRead(input: { upTo?: string; ids?: string[] }): number
+  // ── channel subscriptions (channel-message-source-design.md v3) ──────────
+  /** All channel subscriptions (id/channel/session/enabled/condition). */
+  listChannelSources(): ChannelSourceInfo[]
+  /** Adds a subscription; without sessionId the plugin's session is discovered by id prefix. */
+  addChannelSource(input: {
+    channel: ChannelId
+    sessionId?: string
+    name?: string
+    condition?: string
+  }): { ok: boolean; sourceId?: string; error?: string }
+  /** Removes a subscription row entirely (its cursor dies with it). */
+  removeChannelSource(sourceId: string): { ok: boolean; error?: string }
+  /** Enables/disables a subscription without losing its cursor. */
+  setChannelSourceEnabled(sourceId: string, enabled: boolean): { ok: boolean; error?: string }
 }
 
 /** Inbound envelope body cap (perception B12′ §5.1). */
@@ -744,6 +766,90 @@ export class ButlerRuntime implements ResidentButler {
 
   pendingApprovals(): PendingApproval[] {
     return this.approvals?.pendingApprovals() ?? []
+  }
+
+  // ── channel subscriptions (channel-message-source-design.md v3) ───────────
+
+  listChannelSources(): ChannelSourceInfo[] {
+    return this.store
+      .listSources()
+      .filter((source) => source.kind === 'channel')
+      .map((source) => {
+        const config = parseChannelConfig(source.config)
+        return {
+          id: source.id,
+          enabled: source.enabled,
+          channel: config?.channel ?? ('wechat' as ChannelId),
+          sessionId: config?.sessionId ?? '',
+          ...(config?.name !== undefined ? { name: config.name } : {}),
+          ...(config?.condition !== undefined ? { condition: config.condition } : {}),
+        }
+      })
+  }
+
+  addChannelSource(input: {
+    channel: ChannelId
+    sessionId?: string
+    name?: string
+    condition?: string
+  }): { ok: boolean; sourceId?: string; error?: string } {
+    if (!CHANNEL_IDS.includes(input.channel)) return { ok: false, error: `未知渠道 ${input.channel}` }
+    let sessionId = input.sessionId?.trim()
+    if (sessionId === undefined || sessionId === '') sessionId = this.discoverChannelSession(input.channel)
+    if (sessionId === undefined || sessionId === '') {
+      return {
+        ok: false,
+        error:
+          '无法定位渠道会话：先在渠道里发一条消息让插件建会话，或显式提供 session_id' +
+          (CHANNEL_SESSION_PREFIXES[input.channel] === undefined ? '（该渠道无会话 id 前缀，必须显式提供）。' : '。'),
+      }
+    }
+    if (this.listChannelSources().some((source) => source.sessionId === sessionId)) {
+      return { ok: false, error: `该渠道会话已在订阅中（session ${sessionId}）。` }
+    }
+    const config: ChannelConfig = { channel: input.channel, sessionId }
+    if (input.name !== undefined && input.name.trim() !== '') config.name = input.name.trim()
+    if (input.condition !== undefined && input.condition.trim() !== '') config.condition = input.condition.trim()
+    const id = `src_${randomUUID()}`
+    this.store.upsertSource({ id, kind: 'channel', enabled: true, config })
+    // No cursor: the bridge's next sweep records the baseline — subscribing
+    // never replays the chat history (design v3 first-scan rule).
+    return { ok: true, sourceId: id }
+  }
+
+  removeChannelSource(sourceId: string): { ok: boolean; error?: string } {
+    const source = this.store.getSource(sourceId)
+    if (source === undefined || source.kind !== 'channel') {
+      return { ok: false, error: `未找到渠道订阅 ${sourceId}` }
+    }
+    this.store.deleteSource(sourceId)
+    return { ok: true }
+  }
+
+  setChannelSourceEnabled(sourceId: string, enabled: boolean): { ok: boolean; error?: string } {
+    const source = this.store.getSource(sourceId)
+    if (source === undefined || source.kind !== 'channel') {
+      return { ok: false, error: `未找到渠道订阅 ${sourceId}` }
+    }
+    this.store.upsertSource({ ...source, enabled })
+    return { ok: true }
+  }
+
+  /**
+   * Finds the channel plugin's agent session by the channel's session-id
+   * prefix (most recent match wins). Channels without a prefix (dingtalk)
+   * need an explicit session id.
+   */
+  private discoverChannelSession(channel: ChannelId): string | undefined {
+    const prefix = CHANNEL_SESSION_PREFIXES[channel]
+    if (prefix === undefined) return undefined
+    const sessions = this.deps.ctx.get('sessions') as { list(): Array<{ id: unknown }> } | undefined
+    if (sessions === undefined) return undefined
+    const matches = sessions
+      .list()
+      .map((session) => String(session.id))
+      .filter((id) => id.startsWith(prefix))
+    return matches.at(-1)
   }
 
   resolveApproval(id: string, approved: boolean): { ok: boolean; error?: string } {

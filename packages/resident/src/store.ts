@@ -485,6 +485,11 @@ export class Store {
     return rows.map((row) => this.getSource(row.id)!)
   }
 
+  /** Removes one source instance row entirely (butler `manage_channel_sources` removal). */
+  deleteSource(id: string): void {
+    this.db.prepare('DELETE FROM source_instances WHERE id = ?').run(id)
+  }
+
   // ── triggers ────────────────────────────────────────────────────────────
 
   saveTrigger(trigger: Trigger): void {
