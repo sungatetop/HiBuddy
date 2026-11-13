@@ -3,7 +3,7 @@ title: @hibuddy/resident 常驻层模块设计（S7-B）
 summary: 常驻层设计——管家会话（常驻 Agent Loop，小工具面）直接面向用户，经 send_message_to_user 双向对话、经 create_session 指派 worker（普通 dsh 会话）；事件源→事件信封→管家决策→委派→回执；审批由管家分级代管或升级请用户确认；微信式对话界面为唯一用户面，SQLite 持久化恢复；AG-UI 应用于管家层
 keywords: [常驻层, resident, 管家会话, butler, worker 会话, 事件源, 定时任务, 周期监控, 工作项, 消息面, 审批代管, S7-B, 模块设计]
 status: accepted
-date: 2026-11-09
+date: 2026-11-13
 ---
 
 # @hibuddy/resident 常驻层模块设计（S7-B）
@@ -125,6 +125,10 @@ interface SourceKind {
 - 去重指纹：上次检查快照 hash，无变化不发 Trigger（幂等）。
 - 退避：连续失败按倍增退避，上限封顶；连续 N 次失败标记来源降级并出系统问题通知（PRD FR-10 异常口径）。
 - 命中 → 发 Trigger → 走两级过滤（§6）。
+
+**channel（IM 渠道消息，四插件已入装配）**
+- 渠道插件（飞书/钉钉/微信/QQ）是 dsh 生态的独立 agent 面，管家不接管渠道直聊；渠道入站消息经 `channel` SourceKind 进入编排——宿侧确定性扫描已订阅会话（ADR-012 哲学），untrusted 载荷走两级过滤，observe 默认。
+- 机制事实（各插件会话 id 派生实测、dingtalk 无稳定前缀的适配缺口）与设计详见 [channel-message-source-design](../solutions/channel-message-source-design.md)。
 
 ## 5. 调度器
 

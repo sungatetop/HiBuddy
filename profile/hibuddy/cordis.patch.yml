@@ -354,3 +354,24 @@
   name: "@hibuddy/ag-ui-bridge"
   config:
     path: "/agui/debug"
+
+# ---------------------------------------------------------------------------
+# Channel plugins (2026-11-13): four IM channel bundles mounted via
+# profile/hibuddy/package.json dsh.profile.bundles — their own dsh.bundle.patch
+# rows compose automatically (verified via --dump-config: channel-wechat /
+# lark-channel / dsh-onebot + onebot-settings-remote / dsh-dingtalk).
+# Rows below are top-level same-id config/disabled overlays (bundle insert rows
+# are not configEditor-addressable; dsh-onebot-qq README T6 note applies).
+#
+# dsh-onebot-qq: M0 security — reverse mode with empty accessToken refuses to
+# start. Disabled until a NapCat/OneBot endpoint is configured; to enable,
+# restate config (mode/host/port/accessToken per plugin README) and drop the
+# disabled flag. Config rows here are top-level: later same-id row config
+# replaces the config object wholesale (see hibuddy-resident row semantics).
+- id: dsh-onebot
+  disabled: true
+  config:
+    mode: reverse
+    host: 127.0.0.1
+    port: 8643
+    accessToken: ""

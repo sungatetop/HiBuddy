@@ -5,6 +5,11 @@ packages:
   - tests/*
   # tests: 跨端集成测试（S4-7 起：Playwright E2E）
 
+# 渠道插件（dsh-onebot-qq 等声明大量 @deepseek-ai/* peer）：禁止 pnpm 自动安装 peers，
+# 防止从 registry 拉入版本错位副本——运行期 peer 统一由 dsh 宿解析层拦截到宿主安装树
+#（@hibuddy/resident 同机制已验证）；版本配对纪律见 ADR-005。
+autoInstallPeers: false
+
 # pnpm 12 settings moved here (package.json "pnpm" field is no longer read).
 # Native / postinstall builds required by the dsh runtime.
 allowBuilds:

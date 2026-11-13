@@ -13,6 +13,7 @@
 | 计划与报告 | [progress-report.md](progress-report.md) | 各阶段验收记录与缺口清单：S0–S6 已通过（P0 交付 + S6 生态接入 2026-11-04 收官：CopilotKit 真机三场景、上游热激活缺口定界为 junction 部署 × pnpm 相对 symlink 并修复）；S7-A 原型真机验证（2026-11-05：三机制两过一缺口，profile 已还原） |
 | 参考资料 | [references/personal-agent-research.md](references/personal-agent-research.md) | 个人智能体深度调研（2024–2026）：商业产品/开源项目/设计理论三路证据，提炼"持久身份 + 私有上下文 + 受托代理权 + 常驻主动性"本质四要素论述与六条设计公理，含收编规律、可靠性数学等反面约束 |
 | 方案文档 | [solutions/butler-architecture-optimization.md](solutions/butler-architecture-optimization.md) | 管家架构优化建议：设计公理 × HiBuddy 现状逐条对照，O1–O9 建议（长期记忆内核与治理、grant 持久化与语义审计、审批可逆性维度、出站三模式契约、每日简报、MCP 评估、模型路由确定性、可靠性护栏），含排期与需立 ADR 事项 |
+| 方案文档 | [solutions/channel-message-source-design.md](solutions/channel-message-source-design.md) | 渠道消息事件源接入管家设计（draft 2026-11-13）：四渠道插件（飞书/钉钉/微信/QQ，版本钉死、boot 验证过）入 profile 装配的机制事实（含各插件会话 id 派生实测、junction×相对 symlink 与 autoInstallPeers 纪律）；channel SourceKind——宿侧确定性扫描订阅会话、指纹去重、untrusted 两级过滤、observe 默认；不接管渠道直聊、不回写渠道；C1–C3 分期与验收标准 |
 
 ## 决策文档（docs/decisions/）
 

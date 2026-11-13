@@ -4,11 +4,15 @@
   "private": true,
   "license": "MIT",
   "dependencies": {
+    "@dingtalk-real-ai/dsh-dingtalk": "0.10.2",
     "@hibuddy/ag-ui-bridge": "workspace:*",
     "@hibuddy/brand": "workspace:*",
     "@hibuddy/coworker": "workspace:*",
     "@hibuddy/resident": "workspace:*",
-    "@hibuddy/web-ui": "workspace:*"
+    "@hibuddy/web-ui": "workspace:*",
+    "dsh-channel-wechat": "0.2.8",
+    "dsh-lark-channel": "0.0.7",
+    "dsh-onebot-qq": "0.10.0"
   },
   "dsh": {
     "profile": {
@@ -20,6 +24,10 @@
         "@hibuddy/resident",
         "@hibuddy/web-ui",
         "@hibuddy/ag-ui-bridge",
+        "@dingtalk-real-ai/dsh-dingtalk",
+        "dsh-channel-wechat",
+        "dsh-lark-channel",
+        "dsh-onebot-qq",
         "@deepseek-ai/dsh-experimental-agent-team-profile"
       ]
     }
