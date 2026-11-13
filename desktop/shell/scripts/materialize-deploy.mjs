@@ -1,14 +1,19 @@
 /**
  * Materialize a pnpm-deployed tree: replace every symlink with a real copy of
- * its resolved target, and prune dev-only files (.map/.d.ts/.tsbuildinfo) that
- * the packaged runtime never reads — but never .md files, which dsh skills may
- * load at runtime — so the afterPack copy and NSIS pack handle a smaller tree.
+ * its resolved target, and prune dev-only files that the packaged runtime
+ * never reads — compiled output is what runs (every package's main/exports
+ * default condition points at lib/dist), so TypeScript sources (.ts/.cts/.mts,
+ * incl. the .d.ts subset), source maps, build info files, and native debug
+ * symbols (.pdb) are dead weight. .md files are NEVER pruned — dsh skills may
+ * load them at runtime. Verified against dsh 0.2.1-rc.5 (2026-11-13): the
+ * nested @deepseek-ai/* subpackages ship ~600MB of src/ that the packaged app
+ * never imports (all entries → lib/index.js).
  * Usage: node scripts/materialize-deploy.mjs <dir>...
  */
 import { cpSync, lstatSync, readdirSync, realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
-const PRUNE_SUFFIXES = ['.map', '.d.ts', '.tsbuildinfo']
+const PRUNE_SUFFIXES = ['.map', '.d.ts', '.tsbuildinfo', '.ts', '.cts', '.mts', '.pdb']
 
 function walk(dir, counters) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {

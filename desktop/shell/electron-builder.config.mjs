@@ -26,7 +26,8 @@ const config = {
   appId: 'cn.hibuddy.desktop',
   productName: 'HiBuddy',
   directories: {
-    output: 'dist/installer',
+    // Overridable when the default dir is locked by an external process.
+    output: process.env.HIBUDDY_INSTALLER_DIR ?? 'dist/installer',
   },
   // Use the locally installed Electron 44.7.0 dist (pinned: dsh's native
   // loader whitelists 44.7.0 only); avoids a network download at packaging.
