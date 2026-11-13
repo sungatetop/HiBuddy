@@ -8,8 +8,8 @@ date: 2026-11-13
 
 # 渠道消息事件源接入管家设计
 
-> 依据：[resident-design §4 事件源框架](../module-design/resident-design.md)（SourceKind registry、两级过滤、观察模式）、[ADR-012](../decisions/ADR-012-workspace-watch.md)（确定性扫描为事实来源的感知源哲学）、[butler-perception-design](butler-perception-design.md)（L2 感知面扩展，IM 渠道为其列名项）、[ADR-011](../decisions/ADR-011-butler-conversation-layer.md)（消息账本为唯一用户面）。
-> 状态：draft（2026-11-13）。渠道插件装配已落地并 boot 验证通过；本设计待评审后进入实施。
+> 依据：[resident-design §4 事件源框架](../module-design/resident-design.md)（SourceKind registry、两级过滤、观察模式）、[ADR-012](../decisions/ADR-012-workspace-watch.md)（确定性扫描为事实来源的感知源哲学）、[butler-perception-design](butler-perception-design.md)（L2 感知面扩展，IM 渠道为其列名项）、[ADR-011](../decisions/ADR-011-butler-conversation-layer.md)（消息账本为唯一用户面）、**dsh-superagent-prototype 飞书源**（thirdparty/dsh-superagent-prototype/src/sources/feishu-loops.ts，三通道机制权威）。
+> 状态：draft（2026-11-13，v2 修订为三通道同构）。渠道插件装配已落地并 boot 验证通过；本设计待评审后进入实施。
 
 ## 1. 背景与定位
 
@@ -43,13 +43,24 @@ date: 2026-11-13
 - **peer 副本防错位**：`pnpm-workspace.yaml` 已设 `autoInstallPeers: false`，四插件的 `@deepseek-ai/*` peer 全部链接到宿主已有同版本实例（cordis@4.0.5、dsh-agent/llm/session@0.2.1-rc.5），无 registry 副本（ADR-005 版本配对纪律）。
 - **onebot 初始禁用**：profile cordis.patch.yml 顶层同 id 行 `disabled: true` + config 模板；启用时按插件 README 补 accessToken 并去掉 disabled。
 
-## 3. 总体设计：channel SourceKind
+## 3. 总体设计：channel SourceKind（三通道同构）
 
-按 resident-design §4.1 的承诺，渠道以**一个新 kind** 注册（`channel`），编排层零改动：
+按 resident-design §4.1 的承诺，渠道以**一个新 kind** 注册（`channel`），编排层零改动。
 
-- **事实来源 = 宿侧确定性扫描**（ADR-012 workspace-watch 同款哲学）：不依赖各插件的内部回调/事件总线——四个社区插件没有统一的出站事件契约，宿侧耦合其内部 API 脆弱且随版本漂移。改为按间隔（默认 30s，对齐 B12′ EdgeDetector 轮询）扫描**已订阅**渠道会话的事件流（session JSONL 尾读或 `snapshotEvents`），抽取新的**入站用户消息**事件。
-- **扫描游标**存 `source_instances`（重启不重放，原型 Source 规则）；**首扫基线**：新订阅会话首扫只记游标不产 Trigger（D5 同款，防历史消息轰炸）。
-- **去重指纹**：`sha256(channel|chatId|messageId)` 前 16 位，宿侧确定性计算（B5 教训：指纹禁用模型自由文本）。
+消息本质是事件——本设计与 dsh-superagent-prototype 飞书源同构，采用**推送为主、轮询兜底**的三通道架构；三路对同一条消息收敛到同一个确定性 id，重叠互不重复：
+
+| 通道 | 对应原型 | HiBuddy 实现 | 延迟 | 职责 |
+|---|---|---|---|---|
+| ① 事件拉前 | watch（`lark-cli event consume` 实时流） | 宿 **session/event 流**监听：匹配渠道前缀会话 + 入站用户消息事件 → 立即触发该会话的定向扫描 | 秒级 | **及时性**——事件只做信号，Trigger 内容仍从会话事件流读出 |
+| ② 确定性扫描（保底） | backfillLoop（60s 群历史补收） | 30s 扫描已订阅会话的 JSONL 尾读/`snapshotEvents`，抽取新的入站用户消息 | ≤30s | **完整性**——停机窗口、事件漏报、监听器异常后的恢复；游标存 `source_instances`，重启不重放 |
+| ③ 活跃会话高频扫描 | pollThreads（订阅线程 14 天视界轮询） | 有活跃 ticket / 近期触发的订阅会话，扫描间隔缩短（如 10s） | ≤10s | 兜①②间隙内活跃线程的连续消息 |
+
+机制要点（原型同构）：
+
+- **事实来源**：Trigger 内容永远从会话事件流（JSONL/`snapshotEvents`）读出并过指纹——①只提供"何时读"的信号，②③提供"没信号也照读"的兜底；事件丢失/乱序/重复不影响正确性（ADR-012 分层哲学：事件承担及时性，扫描承担正确性）。
+- **确定性 id 幂等**（原型 `feishuTriggerId = key('feishu', messageId)` 的对应物）：指纹 `sha256(channel|chatId|messageId)` 前 16 位，宿侧确定性计算（B5 教训：指纹禁用模型自由文本）；三通道产出同一指纹，gate 层去重。
+- **首扫基线**：新订阅会话首扫只记游标不产 Trigger（D5 同款，防历史消息轰炸）。
+- **①的可靠性姿态**（原型 watch 同款）：监听器异常按指数退避重建，退避期间②的扫描自动接管——事件流被当作随时会断的不可靠源。
 
 ### 3.1 渠道适配器（channel adapter）
 
@@ -79,17 +90,19 @@ date: 2026-11-13
 
 ## 7. 分期
 
-- **C1（本设计 P0）**：`channel` SourceKind + wechat/lark/onebot 三前缀适配器 + 扫描/游标/指纹去重 + 两级过滤（observe 默认）+ 订阅管理面板项。
+- **C1（本设计 P0）**：`channel` SourceKind ②③通道——wechat/lark/onebot 三前缀适配器 + 确定性扫描（游标/指纹去重/活跃会话高频档）+ 两级过滤（observe 默认）+ 订阅管理面板项。
+- **C1.5（及时性）**：①通道 session/event 事件拉前——监听匹配渠道前缀的会话事件触发定向扫描，延迟降至秒级；监听器指数退避、扫描自动接管兜底。实施前真机核验：渠道插件驱动会话时宿 session/event 流的事件形状与入站消息辨认。
 - **C2**：dingtalk 会话识别适配——会话 id 为 randomUUID 无稳定前缀，候选方案：(a) 读插件状态文件的 conversationId→session 映射；(b) 真机核实其会话 header 的 cwd/preset 锚点可用性后按锚点识别。实施前真机定界。
 - **C3（可选 P1，需先立 ADR）**：auto 模式 + 管家经渠道出站 API 代答/代发（推翻渠道回写裁剪，涉及身份与审批语义，本设计不做）。
 
 ## 8. 验收标准
 
-1. 订阅某渠道会话后，向该会话注入一条入站消息 → 一个扫描周期内 Trigger 落库（指纹唯一），observe 模式产出 would-act 信封并出现在管家对话。
-2. 同一消息重复扫描/宿重启后不重放（游标 + 指纹双重幂等）。
+1. 订阅某渠道会话后，向该会话注入一条入站消息 → C1.5 事件拉前触发定向扫描（秒级），无事件监听时 30s 内轮询兜底；Trigger 落库（指纹唯一），observe 模式产出 would-act 信封并出现在管家对话。
+2. 同一消息重复扫描/宿重启后不重放（游标 + 指纹双重幂等）；①②③三通道对同一消息只产一个 Trigger。
 3. 未订阅的渠道会话零 Trigger；首扫只建基线。
 4. 免打扰窗内仅落库不触达。
-5. onebot 保持 disabled 时不产生任何扫描活动；启用后行为同上。
+5. 事件监听器故障注入（kill/异常）后按退避重建，期间轮询通道持续产 Trigger，无丢失。
+6. onebot 保持 disabled 时不产生任何扫描活动；启用后行为同上。
 
 ## 9. 开放问题
 
