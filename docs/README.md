@@ -15,6 +15,12 @@
 | 方案文档 | [solutions/butler-architecture-optimization.md](solutions/butler-architecture-optimization.md) | 管家架构优化建议：设计公理 × HiBuddy 现状逐条对照，O1–O9 建议（长期记忆内核与治理、grant 持久化与语义审计、审批可逆性维度、出站三模式契约、每日简报、MCP 评估、模型路由确定性、可靠性护栏），含排期与需立 ADR 事项 |
 | 方案文档 | [solutions/channel-message-source-design.md](solutions/channel-message-source-design.md) | 渠道消息事件源接入管家设计（draft 2026-11-13）：四渠道插件（飞书/钉钉/微信/QQ，版本钉死、boot 验证过）入 profile 装配的机制事实（含各插件会话 id 派生实测、junction×相对 symlink 与 autoInstallPeers 纪律）；channel SourceKind——宿侧确定性扫描订阅会话、指纹去重、untrusted 两级过滤、observe 默认；不接管渠道直聊、不回写渠道；C1–C3 分期与验收标准 |
 
+## 产品文档（docs/product/）
+
+| 文档 | 摘要 |
+|---|---|
+| [agent-butler-deep-thinking.md](product/agent-butler-deep-thinking.md) | 社区分享深度文章（配 assets/ 三张 SVG 示意图）：从"百会话困境"出发——会话即任务聚焦 worker、用户注意力即瓶颈，给出管家层四层架构、六条关键设计决策（会话即 worker / 管家是常驻 Agent Loop / 确定性层不决策 / 消息账本唯一用户面 / Ticket 委派账本 / 审批分级代管）、三层次感知管线与委派生命周期时序，以及确定性与智能分工、注意力 O(会话数)→O(目标数) 降维、主动即信任负债等反思 |
+
 ## 决策文档（docs/decisions/）
 
 | ADR | 摘要 |

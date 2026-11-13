@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 880" font-family="'PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748B"/>
+    </marker>
+    <marker id="arrowTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0D9488"/>
+    </marker>
+  </defs>
+
+  <rect width="1000" height="880" fill="#FFFFFF"/>
+
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" font-size="22" font-weight="700" fill="#0F172A">HiBuddy 管家层总体架构：四层分工</text>
+  <text x="500" y="66" text-anchor="middle" font-size="13" fill="#64748B">用户只对管家说话 · 管家不执行 · 确定性层不决策 · 会话即 worker</text>
+
+  <!-- User box -->
+  <rect x="80" y="92" width="220" height="42" rx="21" fill="#F1F5F9" stroke="#CBD5E1"/>
+  <text x="190" y="118" text-anchor="middle" font-size="14" font-weight="600" fill="#334155">用户（只关注目标）</text>
+  <line x1="190" y1="134" x2="190" y2="148" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Layer 1: 用户可见面 -->
+  <rect x="60" y="150" width="660" height="118" rx="10" fill="#F8FAFC" stroke="#94A3B8"/>
+  <rect x="60" y="150" width="6" height="118" rx="3" fill="#0284C7"/>
+  <text x="82" y="176" font-size="14" font-weight="700" fill="#0F172A">① 用户可见面 —— 微信式对话界面（唯一用户面）</text>
+  <rect x="82" y="192" width="88" height="28" rx="14" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="126" y="210" text-anchor="middle" font-size="12" fill="#334155">用户消息</text>
+  <rect x="180" y="192" width="88" height="28" rx="14" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="224" y="210" text-anchor="middle" font-size="12" fill="#334155">管家回复</text>
+  <rect x="278" y="192" width="76" height="28" rx="14" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="316" y="210" text-anchor="middle" font-size="12" fill="#334155">审批卡</text>
+  <rect x="364" y="192" width="92" height="28" rx="14" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="410" y="210" text-anchor="middle" font-size="12" fill="#334155">「处理中」条</text>
+  <text x="82" y="248" font-size="12" fill="#64748B">思考不可见：消息账本只记 in/out，推理与 worker 过程在结构上就不进用户视野</text>
+
+  <line x1="390" y1="268" x2="390" y2="308" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="404" y="292" font-size="11" fill="#475569">in / out 消息（经消息账本）</text>
+
+  <!-- Layer 2: 管家层 -->
+  <rect x="60" y="310" width="660" height="148" rx="10" fill="#EEF2FF" stroke="#6366F1"/>
+  <rect x="60" y="310" width="6" height="148" rx="3" fill="#4F46E5"/>
+  <text x="82" y="336" font-size="14" font-weight="700" fill="#312E81">② 管家层 —— resident-butler：一条常驻 Agent Loop（小工具面）</text>
+  <rect x="82" y="352" width="118" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/>
+  <text x="141" y="369" text-anchor="middle" font-size="11" fill="#3730A3">create_session</text>
+  <rect x="210" y="352" width="128" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/>
+  <text x="274" y="369" text-anchor="middle" font-size="11" fill="#3730A3">send_to_session</text>
+  <rect x="348" y="352" width="150" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/>
+  <text x="423" y="369" text-anchor="middle" font-size="11" fill="#3730A3">get / list / cancel_session</text>
+  <rect x="508" y="352" width="126" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/>
+  <text x="571" y="369" text-anchor="middle" font-size="11" fill="#3730A3">resolve_approval</text>
+  <rect x="82" y="386" width="158" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/>
+  <text x="161" y="403" text-anchor="middle" font-size="11" fill="#3730A3">send_message_to_user</text>
+  <rect x="250" y="386" width="90" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/>
+  <text x="295" y="403" text-anchor="middle" font-size="11" fill="#3730A3">render_ui</text>
+  <rect x="350" y="386" width="66" height="26" rx="13" fill="#FFFFFF" stroke="#C7D2FE"/>
+  <text x="383" y="403" text-anchor="middle" font-size="11" fill="#3730A3">记忆</text>
+  <text x="82" y="440" font-size="12" fill="#475569">职责：理解目标、拆解派发、监控进度、研判事件、代管审批、汇报结果 —— 自身不持执行类工具</text>
+
+  <line x1="390" y1="458" x2="390" y2="498" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="404" y="482" font-size="11" fill="#475569">create_session 指派 ⇄ 工具驱动状态机</text>
+
+  <!-- Layer 3: 确定性层 -->
+  <rect x="60" y="500" width="660" height="148" rx="10" fill="#F0FDFA" stroke="#14B8A6"/>
+  <rect x="60" y="500" width="6" height="148" rx="3" fill="#0D9488"/>
+  <text x="82" y="526" font-size="14" font-weight="700" fill="#134E4A">③ 确定性层 —— 机制代码，不做决策</text>
+  <rect x="82" y="542" width="150" height="26" rx="13" fill="#FFFFFF" stroke="#99F6E4"/>
+  <text x="157" y="559" text-anchor="middle" font-size="11" fill="#0F766E">消息账本（唯一写入口）</text>
+  <rect x="242" y="542" width="128" height="26" rx="13" fill="#FFFFFF" stroke="#99F6E4"/>
+  <text x="306" y="559" text-anchor="middle" font-size="11" fill="#0F766E">Ticket 委派账本</text>
+  <rect x="380" y="542" width="120" height="26" rx="13" fill="#FFFFFF" stroke="#99F6E4"/>
+  <text x="440" y="559" text-anchor="middle" font-size="11" fill="#0F766E">Scheduler 1s tick</text>
+  <rect x="510" y="542" width="88" height="26" rx="13" fill="#FFFFFF" stroke="#99F6E4"/>
+  <text x="554" y="559" text-anchor="middle" font-size="11" fill="#0F766E">两级过滤</text>
+  <rect x="82" y="576" width="128" height="26" rx="13" fill="#FFFFFF" stroke="#99F6E4"/>
+  <text x="146" y="593" text-anchor="middle" font-size="11" fill="#0F766E">SQLite + 重对账</text>
+  <rect x="220" y="576" width="120" height="26" rx="13" fill="#FFFFFF" stroke="#99F6E4"/>
+  <text x="280" y="593" text-anchor="middle" font-size="11" fill="#0F766E">worker 编排器</text>
+  <rect x="350" y="576" width="130" height="26" rx="13" fill="#FFFFFF" stroke="#99F6E4"/>
+  <text x="415" y="593" text-anchor="middle" font-size="11" fill="#0F766E">感知组装（快照/边沿）</text>
+  <text x="82" y="630" font-size="12" fill="#0F766E">调度、过滤、持久化、恢复全部确定性实现：可预测、可测试、重启不重放</text>
+
+  <line x1="390" y1="648" x2="390" y2="688" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="404" y="672" font-size="11" fill="#475569">agents.create / resume</text>
+
+  <!-- Layer 4: worker 会话层 -->
+  <rect x="60" y="690" width="660" height="86" rx="10" fill="#FFFBEB" stroke="#F59E0B"/>
+  <rect x="60" y="690" width="6" height="86" rx="3" fill="#D97706"/>
+  <text x="82" y="716" font-size="14" font-weight="700" fill="#78350F">④ worker 会话层 —— 会话即 worker（普通 dsh 会话，用户不直接面对）</text>
+  <rect x="82" y="732" width="110" height="28" rx="6" fill="#FFFFFF" stroke="#FDE68A"/>
+  <text x="137" y="750" text-anchor="middle" font-size="12" fill="#92400E">worker #1</text>
+  <rect x="202" y="732" width="110" height="28" rx="6" fill="#FFFFFF" stroke="#FDE68A"/>
+  <text x="257" y="750" text-anchor="middle" font-size="12" fill="#92400E">worker #2</text>
+  <rect x="322" y="732" width="110" height="28" rx="6" fill="#FFFFFF" stroke="#FDE68A"/>
+  <text x="377" y="750" text-anchor="middle" font-size="12" fill="#92400E">worker #N</text>
+  <text x="452" y="750" font-size="12" fill="#92400E">standard preset + 审批分级 + 原生留痕</text>
+
+  <line x1="390" y1="776" x2="390" y2="796" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Base bar -->
+  <rect x="60" y="798" width="660" height="46" rx="8" fill="#F1F5F9" stroke="#64748B"/>
+  <text x="390" y="826" text-anchor="middle" font-size="13" font-weight="600" fill="#334155">deepseek-harness（dsh）runtime —— 同一 Agent Loop · 同一审批 · 同一留痕</text>
+
+  <!-- Right rail: 事件源 -->
+  <rect x="756" y="492" width="204" height="164" rx="10" fill="#FFFFFF" stroke="#0D9488" stroke-dasharray="6 4"/>
+  <text x="858" y="518" text-anchor="middle" font-size="13" font-weight="700" fill="#0F766E">事件源（SourceKind）</text>
+  <text x="772" y="544" font-size="12" fill="#134E4A">· 定时 / 周期 scheduler</text>
+  <text x="772" y="566" font-size="12" fill="#134E4A">· 周期监控 monitor</text>
+  <text x="772" y="588" font-size="12" fill="#134E4A">· 目录变更 workspace-watch</text>
+  <text x="772" y="610" font-size="12" fill="#64748B">· IM 渠道（P1：钉钉/飞书/微信）</text>
+  <text x="772" y="638" font-size="11" fill="#64748B">新来源以新 kind 注册，编排层零改动</text>
+  <line x1="756" y1="574" x2="724" y2="574" stroke="#0D9488" stroke-width="1.5" marker-end="url(#arrowTeal)"/>
+  <text x="740" y="562" text-anchor="middle" font-size="11" fill="#0F766E">Trigger</text>
+</svg>
