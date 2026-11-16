@@ -19,3 +19,14 @@
   Pop $0
   Sleep 1000
 !macroend
+
+; Same reasoning on the uninstall path: deleting resources\host\ while a
+; windowless host (or soffice) still holds files fails the same way.
+; The uninstaller's own image is "Uninstall HiBuddy.exe" — not matched.
+!macro customUnInit
+  nsExec::Exec 'taskkill /F /IM HiBuddy.exe /T'
+  Pop $0
+  nsExec::Exec 'taskkill /F /IM soffice.exe /T'
+  Pop $0
+  Sleep 1000
+!macroend
