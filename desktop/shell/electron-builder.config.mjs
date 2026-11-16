@@ -55,6 +55,10 @@ const config = {
     allowElevation: false,
     allowToChangeInstallationDirectory: true,
     artifactName: '${productName}-Setup-${version}.${ext}',
+    // Pre-kill the windowless RunAsNode host (same exe image) and leftover
+    // soffice.exe before the copy phase — see installer.nsh for why the
+    // built-in close-application flow alone leaves "file in use" loops.
+    include: 'installer.nsh',
   },
   afterPack: async context => {
     const resources = join(context.appOutDir, 'resources')
