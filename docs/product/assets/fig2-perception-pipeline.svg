@@ -9,6 +9,7 @@
 
   <text x="500" y="40" text-anchor="middle" font-size="22" font-weight="700" fill="#0F172A">感知与决策管线：事件源 → 两级过滤 → 事件信封 → 管家决策</text>
   <text x="500" y="66" text-anchor="middle" font-size="13" fill="#64748B">事件源只产出信封 · 是否行动由管家判断 · 观察模式默认 · 外部内容标记 untrusted</text>
+  <text x="500" y="86" text-anchor="middle" font-size="12.5" fill="#0F766E">已接入 IM 渠道（微信 / 飞书 / 钉钉 / QQ）：消息推送直达管家对话，不经研判管线</text>
 
   <!-- C1: 事件源 -->
   <rect x="40" y="110" width="176" height="330" rx="10" fill="#F0FDFA" stroke="#14B8A6"/>
@@ -23,8 +24,8 @@
   <text x="128" y="320" text-anchor="middle" font-size="12" font-weight="600" fill="#0F766E">workspace-watch</text>
   <text x="128" y="340" text-anchor="middle" font-size="11" fill="#475569">目录变更确定性扫描</text>
   <rect x="56" y="364" width="144" height="60" rx="8" fill="#FFFFFF" stroke="#99F6E4" stroke-dasharray="5 3"/>
-  <text x="128" y="390" text-anchor="middle" font-size="12" font-weight="600" fill="#64748B">IM 渠道（P1）</text>
-  <text x="128" y="410" text-anchor="middle" font-size="11" fill="#64748B">钉钉 / 飞书 / 微信</text>
+  <text x="128" y="390" text-anchor="middle" font-size="12" font-weight="600" fill="#64748B">网页 / RSS / 邮件</text>
+  <text x="128" y="410" text-anchor="middle" font-size="11" fill="#64748B">规划中 · 新 kind 注册</text>
 
   <line x1="216" y1="275" x2="248" y2="275" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow2)"/>
 

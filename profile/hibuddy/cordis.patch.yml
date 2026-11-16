@@ -369,7 +369,7 @@
 # disabled flag. Config rows here are top-level: later same-id row config
 # replaces the config object wholesale (see hibuddy-resident row semantics).
 - id: dsh-onebot
-  disabled: true
+  disabled: false
   config:
     mode: reverse
     host: 127.0.0.1

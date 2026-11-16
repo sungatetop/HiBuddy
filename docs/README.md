@@ -19,7 +19,7 @@
 
 | 文档 | 摘要 |
 |---|---|
-| [agent-butler-deep-thinking.md](product/agent-butler-deep-thinking.md) | 社区分享深度文章（配 assets/ 三张 SVG 示意图）：从 AI Coding 工具与各类智能体平台的共同形态——"会话管理"——出发——会话即任务聚焦 worker、用户注意力即瓶颈，给出管家层四层架构、六条关键设计决策（会话即 worker / 管家是常驻 Agent Loop / 确定性层不决策 / 消息账本唯一用户面 / Ticket 委派账本 / 审批分级代管）、三层次感知管线与委派生命周期时序，以及确定性与智能分工、注意力 O(会话数)→O(目标数) 降维、主动即信任负债等反思 |
+| [agent-butler-deep-thinking.md](product/agent-butler-deep-thinking.md) | 社区分享深度文章（配 assets/ 四张 SVG 示意图）：从 AI Coding 工具与各类智能体平台的共同形态——"会话管理"——出发——会话即任务聚焦 worker、用户注意力即瓶颈，给出管家层四层架构、六条关键设计决策（会话即 worker / 管家是常驻 Agent Loop / 确定性层不决策 / 消息账本唯一用户面 / Ticket 委派账本 / 审批分级代管）、三层次感知管线与委派生命周期时序（IM 渠道微信/飞书/钉钉/QQ 推送直达对话已落地）、委派独立会话与会话内 subagent 的结构辨析，以及确定性与智能分工、注意力 O(会话数)→O(目标数) 降维、主动即信任负债等反思 |
 
 ## 决策文档（docs/decisions/）
 

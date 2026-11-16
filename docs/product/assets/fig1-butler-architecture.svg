@@ -102,12 +102,13 @@
 
   <!-- Right rail: 事件源 -->
   <rect x="756" y="492" width="204" height="164" rx="10" fill="#FFFFFF" stroke="#0D9488" stroke-dasharray="6 4"/>
-  <text x="858" y="518" text-anchor="middle" font-size="13" font-weight="700" fill="#0F766E">事件源（SourceKind）</text>
+  <text x="858" y="518" text-anchor="middle" font-size="13" font-weight="700" fill="#0F766E">事件源 / 渠道接入</text>
   <text x="772" y="544" font-size="12" fill="#134E4A">· 定时 / 周期 scheduler</text>
   <text x="772" y="566" font-size="12" fill="#134E4A">· 周期监控 monitor</text>
   <text x="772" y="588" font-size="12" fill="#134E4A">· 目录变更 workspace-watch</text>
-  <text x="772" y="610" font-size="12" fill="#64748B">· IM 渠道（P1：钉钉/飞书/微信）</text>
-  <text x="772" y="638" font-size="11" fill="#64748B">新来源以新 kind 注册，编排层零改动</text>
+  <text x="772" y="610" font-size="12" fill="#134E4A">· IM 渠道（已接入）</text>
+  <text x="784" y="628" font-size="11" fill="#64748B">微信 / 飞书 / 钉钉 / QQ</text>
+  <text x="772" y="650" font-size="11" fill="#64748B">推送直达对话 · 注册零改动</text>
   <line x1="756" y1="574" x2="724" y2="574" stroke="#0D9488" stroke-width="1.5" marker-end="url(#arrowTeal)"/>
   <text x="740" y="562" text-anchor="middle" font-size="11" fill="#0F766E">Trigger</text>
 </svg>

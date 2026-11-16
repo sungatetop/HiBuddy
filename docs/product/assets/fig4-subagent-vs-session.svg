@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 740" font-family="'PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif">
+  <defs>
+    <marker id="arrow4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748B"/>
+    </marker>
+    <marker id="arrow4o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#9A3412"/>
+    </marker>
+    <marker id="arrow4i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3730A3"/>
+    </marker>
+  </defs>
+
+  <rect width="1000" height="740" fill="#FFFFFF"/>
+
+  <text x="500" y="36" text-anchor="middle" font-size="22" font-weight="700" fill="#0F172A">委派的两种形态：会话内 subagent vs 独立 worker 会话</text>
+  <text x="500" y="60" text-anchor="middle" font-size="13" fill="#64748B">subagent 是"这一轮的帮手"，独立会话是"常驻的 worker"</text>
+
+  <!-- ================= 左：会话内 subagent ================= -->
+  <rect x="40" y="84" width="440" height="524" rx="12" fill="#FFF7ED" stroke="#F97316"/>
+  <text x="260" y="112" text-anchor="middle" font-size="14" font-weight="700" fill="#7C2D12">会话内 subagent —— 寄生于父会话</text>
+
+  <!-- 父会话 outer -->
+  <rect x="64" y="128" width="392" height="252" rx="10" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="80" y="150" font-size="12.5" font-weight="600" fill="#334155">父会话（一轮之内）</text>
+
+  <!-- context bar -->
+  <rect x="84" y="162" width="238" height="32" rx="6" fill="#FEE2E2" stroke="#FCA5A5"/>
+  <text x="94" y="182" font-size="11.5" fill="#991B1B">上下文</text>
+  <rect x="322" y="162" width="114" height="32" rx="6" fill="#FECACA" stroke="#FCA5A5"/>
+  <text x="379" y="182" text-anchor="middle" font-size="10.5" fill="#991B1B">越用越胖</text>
+  <line x1="322" y1="178" x2="418" y2="178" stroke="#DC2626" stroke-width="1.2" marker-end="url(#arrow4o)"/>
+
+  <!-- subagents -->
+  <rect x="84" y="212" width="168" height="50" rx="8" fill="#FFFFFF" stroke="#FDBA74"/>
+  <text x="168" y="234" text-anchor="middle" font-size="12" font-weight="600" fill="#9A3412">subagent A</text>
+  <text x="168" y="252" text-anchor="middle" font-size="10.5" fill="#64748B">继承父会话视野</text>
+  <rect x="272" y="212" width="168" height="50" rx="8" fill="#FFFFFF" stroke="#FDBA74"/>
+  <text x="356" y="234" text-anchor="middle" font-size="12" font-weight="600" fill="#9A3412">subagent B</text>
+  <text x="356" y="252" text-anchor="middle" font-size="10.5" fill="#64748B">继承父会话视野</text>
+  <rect x="84" y="274" width="168" height="44" rx="8" fill="#FFFFFF" stroke="#FDBA74"/>
+  <text x="168" y="295" text-anchor="middle" font-size="12" font-weight="600" fill="#9A3412">subagent C …</text>
+  <text x="168" y="311" text-anchor="middle" font-size="10.5" fill="#64748B">子任务越多越挤</text>
+
+  <!-- results back -->
+  <line x1="150" y1="212" x2="150" y2="198" stroke="#9A3412" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrow4o)"/>
+  <line x1="340" y1="212" x2="340" y2="198" stroke="#9A3412" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrow4o)"/>
+  <text x="262" y="206" text-anchor="middle" font-size="10.5" fill="#9A3412">结果全量回流父上下文</text>
+
+  <!-- recycle note -->
+  <text x="260" y="352" text-anchor="middle" font-size="11.5" fill="#9A3412">轮次结束 → 子代理随父会话一并回收，无法单独存活</text>
+
+  <!-- lifecycle strip -->
+  <line x1="84" y1="398" x2="416" y2="398" stroke="#9A3412" stroke-width="1.5" marker-end="url(#arrow4o)"/>
+  <circle cx="104" cy="398" r="4" fill="#9A3412"/>
+  <circle cx="200" cy="398" r="4" fill="#9A3412"/>
+  <circle cx="300" cy="398" r="4" fill="#9A3412"/>
+  <circle cx="396" cy="398" r="4" fill="#9A3412"/>
+  <text x="104" y="416" text-anchor="middle" font-size="10.5" fill="#7C2D12">轮次开始</text>
+  <text x="200" y="416" text-anchor="middle" font-size="10.5" fill="#7C2D12">同步执行</text>
+  <text x="300" y="416" text-anchor="middle" font-size="10.5" fill="#7C2D12">结果回流</text>
+  <text x="396" y="416" text-anchor="middle" font-size="10.5" fill="#7C2D12">轮次回收</text>
+  <text x="260" y="438" text-anchor="middle" font-size="10.5" fill="#64748B">生命周期 = 父轮次的生命周期（无轮次即无执行体）</text>
+
+  <!-- bullets -->
+  <text x="64" y="470" font-size="11.5" fill="#475569">· 管理成本 O(子任务数)：干得越多，父会话越胖</text>
+  <text x="64" y="494" font-size="11.5" fill="#475569">· 权限继承父视野，无法按任务收敛</text>
+  <text x="64" y="518" font-size="11.5" fill="#475569">· 混在父会话留痕中，无法单独恢复</text>
+  <text x="64" y="542" font-size="11.5" fill="#475569">· 只能做"当前一轮的帮手"，做不了常驻 worker</text>
+  <text x="64" y="566" font-size="11.5" fill="#475569">· 适合：轮内短时并行子任务（查资料、批量检索）</text>
+
+  <!-- ================= 右：独立 worker 会话 ================= -->
+  <rect x="520" y="84" width="440" height="524" rx="12" fill="#EEF2FF" stroke="#4F46E5"/>
+  <text x="740" y="112" text-anchor="middle" font-size="14" font-weight="700" fill="#312E81">独立 worker 会话 —— 会话即 worker</text>
+
+  <!-- butler -->
+  <rect x="544" y="132" width="180" height="122" rx="10" fill="#FFFFFF" stroke="#4F46E5"/>
+  <text x="634" y="154" text-anchor="middle" font-size="12.5" font-weight="700" fill="#312E81">管家会话</text>
+  <rect x="560" y="168" width="148" height="26" rx="5" fill="#E0E7FF" stroke="#A5B4FC"/>
+  <text x="634" y="185" text-anchor="middle" font-size="10.5" fill="#3730A3">上下文（保持恒定）</text>
+  <text x="634" y="216" text-anchor="middle" font-size="10.5" fill="#475569">只消费结构化富化回执</text>
+  <text x="634" y="234" text-anchor="middle" font-size="10.5" fill="#475569">（按轮次幂等）</text>
+
+  <!-- workers -->
+  <rect x="764" y="132" width="176" height="56" rx="8" fill="#FFFFFF" stroke="#D97706"/>
+  <text x="852" y="152" text-anchor="middle" font-size="12" font-weight="600" fill="#92400E">worker 会话 #1</text>
+  <text x="852" y="170" text-anchor="middle" font-size="10.5" fill="#64748B">独立上下文 · 沙箱 · 审批分级</text>
+  <rect x="764" y="200" width="176" height="56" rx="8" fill="#FFFFFF" stroke="#D97706"/>
+  <text x="852" y="220" text-anchor="middle" font-size="12" font-weight="600" fill="#92400E">worker 会话 #2 …</text>
+  <text x="852" y="238" text-anchor="middle" font-size="10.5" fill="#64748B">委派规模可无限增长</text>
+
+  <!-- arrows butler <-> worker -->
+  <line x1="724" y1="152" x2="760" y2="152" stroke="#3730A3" stroke-width="1.4" marker-end="url(#arrow4i)"/>
+  <text x="742" y="142" text-anchor="middle" font-size="10.5" fill="#3730A3">create_session</text>
+  <line x1="760" y1="242" x2="728" y2="242" stroke="#94A3B8" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrow4)"/>
+  <text x="744" y="258" text-anchor="middle" font-size="10.5" fill="#64748B">回执</text>
+
+  <!-- worker lifecycle timeline -->
+  <text x="544" y="300" font-size="11.5" font-weight="600" fill="#334155">worker #1 生命周期（跨轮次驻留）</text>
+  <rect x="544" y="310" width="86" height="22" rx="4" fill="#FDE68A"/>
+  <text x="587" y="325" text-anchor="middle" font-size="10.5" fill="#92400E">执行</text>
+  <rect x="630" y="310" width="86" height="22" rx="4" fill="#F1F5F9" stroke="#CBD5E1"/>
+  <text x="673" y="325" text-anchor="middle" font-size="10.5" fill="#475569">空闲挂起</text>
+  <rect x="716" y="310" width="86" height="22" rx="4" fill="#FDE68A"/>
+  <text x="759" y="325" text-anchor="middle" font-size="10.5" fill="#92400E">followup 续跑</text>
+  <rect x="802" y="310" width="86" height="22" rx="4" fill="#D1FAE5" stroke="#6EE7B7"/>
+  <text x="845" y="325" text-anchor="middle" font-size="10.5" fill="#065F46">完成归档</text>
+  <line x1="544" y1="344" x2="936" y2="344" stroke="#64748B" stroke-width="1" marker-end="url(#arrow4)"/>
+  <text x="936" y="362" text-anchor="end" font-size="10.5" fill="#64748B">时间</text>
+  <text x="544" y="380" font-size="10.5" fill="#64748B">宿进程重启 → reconcile 对账，working 票自动 resume 续跑</text>
+
+  <!-- bullets -->
+  <text x="544" y="470" font-size="11.5" fill="#475569">· 管理成本 O(目标数)：上下文隔离，管家恒定</text>
+  <text x="544" y="494" font-size="11.5" fill="#475569">· 权限按任务收敛（工具面 / 沙箱 / 审批分级）</text>
+  <text x="544" y="518" font-size="11.5" fill="#475569">· 独立留痕、独立恢复，与管家互不污染</text>
+  <text x="544" y="542" font-size="11.5" fill="#475569">· scheduler / monitor / 停滞检测的执行载体</text>
+  <text x="544" y="566" font-size="11.5" fill="#475569">· 适合：长时任务、多任务并行、定时/周期常驻</text>
+
+  <!-- bottom conclusion -->
+  <rect x="40" y="632" width="920" height="70" rx="10" fill="#F8FAFC" stroke="#CBD5E1"/>
+  <rect x="40" y="632" width="6" height="70" rx="3" fill="#4F46E5"/>
+  <text x="500" y="662" text-anchor="middle" font-size="13" font-weight="700" fill="#0F172A">判断：用户的注意力瓶颈，同样是管家 Agent 的上下文瓶颈</text>
+  <text x="500" y="686" text-anchor="middle" font-size="12" fill="#475569">委派规模要能无限增长，而管家（及其背后的用户）的消耗保持恒定 —— 只有独立会话能同时满足这两条。</text>
+</svg>
