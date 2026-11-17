@@ -1,23 +1,38 @@
 ; HiBuddy installer pre-kill (electron-builder nsis.include, runs inside .onInit
-; BEFORE the CHECK_APP_RUNNING flow).
+; AFTER initMultiUser has set $INSTDIR, BEFORE the Section's CHECK_APP_RUNNING).
 ;
-; Why: the desktop host runs as ELECTRON_RUN_AS_NODE — it is the SAME HiBuddy.exe
-; image as the shell but WINDOWLESS. The installer's close-application flow can
-; only close windowed instances, so an orphaned host (shell crashed or killed,
-; host shutdown raced) keeps files under resources\host\ locked and the copy
-; phase loops on "file in use". Killing the image tree deterministically clears
-; every case; the installer itself (HiBuddy-Setup-*.exe) is a different image and
-; is not affected.
+; Why kill here: the desktop host runs as ELECTRON_RUN_AS_NODE — it is the SAME
+; HiBuddy.exe image as the shell but WINDOWLESS. The installer's close-application
+; flow can only close windowed instances, so an orphaned host (shell crashed or
+; killed, host shutdown raced) keeps files under resources\host\ locked and the
+; copy phase loops on "file in use". Killing the image tree deterministically
+; clears every case; the installer itself (HiBuddy-Setup-*.exe) is a different
+; image and is not affected.
 ;
 ; soffice.exe: libreoffice-kit ships its LibreOffice binaries INSIDE the install
 ; tree and dsh spawns them for document conversion — a leftover conversion locks
 ; resources\host\node_modules\@deepseek-ai\libreoffice-kit-win32-x64\... too.
+;
+; Why wipe here (NOT in preInit): electron-builder 26 calls preInit in .onInit
+; BEFORE initMultiUser assigns $INSTDIR, so preInit cannot reliably target the
+; install dir. And the bundled NSIS 3.0.4.1 predates long-path support, so
+; RMDir /r silently fails on the >260-char paths of a previous pnpm nested
+; layout (0.3.0/0.3.1 left ~19.8k such paths). robocopy /MIR from an empty dir
+; deletes the whole tree regardless of path length. Everything under
+; resources\host and resources\profile is re-extracted from the package, so
+; wiping them turns every upgrade into a clean extract instead of a merge with
+; stale layouts.
+;
+; Kill-then-wipe order matters: a running app releases its file locks before
+; the wipe; the Section's CHECK_APP_RUNNING afterwards is just a safety net.
 !macro customInit
   nsExec::Exec 'taskkill /F /IM HiBuddy.exe /T'
   Pop $0
   nsExec::Exec 'taskkill /F /IM soffice.exe /T'
   Pop $0
   Sleep 1000
+  nsExec::Exec `"$SYSDIR\cmd.exe" /C mkdir "$TEMP\hibuddy-wipe-empty" 2>nul & robocopy "$TEMP\hibuddy-wipe-empty" "$INSTDIR\resources\host" /MIR /R:1 /W:1 /NFL /NDL /NJH /NJS /NP & robocopy "$TEMP\hibuddy-wipe-empty" "$INSTDIR\resources\profile" /MIR /R:1 /W:1 /NFL /NDL /NJH /NJS /NP & rd /s /q "$TEMP\hibuddy-wipe-empty"`
+  Pop $0
 !macroend
 
 ; Same reasoning on the uninstall path: deleting resources\host\ while a
@@ -71,4 +86,12 @@
     MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY checkAppLoop
     Quit
   checkAppDone:
+!macroend
+
+; Same wipe on uninstall: the uninstaller's own file log only knows its own
+; layout, and NSIS 3.0.4.1 RMDir /r cannot delete >260 paths — trees from
+; older pnpm-nested layouts would otherwise survive the uninstall.
+!macro customUnInstall
+  nsExec::Exec `"$SYSDIR\cmd.exe" /C mkdir "$TEMP\hibuddy-wipe-empty" 2>nul & robocopy "$TEMP\hibuddy-wipe-empty" "$INSTDIR\resources\host" /MIR /R:1 /W:1 /NFL /NDL /NJH /NJS /NP & robocopy "$TEMP\hibuddy-wipe-empty" "$INSTDIR\resources\profile" /MIR /R:1 /W:1 /NFL /NDL /NJH /NJS /NP & rd /s /q "$TEMP\hibuddy-wipe-empty"`
+  Pop $0
 !macroend

@@ -59,16 +59,11 @@ const config = {
     // soffice.exe before the copy phase — see installer.nsh for why the
     // built-in close-application flow alone leaves "file in use" loops.
     include: 'installer.nsh',
-    // Route extraction through nsisunz::Unzip straight into $INSTDIR instead
-    // of the default extract-to-temp + CopyFiles dance. The 7z path fails on
-    // any transient lock during the whole-tree copy (e.g. AV scanning freshly
-    // extracted files), pops a misleading "cannot close HiBuddy" dialog after
-    // 5 silent retries, and its retry/last-resort branch ignores errors and
-    // silently produces a broken install tree (seen on 11-13 and 11-16).
-    // The zip path fails loudly ("decompression failed") instead. Trade-off:
-    // no differential-update blockmap; zip compresses worse than 7z.
-    useZip: true,
-    differentialPackage: false,
+    // Keep the NSIS default 7z extraction. 0.3.0/0.3.1 routed through
+    // nsisunz zip extraction, but nsisunz cannot read Zip64 archives — the
+    // dsh closure (>100k entries) yields a zip it silently fails to unpack.
+    // With the tree flattened by materialize-deploy.mjs (no path ≥ MAX_PATH),
+    // the 7z default is the viable path; differential blockmaps stay enabled.
   },
   afterPack: async context => {
     const resources = join(context.appOutDir, 'resources')

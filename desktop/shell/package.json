@@ -1,7 +1,7 @@
 {
   "name": "@hibuddy/desktop-shell",
   "description": "HiBuddy desktop shell: Electron main process owning the window, tray, and the RunAsNode host lifecycle (ADR-004)",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "electron": "44.7.0",
-    "electron-builder": "^26.17.0"
+    "electron-builder": "^26.17.0",
+    "semver": "^7.8.6"
   }
 }
